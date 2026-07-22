@@ -1,0 +1,225 @@
+@import "tailwindcss";
+
+/* =====================================================================
+   LUUMU DESIGN SYSTEM — TOKENS
+   Fonte da verdade: LUUMU_BrandBook_Visual_v1.pdf / luumus_ds.html
+   ===================================================================== */
+:root {
+  /* ---- Marca / Primárias ---- */
+  --luumu-roxo:        #6B2BD9;
+  --luumu-roxo-claro:  #A78BFA;
+  --luumu-verde:       #7ED957;
+  --luumu-lavanda:     #F3EDFF;
+  --luumu-roxo-escuro: #4B1CAB;
+  --luumu-branco:      #FFFFFF;
+
+  /* ---- Secundárias ---- */
+  --sec-azul:     #4AA8FF;
+  --sec-ciano:    #00D8C9;
+  --sec-amarelo:  #FFC83D;
+  --sec-laranja:  #FF8A3D;
+  --sec-rosa:     #FF4D7D;
+  --sec-indigo:   #4F46E5;
+  --sec-turquesa: #2DD4BF;
+
+  /* ---- Neutras ---- */
+  --gray-900: #0D0F1A;
+  --gray-700: #374151;
+  --gray-500: #6B7280;
+  --gray-300: #D1D5DB;
+  --gray-100: #F3F4F6;
+  --gray-50:  #FAFAFB;
+
+  /* ---- Semânticas ---- */
+  --sucesso: #22C55E;
+  --aviso:   #FACC15;
+  --erro:    #EF4444;
+  --info:    #3882F6;
+  --neutro:  #6B7280;
+
+  /* ---- Gradientes de marca ---- */
+  --grad-roxo:  linear-gradient(135deg, #6B2BD9 0%, #A78BFA 100%);
+  --grad-verde: linear-gradient(135deg, #7ED957 0%, #00D8C9 100%);
+  --grad-marca: linear-gradient(135deg, #6B2BD9 0%, #7ED957 100%);
+
+  /* ---- Raios ---- */
+  --r-xs: 4px; --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-xl: 24px; --r-full: 999px;
+
+  /* ---- Sombras ---- */
+  --shadow-sm: 0 1px 2px rgba(13,15,26,.06), 0 1px 3px rgba(13,15,26,.08);
+  --shadow-md: 0 4px 12px rgba(13,15,26,.08), 0 2px 4px rgba(13,15,26,.06);
+  --shadow-lg: 0 12px 32px rgba(13,15,26,.12), 0 4px 8px rgba(13,15,26,.06);
+  --shadow-glow: 0 8px 40px rgba(107,43,217,.28);
+
+  /* ---- Timing / easing ---- */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-smooth:   cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-fast: .2s; --dur-med: .45s; --dur-slow: .8s;
+
+  /* ---- Superfícies semânticas (tema claro) ---- */
+  --bg:        #FAFAFB;
+  --bg-elev:   #FFFFFF;
+  --bg-sunken: #F3F4F6;
+  --surface-brand: #F3EDFF;
+  --text:      #0D0F1A;
+  --text-soft: #374151;
+  --text-mut:  #6B7280;
+  --border:    #E7E5F0;
+  --border-strong: #D1D5DB;
+  --accent:    #6B2BD9;
+  --accent-contrast: #FFFFFF;
+  --nav-bg: rgba(255,255,255,.72);
+  --card-glow: rgba(107,43,217,.06);
+}
+
+/* ---- Tema escuro ---- */
+:root[data-theme="dark"] {
+  --bg:        #0A0B14;
+  --bg-elev:   #14162A;
+  --bg-sunken: #0D0F1A;
+  --surface-brand: #1B1435;
+  --text:      #FAFAFB;
+  --text-soft: #D1D5DB;
+  --text-mut:  #9AA0B4;
+  --border:    #262A45;
+  --border-strong: #374151;
+  --accent:    #A78BFA;
+  --accent-contrast: #0A0B14;
+  --nav-bg: rgba(13,15,26,.72);
+  --card-glow: rgba(167,139,250,.10);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.4);
+  --shadow-md: 0 4px 12px rgba(0,0,0,.45);
+  --shadow-lg: 0 12px 32px rgba(0,0,0,.55);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:#0A0B14; --bg-elev:#14162A; --bg-sunken:#0D0F1A; --surface-brand:#1B1435;
+    --text:#FAFAFB; --text-soft:#D1D5DB; --text-mut:#9AA0B4;
+    --border:#262A45; --border-strong:#374151;
+    --accent:#A78BFA; --accent-contrast:#0A0B14;
+    --nav-bg:rgba(13,15,26,.72); --card-glow:rgba(167,139,250,.10);
+  }
+}
+
+/* =====================================================================
+   MAPEAMENTO TAILWIND v4 (@theme) — expõe tokens como utilitários
+   ===================================================================== */
+@theme inline {
+  --color-luumu-roxo: var(--luumu-roxo);
+  --color-luumu-roxo-claro: var(--luumu-roxo-claro);
+  --color-luumu-verde: var(--luumu-verde);
+  --color-luumu-lavanda: var(--luumu-lavanda);
+  --color-luumu-roxo-escuro: var(--luumu-roxo-escuro);
+
+  --color-sec-azul: var(--sec-azul);
+  --color-sec-ciano: var(--sec-ciano);
+  --color-sec-amarelo: var(--sec-amarelo);
+  --color-sec-laranja: var(--sec-laranja);
+  --color-sec-rosa: var(--sec-rosa);
+  --color-sec-indigo: var(--sec-indigo);
+  --color-sec-turquesa: var(--sec-turquesa);
+
+  --color-sucesso: var(--sucesso);
+  --color-aviso: var(--aviso);
+  --color-erro: var(--erro);
+  --color-info: var(--info);
+
+  /* superfícies semânticas → bg-*, text-*, border-* */
+  --color-bg: var(--bg);
+  --color-bg-elev: var(--bg-elev);
+  --color-bg-sunken: var(--bg-sunken);
+  --color-surface-brand: var(--surface-brand);
+  --color-fg: var(--text);
+  --color-fg-soft: var(--text-soft);
+  --color-fg-mut: var(--text-mut);
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+  --color-accent: var(--accent);
+  --color-accent-contrast: var(--accent-contrast);
+
+  --radius-xs: var(--r-xs);
+  --radius-sm: var(--r-sm);
+  --radius-md: var(--r-md);
+  --radius-lg: var(--r-lg);
+  --radius-xl: var(--r-xl);
+  --radius-full: var(--r-full);
+
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+  --shadow-glow: var(--shadow-glow);
+
+  --font-display: var(--font-jakarta), system-ui, sans-serif;
+  --font-body: var(--font-inter), system-ui, sans-serif;
+  --font-mono: var(--font-mono-jb), ui-monospace, monospace;
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* =====================================================================
+   RESET + BASE
+   ===================================================================== */
+* { min-width: 0; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: var(--font-body);
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  transition: background .4s var(--ease-smooth), color .4s var(--ease-smooth);
+}
+::selection { background: rgba(126,217,87,.35); color: var(--text); }
+h1, h2, h3, h4, h5 {
+  font-family: var(--font-display);
+  font-weight: 700; line-height: 1.15; letter-spacing: -0.02em;
+}
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 99px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* Texto com gradiente de marca */
+.text-grad-verde {
+  background: var(--grad-verde);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.text-grad-roxo {
+  background: var(--grad-roxo);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* =====================================================================
+   EFEITOS / MICROANIMAÇÕES do DS
+   ===================================================================== */
+.reveal { opacity: 0; transform: translateY(20px); filter: blur(6px); }
+.reveal.in { animation: animationIn var(--dur-slow) var(--ease-out-expo) forwards; }
+@keyframes animationIn { to { opacity: 1; transform: translateY(0); filter: blur(0); } }
+
+.float { animation: floaty 5s ease-in-out infinite; }
+@keyframes floaty { 0%,100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-12px) rotate(1deg); } }
+
+@keyframes spin-slow { to { transform: rotate(360deg); } }
+@keyframes shimmer { to { transform: translateX(100%); } }
+@keyframes marquee { to { transform: translateX(-50%); } }
+
+/* Flashlight / spotlight card */
+.fx-flash { position: relative; overflow: hidden; }
+.fx-flash::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0;
+  transition: opacity .4s;
+  background: radial-gradient(600px circle at var(--mx,50%) var(--my,50%), var(--card-glow), transparent 40%);
+}
+.fx-flash:hover::before { opacity: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal { opacity: 1 !important; transform: none !important; filter: none !important; animation: none !important; }
+  .float { animation: none !important; }
+  * { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+}
