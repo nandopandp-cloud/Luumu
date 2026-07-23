@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { MetricCard } from "@/components/ui/MetricCard";
+import { SoonBanner } from "@/components/ui/SoonBanner";
 import { sessions } from "@/lib/mock/sessions";
 
 export default function ReplayPage() {
@@ -15,14 +16,20 @@ export default function ReplayPage() {
         description="Assista às sessões reais dos seus usuários — com eventos, erros e rage clicks."
       />
 
-      <div className="mb-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <MetricCard label="Sessões hoje" value="1.842" delta={7} accent="roxo" />
-        <MetricCard label="Duração média" value="3m 47s" accent="azul" />
-        <MetricCard label="Rage clicks" value="126" delta={-14} accent="laranja" />
-        <MetricCard label="Erros JS" value="38" delta={-9} accent="verde" />
+      <SoonBanner className="mb-4">
+        Session Replay depende de <strong>gravação de sessões</strong> (DOM, cliques, navegação) no produto
+        do cliente — captura que o SDK ainda não faz. As sessões abaixo são exemplos de layout, não dados do
+        seu workspace.
+      </SoonBanner>
+
+      <div className="mb-4 grid grid-cols-2 gap-4 opacity-70 lg:grid-cols-4">
+        <MetricCard label="Sessões hoje" value="—" accent="roxo" />
+        <MetricCard label="Duração média" value="—" accent="azul" />
+        <MetricCard label="Rage clicks" value="—" accent="laranja" />
+        <MetricCard label="Erros JS" value="—" accent="verde" />
       </div>
 
-      <Card padded={false} className="overflow-hidden">
+      <Card padded={false} className="overflow-hidden opacity-70">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>

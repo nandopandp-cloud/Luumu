@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { ReplayPlayer } from "@/components/replay/ReplayPlayer";
+import { SoonBanner } from "@/components/ui/SoonBanner";
 import { sessions } from "@/lib/mock/sessions";
 
 export default async function ReplayDetailPage({
@@ -33,7 +34,13 @@ export default async function ReplayDetailPage({
         </div>
       </div>
 
-      <ReplayPlayer />
+      <SoonBanner className="mb-4">
+        Esta é uma reprodução de exemplo. A gravação real de sessões ainda não é coletada pelo SDK.
+      </SoonBanner>
+
+      <div className="opacity-70">
+        <ReplayPlayer />
+      </div>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { Card, CardHeader, CardTitle, CardSubtitle } from "@/components/ui/Card"
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Mascot } from "@/components/ui/Mascot";
+import { SoonBanner } from "@/components/ui/SoonBanner";
 import { cn } from "@/lib/utils";
 import { sentiment, clusters, pains, praises, recommendations, churnRisk } from "@/lib/mock/insights";
 
@@ -21,14 +22,19 @@ export default function InsightsPage() {
         title="Insights IA"
         description="A Luumu analisa milhares de respostas e destila o que importa: sentimento, temas e ações."
         actions={
-          <Button size="sm">
+          <Button size="sm" disabled>
             <Sparkles className="size-4" /> Gerar novo resumo
           </Button>
         }
       />
 
+      <SoonBanner className="mb-4">
+        A análise por IA (sentimento, temas, riscos de churn) ainda não está ligada às suas respostas reais.
+        O conteúdo abaixo é um exemplo do formato dos insights — não uma análise do seu workspace.
+      </SoonBanner>
+
       {/* Resumo executivo com mascote */}
-      <Card className="relative overflow-hidden [background:var(--grad-roxo)] text-white">
+      <Card className="relative overflow-hidden opacity-70 [background:var(--grad-roxo)] text-white">
         <div className="relative z-10 max-w-3xl">
           <span className="inline-flex items-center gap-1.5 font-mono text-xs font-semibold uppercase tracking-widest text-white/80">
             <Sparkles className="size-3.5" /> Resumo executivo · gerado por IA
@@ -45,7 +51,7 @@ export default function InsightsPage() {
       </Card>
 
       {/* Sentimento + Clusters */}
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div className="mt-4 grid grid-cols-1 gap-4 opacity-70 lg:grid-cols-3">
         <Card>
           <CardHeader>
             <div>
@@ -92,7 +98,7 @@ export default function InsightsPage() {
       </div>
 
       {/* Dores & Elogios */}
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="mt-4 grid grid-cols-1 gap-4 opacity-70 lg:grid-cols-2">
         <Card>
           <div className="mb-3 flex items-center gap-2">
             <span className="grid size-8 place-items-center rounded-lg bg-erro/12 text-erro">
@@ -128,7 +134,7 @@ export default function InsightsPage() {
       </div>
 
       {/* Recomendações + Churn */}
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="mt-4 grid grid-cols-1 gap-4 opacity-70 lg:grid-cols-2">
         <Card>
           <CardHeader>
             <div>

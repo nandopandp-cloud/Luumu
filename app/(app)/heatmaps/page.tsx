@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Select } from "@/components/ui/Input";
 import { SegmentedControl } from "@/components/ui/Tabs";
+import { SoonBanner } from "@/components/ui/SoonBanner";
 import { cn } from "@/lib/utils";
 
 type HeatType = "click" | "move" | "scroll" | "attention";
@@ -34,7 +35,13 @@ export default function HeatmapsPage() {
         description="Veja onde seus usuários clicam, movem o mouse, rolam e prestam atenção."
       />
 
-      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+      <SoonBanner className="mb-4">
+        Heatmaps dependem de <strong>captura de interações</strong> (cliques, movimento, scroll) no produto
+        do cliente — algo que o SDK ainda não coleta. O mapa abaixo é uma demonstração de layout, não dados
+        do seu workspace.
+      </SoonBanner>
+
+      <div className="mb-4 flex flex-col gap-3 opacity-70 lg:flex-row lg:items-center lg:justify-between">
         <SegmentedControl<HeatType>
           value={type}
           onChange={setType}
@@ -57,7 +64,7 @@ export default function HeatmapsPage() {
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_280px]">
+      <div className="grid grid-cols-1 gap-4 opacity-70 lg:grid-cols-[1fr_280px]">
         {/* Preview com overlay de calor */}
         <Card padded={false} className="overflow-hidden">
           <div className="flex items-center gap-2 border-b border-line px-4 py-2.5">
