@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Mascot, type MascotName } from "@/components/ui/Mascot";
 import { surveyTemplates } from "@/lib/mock/surveys";
+import { createSurveyAction } from "../actions";
 
 export default function NewSurveyPage() {
   return (
@@ -23,18 +24,26 @@ export default function NewSurveyPage() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {surveyTemplates.map((t) => (
-          <Link key={t.type} href={`/surveys/csat-produto/builder`}>
-            <Card className="fx-flash group h-full transition-all duration-200 hover:-translate-y-1 hover:border-accent hover:shadow-[var(--shadow-md)]">
-              <div className="flex items-start justify-between">
-                <div className="grid size-14 place-items-center rounded-xl bg-surface-brand">
-                  <Mascot name={t.mascot as MascotName} size={44} />
+          <form
+            key={t.type}
+            action={async () => {
+              "use server";
+              await createSurveyAction(t.type);
+            }}
+          >
+            <button type="submit" className="block w-full text-left">
+              <Card className="fx-flash group h-full transition-all duration-200 hover:-translate-y-1 hover:border-accent hover:shadow-[var(--shadow-md)]">
+                <div className="flex items-start justify-between">
+                  <div className="grid size-14 place-items-center rounded-xl bg-surface-brand">
+                    <Mascot name={t.mascot as MascotName} size={44} />
+                  </div>
+                  <ArrowRight className="size-5 text-fg-mut transition group-hover:translate-x-1 group-hover:text-accent" />
                 </div>
-                <ArrowRight className="size-5 text-fg-mut transition group-hover:translate-x-1 group-hover:text-accent" />
-              </div>
-              <h3 className="mt-4 text-lg font-bold">{t.title}</h3>
-              <p className="mt-1 text-sm text-fg-mut">{t.desc}</p>
-            </Card>
-          </Link>
+                <h3 className="mt-4 text-lg font-bold">{t.title}</h3>
+                <p className="mt-1 text-sm text-fg-mut">{t.desc}</p>
+              </Card>
+            </button>
+          </form>
         ))}
       </div>
     </div>

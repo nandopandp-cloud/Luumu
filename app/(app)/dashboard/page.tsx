@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Plus, Smile, TrendingUp, Users, Inbox } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { MetricCard } from "@/components/ui/MetricCard";
@@ -6,15 +7,24 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Mascot } from "@/components/ui/Mascot";
 import { AreaTrend, DonutChart } from "@/components/charts/Charts";
-import { csatTrend, channelSplit, recentSurveys } from "@/lib/mock/dashboard";
+import { csatTrend, channelSplit } from "@/lib/mock/dashboard";
+import { listSurveys } from "@/lib/db/surveys";
+import { getStats } from "@/lib/db/responses";
+
+export const dynamic = "force-dynamic";
 
 const statusTone = {
   ativa: "success",
   pausada: "warn",
   encerrada: "neutral",
+  rascunho: "brand",
 } as const;
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  const [allSurveys, stats] = await Promise.all([listSurveys(), getStats()]);
+  const activeCount = allSurveys.filter((s) => s.status === "ativa").length;
+  const recent = allSurveys.slice(0, 5);
+
   return (
     <div>
       <PageHeader
@@ -35,10 +45,10 @@ export default function DashboardPage() {
 
       {/* Métricas */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <MetricCard label="CSAT Médio" value="4.6" delta={8} accent="roxo" icon={<Smile className="size-5" />} />
-        <MetricCard label="NPS" value="58" delta={5} accent="verde" icon={<TrendingUp className="size-5" />} />
-        <MetricCard label="Respostas" value="1.248" delta={12} accent="azul" icon={<Inbox className="size-5" />} />
-        <MetricCard label="Usuários ativos" value="8.6k" delta={-3} accent="laranja" icon={<Users className="size-5" />} />
+        <MetricCard label="Nota média" value={stats.avgScore ?? "—"} accent="roxo" icon={<Smile className="size-5" />} />
+        <MetricCard label="Sentimento positivo" value={`${stats.positivePct}%`} accent="verde" icon={<TrendingUp className="size-5" />} />
+        <MetricCard label="Respostas" value={stats.total} accent="azul" icon={<Inbox className="size-5" />} />
+        <MetricCard label="Pesquisas ativas" value={activeCount} accent="laranja" icon={<Users className="size-5" />} />
       </div>
 
       {/* Gráficos */}
@@ -89,20 +99,22 @@ export default function DashboardPage() {
                   <th className="px-6 py-2.5 font-semibold">Pesquisa</th>
                   <th className="px-3 py-2.5 font-semibold">Status</th>
                   <th className="px-3 py-2.5 font-semibold">Respostas</th>
-                  <th className="px-3 py-2.5 font-semibold">Taxa</th>
-                  <th className="px-6 py-2.5 text-right font-semibold">CSAT</th>
+                  <th className="px-3 py-2.5 font-semibold">Tipo</th>
+                  <th className="px-6 py-2.5 text-right font-semibold">Score</th>
                 </tr>
               </thead>
               <tbody>
-                {recentSurveys.map((s) => (
-                  <tr key={s.name} className="border-b border-line last:border-0 hover:bg-bg-sunken/50">
-                    <td className="px-6 py-3 font-semibold">{s.name}</td>
-                    <td className="px-3 py-3">
-                      <Badge tone={statusTone[s.status]}>{s.status}</Badge>
+                {recent.map((s) => (
+                  <tr key={s.id} className="border-b border-line last:border-0 hover:bg-bg-sunken/50">
+                    <td className="px-6 py-3 font-semibold">
+                      <Link href={`/surveys/${s.id}/builder`} className="hover:text-accent">{s.name}</Link>
                     </td>
-                    <td className="px-3 py-3 text-fg-soft">{s.responses}</td>
-                    <td className="px-3 py-3 text-fg-soft">{s.rate}%</td>
-                    <td className="px-6 py-3 text-right font-bold text-luumu-roxo">{s.csat}</td>
+                    <td className="px-3 py-3">
+                      <Badge tone={statusTone[s.status as keyof typeof statusTone]}>{s.status}</Badge>
+                    </td>
+                    <td className="px-3 py-3 text-fg-soft">{s.responseCount}</td>
+                    <td className="px-3 py-3 text-fg-soft">{s.type}</td>
+                    <td className="px-6 py-3 text-right font-bold text-luumu-roxo">{s.score ?? "—"}</td>
                   </tr>
                 ))}
               </tbody>

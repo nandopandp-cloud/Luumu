@@ -1,8 +1,13 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { ResponsesView } from "@/components/responses/ResponsesView";
-import { surveys } from "@/lib/mock/surveys";
+import { ResponsesView, type ResponseItem } from "@/components/responses/ResponsesView";
+import { getSurvey } from "@/lib/db/surveys";
+import { listResponses, getStats, getScoreDistribution } from "@/lib/db/responses";
+import { timeAgo } from "@/lib/utils";
+
+export const dynamic = "force-dynamic";
 
 export default async function SurveyResponsesPage({
   params,
@@ -10,7 +15,25 @@ export default async function SurveyResponsesPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const survey = surveys.find((s) => s.id === id) ?? surveys[1];
+  const survey = await getSurvey(id);
+  if (!survey) notFound();
+
+  const [rows, stats, distribution] = await Promise.all([
+    listResponses(id),
+    getStats(id),
+    getScoreDistribution(id),
+  ]);
+
+  const items: ResponseItem[] = rows.map((r) => ({
+    id: r.id,
+    user: r.respondent ?? "Anônimo",
+    channel: r.channel,
+    when: timeAgo(r.createdAt),
+    sentiment: r.sentiment as ResponseItem["sentiment"],
+    score: r.score,
+    comment: r.comment,
+  }));
+
   return (
     <div>
       <Link
@@ -19,8 +42,12 @@ export default async function SurveyResponsesPage({
       >
         <ArrowLeft className="size-4" /> {survey.name}
       </Link>
-      <PageHeader eyebrow="Respostas da pesquisa" title={survey.name} description="Respostas individuais, distribuição e temas desta pesquisa." />
-      <ResponsesView />
+      <PageHeader
+        eyebrow="Respostas da pesquisa"
+        title={survey.name}
+        description={`${stats.total} respostas · nota média ${stats.avgScore ?? "—"}`}
+      />
+      <ResponsesView responses={items} distribution={distribution} total={stats.total} />
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { Card, CardHeader, CardTitle, CardSubtitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
-import { responses, distribution, topThemes } from "@/lib/mock/responses";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { topThemes } from "@/lib/mock/responses";
 
 const sentimentTone = {
   positivo: "success",
@@ -8,7 +9,41 @@ const sentimentTone = {
   negativo: "error",
 } as const;
 
-export function ResponsesView() {
+export interface ResponseItem {
+  id: string;
+  user: string;
+  channel: string;
+  when: string;
+  sentiment: "positivo" | "neutro" | "negativo" | null;
+  score: number | null;
+  comment: string;
+}
+
+export interface DistributionBucket {
+  label: string;
+  value: number; // %
+  tone: string;
+}
+
+export function ResponsesView({
+  responses,
+  distribution,
+  total,
+}: {
+  responses: ResponseItem[];
+  distribution: DistributionBucket[];
+  total: number;
+}) {
+  if (responses.length === 0) {
+    return (
+      <EmptyState
+        mascot="Pensativo"
+        title="Ainda sem respostas"
+        description="Publique uma pesquisa e compartilhe o link. As respostas aparecerão aqui em tempo real."
+      />
+    );
+  }
+
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
       {/* Feed de respostas */}
@@ -22,19 +57,19 @@ export function ResponsesView() {
                 </span>
                 <div>
                   <div className="text-sm font-semibold">{r.user}</div>
-                  <div className="text-xs text-fg-mut">
-                    {r.channel} · {r.when}
-                  </div>
+                  <div className="text-xs text-fg-mut">{r.channel} · {r.when}</div>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <Badge tone={sentimentTone[r.sentiment]}>{r.sentiment}</Badge>
-                <span className="grid size-9 place-items-center rounded-lg bg-surface-brand text-sm font-bold text-accent">
-                  {r.score}
-                </span>
+                {r.sentiment && <Badge tone={sentimentTone[r.sentiment]}>{r.sentiment}</Badge>}
+                {r.score != null && (
+                  <span className="grid size-9 place-items-center rounded-lg bg-surface-brand text-sm font-bold text-accent">
+                    {r.score}
+                  </span>
+                )}
               </div>
             </div>
-            <p className="mt-3 text-sm text-fg-soft">“{r.comment}”</p>
+            {r.comment && <p className="mt-3 text-sm text-fg-soft">“{r.comment}”</p>}
           </Card>
         ))}
       </div>
@@ -45,7 +80,7 @@ export function ResponsesView() {
           <CardHeader>
             <div>
               <CardTitle>Distribuição de notas</CardTitle>
-              <CardSubtitle>Base: 640 respostas</CardSubtitle>
+              <CardSubtitle>Base: {total} respostas</CardSubtitle>
             </div>
           </CardHeader>
           <div className="flex flex-col gap-2.5">
