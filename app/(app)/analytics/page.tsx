@@ -1,9 +1,16 @@
+import { Info } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card, CardHeader, CardTitle, CardSubtitle } from "@/components/ui/Card";
 import { MetricCard } from "@/components/ui/MetricCard";
+import { Badge } from "@/components/ui/Badge";
 import { AreaTrend } from "@/components/charts/Charts";
 import { cn } from "@/lib/utils";
 import { funnel, retention, cohorts, topPages } from "@/lib/mock/analytics";
+
+// Selo aplicado a blocos que dependem da camada de analytics de comportamento (ainda não coletada).
+function SoonBadge() {
+  return <Badge tone="warn" dot={false}>Em breve</Badge>;
+}
 
 function cohortColor(v: number | null) {
   if (v === null) return "bg-transparent text-transparent";
@@ -19,25 +26,47 @@ export default function AnalyticsPage() {
     <div>
       <PageHeader
         eyebrow="Inteligência"
-        title="Analytics"
+        title="Analytics de comportamento"
         description="Funis, retenção, cohorts e engajamento — entenda o comportamento ao longo do tempo."
       />
 
-      <div className="mb-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <MetricCard label="DAU" value="1.040" delta={6} accent="roxo" />
-        <MetricCard label="WAU" value="3.820" delta={4} accent="azul" />
-        <MetricCard label="MAU" value="9.020" delta={3} accent="verde" />
-        <MetricCard label="Stickiness" value="11.5%" delta={2} accent="laranja" />
+      {/* Aviso: esta área depende de coleta de comportamento que ainda não existe */}
+      <Card className="mb-4 border-aviso/40 bg-aviso/10">
+        <div className="flex items-start gap-3">
+          <Info className="mt-0.5 size-5 shrink-0 text-aviso" />
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-bold text-fg">Prévia — dados ilustrativos</span>
+              <Badge tone="warn" dot={false}>Em breve</Badge>
+            </div>
+            <p className="mt-1 max-w-3xl text-sm text-fg-soft">
+              Estas métricas (DAU/MAU, funil, retenção, cohorts) dependem de uma camada de{" "}
+              <strong>analytics de comportamento</strong> que ainda não coletamos — o SDK hoje registra{" "}
+              <em>eventos nomeados</em> e <em>respostas de pesquisa</em>. Os números abaixo são exemplos de layout,
+              não dados do seu workspace. Enquanto isso, use o{" "}
+              <a href="/dashboard" className="font-semibold text-accent hover:underline">Dashboard</a> e a{" "}
+              <a href="/responses" className="font-semibold text-accent hover:underline">Respostas</a> para dados reais de feedback.
+            </p>
+          </div>
+        </div>
+      </Card>
+
+      <div className="mb-4 grid grid-cols-2 gap-4 opacity-70 lg:grid-cols-4">
+        <MetricCard label="DAU" value="—" accent="roxo" />
+        <MetricCard label="WAU" value="—" accent="azul" />
+        <MetricCard label="MAU" value="—" accent="verde" />
+        <MetricCard label="Stickiness" value="—" accent="laranja" />
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Funil */}
-        <Card>
+        <Card className="opacity-70">
           <CardHeader>
             <div>
               <CardTitle>Funil de ativação</CardTitle>
               <CardSubtitle>Do primeiro acesso à ativação</CardSubtitle>
             </div>
+            <SoonBadge />
           </CardHeader>
           <div className="flex flex-col gap-2.5">
             {funnel.map((f, i) => (
@@ -66,24 +95,26 @@ export default function AnalyticsPage() {
         </Card>
 
         {/* Retenção */}
-        <Card>
+        <Card className="opacity-70">
           <CardHeader>
             <div>
               <CardTitle>Curva de retenção</CardTitle>
               <CardSubtitle>% de usuários que retornam</CardSubtitle>
             </div>
+            <SoonBadge />
           </CardHeader>
           <AreaTrend data={retention} dataKey="value" xKey="day" color="var(--luumu-verde)" height={200} />
         </Card>
       </div>
 
       {/* Cohorts */}
-      <Card className="mt-4">
+      <Card className="mt-4 opacity-70">
         <CardHeader>
           <div>
             <CardTitle>Cohorts de retenção</CardTitle>
             <CardSubtitle>Retenção semanal por coorte de entrada</CardSubtitle>
           </div>
+          <SoonBadge />
         </CardHeader>
         <div className="overflow-x-auto">
           <table className="w-full border-separate border-spacing-1 text-center text-sm">
@@ -116,9 +147,10 @@ export default function AnalyticsPage() {
       </Card>
 
       {/* Top páginas */}
-      <Card className="mt-4" padded={false}>
-        <div className="p-6 pb-3">
+      <Card className="mt-4 opacity-70" padded={false}>
+        <div className="flex items-center justify-between p-6 pb-3">
           <CardTitle>Top páginas</CardTitle>
+          <SoonBadge />
         </div>
         <table className="w-full text-sm">
           <thead>
