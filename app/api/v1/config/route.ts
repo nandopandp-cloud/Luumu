@@ -35,6 +35,7 @@ export async function GET(req: Request) {
         type: s.type,
         appearance: normalizeAppearance(s.appearance),
         trigger: s.trigger,
+        triggerEvent: s.triggerEvent, // evento que dispara a survey (null = mostra no load)
         frequency: s.frequency,
       })),
     },

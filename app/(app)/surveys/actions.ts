@@ -60,6 +60,7 @@ const settingsSchema = z.object({
   segment: z.string().optional(),
   language: z.string().optional(),
   trigger: z.string().optional(),
+  triggerEvent: z.string().nullable().optional(),
   frequency: z.string().optional(),
   delay: z.string().optional(),
   startsAt: z.string().optional(),

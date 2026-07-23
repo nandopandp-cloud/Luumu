@@ -7,6 +7,7 @@ import {
   jsonb,
   real,
   index,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 /* =====================================================================
@@ -67,6 +68,28 @@ export const rateLimits = pgTable(
   }
 );
 
+/**
+ * Eventos rastreados pelo SDK no produto do cliente (ex.: "onboarding_concluido").
+ * Um registro por (workspace, nome); atualizado a cada ocorrência para virar gatilho de survey.
+ */
+export const events = pgTable(
+  "events",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    name: text("name").notNull(), // slug do evento, único por workspace
+    count: integer("count").notNull().default(0),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+    firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("events_ws_name_uidx").on(t.workspaceId, t.name),
+    index("events_ws_idx").on(t.workspaceId),
+  ]
+);
+
 export const surveys = pgTable(
   "surveys",
   {
@@ -82,6 +105,8 @@ export const surveys = pgTable(
     segment: text("segment").notNull().default("Todos"),
     language: text("language").notNull().default("pt"),
     trigger: text("trigger").notNull().default("Ao concluir onboarding"),
+    // nome do evento (rastreado pelo SDK do cliente) que dispara esta survey; null = sem gatilho por evento
+    triggerEvent: text("trigger_event"),
     frequency: text("frequency").notNull().default("Uma vez por usuário"),
     delay: text("delay").notNull().default("5s"),
     startsAt: text("starts_at"),
@@ -151,3 +176,4 @@ export type Answer = typeof answers.$inferSelect;
 export type User = typeof users.$inferSelect;
 export type Membership = typeof memberships.$inferSelect;
 export type ApiKey = typeof apiKeys.$inferSelect;
+export type Event = typeof events.$inferSelect;

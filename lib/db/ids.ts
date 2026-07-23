@@ -8,3 +8,4 @@ export const surveyId = () => newId("svy");
 export const questionId = () => newId("qst");
 export const responseId = () => newId("res");
 export const answerId = () => newId("ans");
+export const eventId = () => newId("evt");

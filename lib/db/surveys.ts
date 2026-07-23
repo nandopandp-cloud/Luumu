@@ -101,7 +101,7 @@ export async function createSurveyFromTemplate(workspaceId: string, type: Survey
 export async function updateSurvey(
   id: string,
   workspaceId: string,
-  patch: Partial<Pick<SurveyRow, "name" | "channel" | "audience" | "segment" | "language" | "trigger" | "frequency" | "delay" | "startsAt" | "endsAt">>
+  patch: Partial<Pick<SurveyRow, "name" | "channel" | "audience" | "segment" | "language" | "trigger" | "triggerEvent" | "frequency" | "delay" | "startsAt" | "endsAt">>
 ) {
   await assertOwned(id, workspaceId);
   await db.update(surveys).set({ ...patch, updatedAt: new Date() }).where(eq(surveys.id, id));

@@ -58,6 +58,11 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
   const keyFromAttr = currentScript?.getAttribute("data-luumu") || "";
   let activeKey = ""; // SDK key em uso (setada em start())
 
+  // catálogo de surveys ativas do workspace (carregado uma vez), p/ resolver gatilhos por evento
+  type ActiveSurvey = { id: string; triggerEvent?: string | null; appearance?: Appearance };
+  let activeSurveys: ActiveSurvey[] = [];
+  let catalogLoaded = false;
+
   const seen = (id: string) => {
     try {
       return localStorage.getItem(`luumu_seen_${id}`) === "1";
@@ -398,14 +403,66 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     }
   }
 
-  async function fetchActive(key: string): Promise<{ id: string; appearance: Appearance }[]> {
+  async function fetchActive(key: string): Promise<ActiveSurvey[]> {
     try {
       const r = await fetch(`${API}/config?key=${encodeURIComponent(key)}`);
       if (!r.ok) return [];
       const d = await r.json();
-      return d.surveys || [];
+      return (d.surveys || []) as ActiveSurvey[];
     } catch {
       return [];
+    }
+  }
+
+  // garante que o catálogo de surveys ativas esteja carregado (uma vez por sessão)
+  async function ensureCatalog(key: string) {
+    if (catalogLoaded) return;
+    activeSurveys = await fetchActive(key);
+    catalogLoaded = true;
+  }
+
+  // slug de evento — DEVE casar com normalizeEventName() do servidor (lib/db/events.ts)
+  const slug = (s: string) =>
+    s
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9.-]+/g, "_")
+      .replace(/_{2,}/g, "_")
+      .replace(/^_|_$/g, "")
+      .slice(0, 64);
+
+  // dispara a survey (respeitando "já visto", salvo force) buscando os detalhes sob demanda
+  async function trigger(surveyId: string, key: string, force = false) {
+    if (!force && seen(surveyId)) return;
+    const survey = await fetchSurvey(surveyId, key);
+    if (!survey) return;
+    if (!force && seen(survey.id)) return;
+    const delay = Math.max(0, (survey.appearance.triggerDelay || 0) * 1000);
+    setTimeout(() => mount(survey), delay);
+  }
+
+  /**
+   * Envia um evento do produto do cliente. Faz duas coisas:
+   *  1. ingere o evento (para aparecer no painel como gatilho disponível);
+   *  2. dispara qualquer survey ativa cujo triggerEvent case com o nome.
+   */
+  async function track(rawEvent: string) {
+    const key = activeKey || keyFromAttr;
+    if (!key || !rawEvent) return;
+    const name = slug(rawEvent);
+    if (!name) return;
+    // ingestão (best-effort, não bloqueia o disparo)
+    fetch(`${API}/events`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key, event: name }),
+    }).catch(() => {});
+    // disparo por gatilho
+    await ensureCatalog(key);
+    for (const s of activeSurveys) {
+      if (s.triggerEvent && slug(s.triggerEvent) === name) trigger(s.id, key);
     }
   }
 
@@ -413,18 +470,20 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     const key = opts.key || keyFromAttr;
     if (!key) return;
     activeKey = key;
-    let survey: SurveyData | null = null;
     if (opts.surveyId) {
-      survey = await fetchSurvey(opts.surveyId, key);
-    } else {
-      const active = await fetchActive(key);
-      const target = active.find((s) => opts.force || !seen(s.id));
-      if (target) survey = await fetchSurvey(target.id, key);
+      // pedido explícito: ignora catálogo/gatilho
+      const survey = await fetchSurvey(opts.surveyId, key);
+      if (!survey) return;
+      if (!opts.force && seen(survey.id)) return;
+      const delay = Math.max(0, (survey.appearance.triggerDelay || 0) * 1000);
+      setTimeout(() => mount(survey), delay);
+      return;
     }
-    if (!survey) return;
-    if (!opts.force && seen(survey.id)) return;
-    const delay = Math.max(0, (survey.appearance.triggerDelay || 0) * 1000);
-    setTimeout(() => mount(survey!), delay);
+    // auto-init: só surveys SEM gatilho por evento aparecem no load;
+    // as que têm triggerEvent aguardam Luumu.track(...).
+    await ensureCatalog(key);
+    const target = activeSurveys.find((s) => !s.triggerEvent && (opts.force || !seen(s.id)));
+    if (target) trigger(target.id, key, opts.force);
   }
 
   const Luumu = {
@@ -434,6 +493,10 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     // exibe uma pesquisa específica ignorando "já visto" (útil para testes/preview)
     show(surveyId: string) {
       start({ surveyId, force: true });
+    },
+    // registra um evento do produto e dispara surveys cujo gatilho case
+    track(event: string) {
+      track(event);
     },
   };
 

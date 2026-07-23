@@ -22,13 +22,26 @@ export interface SettingsValues {
   segment: string;
   language: string;
   trigger: string;
+  triggerEvent: string;
   frequency: string;
   delay: string;
   startsAt: string;
   endsAt: string;
 }
 
-export function SurveySettingsForm({ initial }: { initial: SettingsValues }) {
+export interface WorkspaceEvent {
+  name: string;
+  count: number;
+  lastSeenAt: Date | string;
+}
+
+export function SurveySettingsForm({
+  initial,
+  events = [],
+}: {
+  initial: SettingsValues;
+  events?: WorkspaceEvent[];
+}) {
   const [v, setV] = useState(initial);
   const [saving, startSaving] = useTransition();
   const [saved, setSaved] = useState(false);
@@ -38,7 +51,8 @@ export function SurveySettingsForm({ initial }: { initial: SettingsValues }) {
 
   function save() {
     startSaving(async () => {
-      await saveSettingsAction(v);
+      // "" no seletor de evento → null (sem gatilho por evento)
+      await saveSettingsAction({ ...v, triggerEvent: v.triggerEvent || null });
       setSaved(true);
       toast("success", "Configurações salvas.");
       setTimeout(() => setSaved(false), 1800);
@@ -91,9 +105,19 @@ export function SurveySettingsForm({ initial }: { initial: SettingsValues }) {
             <CardTitle>Trigger & frequência</CardTitle>
           </div>
           <div className="mt-4 flex flex-col gap-4">
-            <Field label="Evento de disparo">
+            <Field label="Contexto de disparo">
               <Select value={v.trigger} onChange={(e) => set({ trigger: e.target.value })}>
                 {triggers.map((t) => <option key={t}>{t}</option>)}
+              </Select>
+            </Field>
+            <Field label="Gatilho por evento (SDK)">
+              <Select value={v.triggerEvent} onChange={(e) => set({ triggerEvent: e.target.value })}>
+                <option value="">Nenhum — exibir no carregamento</option>
+                {events.map((ev) => (
+                  <option key={ev.name} value={ev.name}>
+                    {ev.name} · {ev.count} {ev.count === 1 ? "evento" : "eventos"}
+                  </option>
+                ))}
               </Select>
             </Field>
             <div className="grid grid-cols-2 gap-3">
@@ -117,12 +141,22 @@ export function SurveySettingsForm({ initial }: { initial: SettingsValues }) {
               </Field>
             </div>
             <div className="rounded-xl bg-bg-sunken p-3">
-              <div className="mb-2 text-xs font-semibold text-fg-soft">Regras de disparo</div>
-              <div className="flex flex-wrap gap-2">
-                <Badge tone="brand" dot={false}>URL contém /checkout</Badge>
-                <Badge tone="brand" dot={false}>Device = Desktop</Badge>
-                <Badge tone="success">Ativa</Badge>
-              </div>
+              {events.length === 0 ? (
+                <p className="text-xs leading-relaxed text-fg-mut">
+                  Nenhum evento rastreado ainda. Instale o SDK e chame{" "}
+                  <code className="rounded bg-bg px-1 py-0.5 font-mono text-[11px]">luumu.track(&quot;seu_evento&quot;)</code>{" "}
+                  no seu produto — os eventos aparecerão aqui para servir de gatilho.
+                </p>
+              ) : v.triggerEvent ? (
+                <div className="flex flex-wrap items-center gap-2 text-xs text-fg-soft">
+                  <span>Dispara quando o SDK registrar</span>
+                  <Badge tone="brand" dot={false}>{v.triggerEvent}</Badge>
+                </div>
+              ) : (
+                <p className="text-xs text-fg-mut">
+                  Sem gatilho por evento: a pesquisa aparece no carregamento (respeitando frequência).
+                </p>
+              )}
             </div>
           </div>
         </Card>
