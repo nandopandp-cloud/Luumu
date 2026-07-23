@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { jwtVerify } from "jose";
+import { isLockedPath } from "@/lib/locked-routes";
 
 const secret = new TextEncoder().encode(process.env.AUTH_SECRET);
 
@@ -30,6 +31,15 @@ export async function proxy(req: NextRequest) {
     url.searchParams.set("next", pathname);
     return NextResponse.redirect(url);
   }
+
+  // áreas ainda sem fonte de dados real — bloqueadas mesmo por acesso direto à URL
+  if (isLockedPath(pathname)) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/dashboard";
+    url.search = "";
+    return NextResponse.redirect(url);
+  }
+
   return NextResponse.next();
 }
 

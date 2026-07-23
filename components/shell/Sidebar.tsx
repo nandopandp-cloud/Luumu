@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronsUpDown } from "lucide-react";
+import { ChevronsUpDown, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LuumuLogo } from "@/components/ui/Mascot";
 import { NAV } from "./nav";
@@ -50,6 +50,22 @@ export function Sidebar({
                 const active =
                   pathname === item.href || pathname.startsWith(item.href + "/");
                 const Icon = item.icon;
+
+                if (item.locked) {
+                  return (
+                    <div
+                      key={item.href}
+                      aria-disabled="true"
+                      title="Em breve"
+                      className="flex cursor-not-allowed items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-fg-mut/50"
+                    >
+                      <Icon className="size-[18px]" />
+                      <span className="flex-1">{item.label}</span>
+                      <Lock className="size-3.5 shrink-0" />
+                    </div>
+                  );
+                }
+
                 return (
                   <Link
                     key={item.href}

@@ -12,11 +12,16 @@ import {
   Settings,
   type LucideIcon,
 } from "lucide-react";
+import { LOCKED_ROUTES } from "@/lib/locked-routes";
+
+const locked = (href: string) => (LOCKED_ROUTES as readonly string[]).includes(href);
 
 export interface NavItem {
   href: string;
   label: string;
   icon: LucideIcon;
+  /** Área ainda sem fonte de dados real — item desabilitado na sidebar e rota bloqueada. */
+  locked?: boolean;
 }
 
 export interface NavGroup {
@@ -36,15 +41,15 @@ export const NAV: NavGroup[] = [
   {
     title: "Behavior",
     items: [
-      { href: "/heatmaps", label: "Heatmaps", icon: Flame },
-      { href: "/replay", label: "Session Replay", icon: PlayCircle },
+      { href: "/heatmaps", label: "Heatmaps", icon: Flame, locked: locked("/heatmaps") },
+      { href: "/replay", label: "Session Replay", icon: PlayCircle, locked: locked("/replay") },
     ],
   },
   {
     title: "Inteligência",
     items: [
-      { href: "/analytics", label: "Analytics", icon: BarChart3 },
-      { href: "/insights", label: "Insights IA", icon: Sparkles },
+      { href: "/analytics", label: "Analytics", icon: BarChart3, locked: locked("/analytics") },
+      { href: "/insights", label: "Insights IA", icon: Sparkles, locked: locked("/insights") },
       { href: "/reports", label: "Relatórios", icon: FileText },
     ],
   },
