@@ -2,16 +2,18 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
-import { SurveyBuilder } from "@/components/survey-builder/SurveyBuilder";
 import { SurveySubnav } from "@/components/survey/SurveySubnav";
+import { AppearanceEditor } from "@/components/survey/AppearanceEditor";
 import { getSurveyWithQuestions } from "@/lib/db/surveys";
-import type { BuilderQuestion } from "@/lib/builder";
+import { normalizeAppearance, type BuilderQuestion } from "@/lib/builder";
+
+export const dynamic = "force-dynamic";
 
 const statusTone = {
   ativa: "success", pausada: "warn", encerrada: "neutral", rascunho: "brand",
 } as const;
 
-export default async function BuilderPage({
+export default async function AppearancePage({
   params,
 }: {
   params: Promise<{ id: string }>;
@@ -21,7 +23,7 @@ export default async function BuilderPage({
   if (!data) notFound();
   const { survey, questions } = data;
 
-  const initialQuestions: BuilderQuestion[] = questions.map((q) => ({
+  const rendered: BuilderQuestion[] = questions.map((q) => ({
     uid: q.id,
     blockId: q.blockId,
     title: q.title,
@@ -46,17 +48,17 @@ export default async function BuilderPage({
           <Badge tone={statusTone[survey.status as keyof typeof statusTone]}>{survey.status}</Badge>
         </div>
         <p className="mt-1 text-sm text-fg-mut">
-          Monte sua pesquisa arrastando blocos. Tudo é salvo automaticamente.
+          Escolha como a pesquisa aparece dentro do produto do seu cliente. O preview mostra o resultado real.
         </p>
       </div>
 
-      <SurveySubnav id={survey.id} />
+      <SurveySubnav id={id} />
 
-      <SurveyBuilder
-        surveyId={survey.id}
+      <AppearanceEditor
+        id={id}
         surveyName={survey.name}
-        status={survey.status}
-        initialQuestions={initialQuestions}
+        questions={rendered}
+        initial={normalizeAppearance(survey.appearance)}
       />
     </div>
   );

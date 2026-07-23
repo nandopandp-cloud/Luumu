@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "prebuild": "node sdk/build.mjs",
     "build": "next build",
+    "build:sdk": "node sdk/build.mjs",
     "start": "next start",
     "lint": "eslint",
     "db:push": "drizzle-kit push",
@@ -35,6 +37,7 @@
     "@types/react-dom": "^19",
     "dotenv": "^17.4.2",
     "drizzle-kit": "^0.31.10",
+    "esbuild": "^0.28.1",
     "eslint": "^9",
     "eslint-config-next": "16.2.11",
     "tailwindcss": "^4",

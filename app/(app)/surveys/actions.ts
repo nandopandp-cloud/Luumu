@@ -10,8 +10,11 @@ import {
   publishSurvey,
   setSurveyStatus,
   getSurveyWithQuestions,
+  saveAppearance,
 } from "@/lib/db/surveys";
 import { submitResponse } from "@/lib/db/responses";
+import { deriveSentiment } from "@/lib/sentiment";
+import { normalizeAppearance } from "@/lib/builder";
 import type { SurveyType, SurveyStatus } from "@/lib/mock/surveys";
 
 /* ---------- Criar (a partir de template) ---------- */
@@ -96,15 +99,6 @@ const submitSchema = z.object({
   score: z.number().nullable(),
 });
 
-function deriveSentiment(score: number | null): "positivo" | "neutro" | "negativo" | null {
-  if (score == null) return null;
-  // normaliza: NPS 0-10, CSAT/escala 1-5/1-7 — usa faixas relativas simples
-  if (score >= 8 || (score <= 5 && score >= 4)) return "positivo";
-  if (score >= 6 && score <= 7) return "neutro";
-  if (score <= 3) return "negativo";
-  return "neutro";
-}
-
 export async function submitResponseAction(input: unknown) {
   const data = submitSchema.parse(input);
   await submitResponse({
@@ -117,4 +111,12 @@ export async function submitResponseAction(input: unknown) {
   revalidatePath(`/surveys/${data.surveyId}/responses`);
   revalidatePath("/dashboard");
   return { ok: true as const };
+}
+
+/* ---------- Aparência do widget (aba Exibição) ---------- */
+export async function saveAppearanceAction(id: string, appearance: unknown) {
+  const normalized = normalizeAppearance(appearance);
+  await saveAppearance(id, normalized);
+  revalidatePath(`/surveys/${id}/appearance`);
+  return { ok: true as const, appearance: normalized };
 }

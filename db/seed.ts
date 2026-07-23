@@ -9,6 +9,7 @@ import { workspaces, surveys, questions, responses, answers } from "./schema";
 import { surveys as mockSurveys } from "../lib/mock/surveys";
 import { responses as mockResponses } from "../lib/mock/responses";
 import { questionTemplates } from "../lib/survey-templates";
+import { defaultAppearanceFor } from "../lib/builder";
 import type { SurveyType } from "../lib/mock/surveys";
 
 const nano = customAlphabet("23456789abcdefghijkmnpqrstuvwxyz", 10);
@@ -47,6 +48,7 @@ async function main() {
       type: s.type,
       status,
       channel: s.channel,
+      appearance: defaultAppearanceFor(s.type as SurveyType),
       publishedAt: status === "ativa" || status === "pausada" || status === "encerrada" ? new Date() : null,
     });
 

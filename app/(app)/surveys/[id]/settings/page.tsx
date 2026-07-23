@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
-import { PageHeader } from "@/components/ui/PageHeader";
 import { SurveySettingsForm } from "@/components/survey/SurveySettingsForm";
+import { SurveySubnav } from "@/components/survey/SurveySubnav";
 import { getSurvey } from "@/lib/db/surveys";
 
 export const dynamic = "force-dynamic";
@@ -19,16 +19,20 @@ export default async function SurveySettingsPage({
   return (
     <div>
       <Link
-        href={`/surveys/${id}/builder`}
+        href="/surveys"
         className="mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-fg-mut hover:text-accent"
       >
-        <ArrowLeft className="size-4" /> {survey.name}
+        <ArrowLeft className="size-4" /> Pesquisas
       </Link>
-      <PageHeader
-        eyebrow="Configuração da pesquisa"
-        title="Disparo & Público"
-        description="Defina quando, para quem e com que frequência esta pesquisa é exibida."
-      />
+      <div className="mb-6">
+        <h1 className="font-display text-2xl font-extrabold tracking-tight">{survey.name}</h1>
+        <p className="mt-1 text-sm text-fg-mut">
+          Defina quando, para quem e com que frequência esta pesquisa é exibida.
+        </p>
+      </div>
+
+      <SurveySubnav id={id} />
+
       <SurveySettingsForm
         initial={{
           id: survey.id,

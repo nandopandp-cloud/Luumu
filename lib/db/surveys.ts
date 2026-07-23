@@ -4,6 +4,7 @@ import { db } from "./client";
 import { surveys, questions, responses } from "@/db/schema";
 import { surveyId, questionId } from "./ids";
 import { questionTemplates } from "@/lib/survey-templates";
+import { defaultAppearanceFor, type Appearance } from "@/lib/builder";
 import type { SurveyType, SurveyStatus } from "@/lib/mock/surveys";
 
 export const WORKSPACE_ID = "ws_luumu";
@@ -65,6 +66,7 @@ export async function createSurveyFromTemplate(type: SurveyType) {
     name: tpl.name,
     type,
     status: "rascunho",
+    appearance: defaultAppearanceFor(type),
   });
   if (tpl.questions.length) {
     await db.insert(questions).values(
@@ -126,4 +128,18 @@ export async function setSurveyStatus(id: string, status: SurveyStatus) {
 
 export async function deleteSurvey(id: string) {
   await db.delete(surveys).where(eq(surveys.id, id));
+}
+
+/** Salva a aparência do widget embutido. */
+export async function saveAppearance(id: string, appearance: Appearance) {
+  await db.update(surveys).set({ appearance, updatedAt: new Date() }).where(eq(surveys.id, id));
+}
+
+/** Pesquisas ativas do workspace (para a API pública do SDK). */
+export async function listActiveSurveys() {
+  return db
+    .select()
+    .from(surveys)
+    .where(and(eq(surveys.workspaceId, WORKSPACE_ID), eq(surveys.status, "ativa")))
+    .orderBy(desc(surveys.publishedAt));
 }

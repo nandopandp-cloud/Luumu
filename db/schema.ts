@@ -40,6 +40,8 @@ export const surveys = pgTable(
     delay: text("delay").notNull().default("5s"),
     startsAt: text("starts_at"),
     endsAt: text("ends_at"),
+    // Aparência do widget embutido: { format, position, theme, triggerDelay, accent }
+    appearance: jsonb("appearance").notNull().default({}),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     publishedAt: timestamp("published_at", { withTimezone: true }),
