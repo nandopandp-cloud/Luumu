@@ -4,13 +4,18 @@ import { Card, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { SettingsNav } from "@/components/settings/SettingsNav";
+import { requireUser } from "@/lib/auth/current";
+import { listWorkspaceMembers } from "@/lib/db/users";
 
-const members = [
-  { name: "Fernando Rodrigues", email: "fernando@jovensgenios.com", role: "Owner", tone: "brand" },
-  { name: "Marina Souza", email: "marina@jovensgenios.com", role: "Admin", tone: "info" },
-  { name: "Carlos Lima", email: "carlos@jovensgenios.com", role: "Editor", tone: "success" },
-  { name: "Ana Beatriz", email: "ana@jovensgenios.com", role: "Viewer", tone: "neutral" },
-] as const;
+export const dynamic = "force-dynamic";
+
+// role do banco (minúsculo) → rótulo + tom do badge
+const roleMeta: Record<string, { label: string; tone: "brand" | "info" | "success" | "neutral" }> = {
+  owner: { label: "Owner", tone: "brand" },
+  admin: { label: "Admin", tone: "info" },
+  editor: { label: "Editor", tone: "success" },
+  viewer: { label: "Viewer", tone: "neutral" },
+};
 
 const roles = [
   { role: "Owner", desc: "Acesso total, incluindo billing e exclusão do workspace." },
@@ -19,7 +24,10 @@ const roles = [
   { role: "Viewer", desc: "Apenas visualização de dashboards e respostas." },
 ];
 
-export default function MembersPage() {
+export default async function MembersPage() {
+  const { workspaceId, userId } = await requireUser();
+  const members = await listWorkspaceMembers(workspaceId);
+
   return (
     <div>
       <PageHeader
@@ -47,27 +55,34 @@ export default function MembersPage() {
             </tr>
           </thead>
           <tbody>
-            {members.map((m) => (
-              <tr key={m.email} className="border-b border-line last:border-0 hover:bg-bg-sunken/50">
-                <td className="px-6 py-3.5">
-                  <div className="flex items-center gap-3">
-                    <span className="grid size-9 place-items-center rounded-full text-sm font-bold text-white [background:var(--grad-marca)]">
-                      {m.name.charAt(0)}
-                    </span>
-                    <div>
-                      <div className="font-semibold">{m.name}</div>
-                      <div className="text-xs text-fg-mut">{m.email}</div>
+            {members.map((m) => {
+              const meta = roleMeta[m.role] ?? { label: m.role, tone: "neutral" as const };
+              const isCurrent = m.id === userId;
+              return (
+                <tr key={m.id} className="border-b border-line last:border-0 hover:bg-bg-sunken/50">
+                  <td className="px-6 py-3.5">
+                    <div className="flex items-center gap-3">
+                      <span className="grid size-9 place-items-center rounded-full text-sm font-bold text-white [background:var(--grad-marca)]">
+                        {m.name.charAt(0).toUpperCase()}
+                      </span>
+                      <div>
+                        <div className="font-semibold">
+                          {m.name}
+                          {isCurrent && <span className="ml-2 text-xs font-normal text-fg-mut">(você)</span>}
+                        </div>
+                        <div className="text-xs text-fg-mut">{m.email}</div>
+                      </div>
                     </div>
-                  </div>
-                </td>
-                <td className="px-3 py-3.5">
-                  <Badge tone={m.tone} dot={false}>{m.role}</Badge>
-                </td>
-                <td className="px-6 py-3.5 text-right">
-                  <Button variant="ghost" size="sm">Editar</Button>
-                </td>
-              </tr>
-            ))}
+                  </td>
+                  <td className="px-3 py-3.5">
+                    <Badge tone={meta.tone} dot={false}>{meta.label}</Badge>
+                  </td>
+                  <td className="px-6 py-3.5 text-right">
+                    <Button variant="ghost" size="sm" disabled={isCurrent}>Editar</Button>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </Card>
