@@ -1,8 +1,6 @@
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
-import { Button } from "@/components/ui/Button";
-import { Field, Input } from "@/components/ui/Input";
 import { LuumuLogo, Mascot } from "@/components/ui/Mascot";
+import { AuthForm } from "../AuthForm";
 
 export default function LoginPage() {
   return (
@@ -22,23 +20,7 @@ export default function LoginPage() {
             Entre para ouvir, entender e melhorar.
           </p>
 
-          <form className="mt-8 flex flex-col gap-4">
-            <Field label="E-mail">
-              <Input type="email" placeholder="voce@empresa.com" defaultValue="fernando@jovensgenios.com" />
-            </Field>
-            <Field label="Senha">
-              <Input type="password" placeholder="••••••••" defaultValue="luumu-demo" />
-            </Field>
-            <div className="flex items-center justify-between text-sm">
-              <label className="flex items-center gap-2 text-fg-soft">
-                <input type="checkbox" defaultChecked className="accent-luumu-roxo" /> Lembrar de mim
-              </label>
-              <a className="font-semibold text-accent">Esqueci a senha</a>
-            </div>
-            <Button href="/dashboard" size="lg" className="mt-2 w-full">
-              Entrar <ArrowRight className="size-4" />
-            </Button>
-          </form>
+          <AuthForm mode="login" />
 
           <p className="mt-6 text-center text-sm text-fg-mut">
             Não tem conta?{" "}

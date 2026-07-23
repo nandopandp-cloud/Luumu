@@ -21,6 +21,52 @@ export const workspaces = pgTable("workspaces", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/* ---- Auth & Multi-tenant ---- */
+export const users = pgTable("users", {
+  id: text("id").primaryKey(),
+  email: text("email").notNull().unique(),
+  name: text("name").notNull(),
+  passwordHash: text("password_hash").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const memberships = pgTable(
+  "memberships",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+    role: text("role").notNull().default("owner"), // owner | admin | editor | viewer
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("memberships_user_idx").on(t.userId), index("memberships_ws_idx").on(t.workspaceId)]
+);
+
+export const apiKeys = pgTable(
+  "api_keys",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+    name: text("name").notNull().default("Default"),
+    publicKey: text("public_key").notNull().unique(), // pk_...
+    secretHash: text("secret_hash").notNull(), // hash da sk_...
+    domains: jsonb("domains").notNull().default([]), // allowlist de origens
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  },
+  (t) => [index("api_keys_ws_idx").on(t.workspaceId), index("api_keys_pk_idx").on(t.publicKey)]
+);
+
+export const rateLimits = pgTable(
+  "rate_limits",
+  {
+    bucket: text("bucket").primaryKey(), // ex.: "res:<ip>:<pk>:<minuteWindow>"
+    count: integer("count").notNull().default(0),
+    windowStart: timestamp("window_start", { withTimezone: true }).notNull().defaultNow(),
+  }
+);
+
 export const surveys = pgTable(
   "surveys",
   {
@@ -102,3 +148,6 @@ export type Survey = typeof surveys.$inferSelect;
 export type Question = typeof questions.$inferSelect;
 export type Response = typeof responses.$inferSelect;
 export type Answer = typeof answers.$inferSelect;
+export type User = typeof users.$inferSelect;
+export type Membership = typeof memberships.$inferSelect;
+export type ApiKey = typeof apiKeys.$inferSelect;

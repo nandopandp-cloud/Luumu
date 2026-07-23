@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/Badge";
 import { SurveyBuilder } from "@/components/survey-builder/SurveyBuilder";
 import { SurveySubnav } from "@/components/survey/SurveySubnav";
 import { getSurveyWithQuestions } from "@/lib/db/surveys";
+import { getCurrentWorkspaceId } from "@/lib/auth/current";
 import type { BuilderQuestion } from "@/lib/builder";
 
 const statusTone = {
@@ -17,7 +18,8 @@ export default async function BuilderPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const data = await getSurveyWithQuestions(id);
+  const workspaceId = await getCurrentWorkspaceId();
+  const data = await getSurveyWithQuestions(id, workspaceId);
   if (!data) notFound();
   const { survey, questions } = data;
 

@@ -1,8 +1,7 @@
 import Link from "next/link";
-import { ArrowRight, Check } from "lucide-react";
-import { Button } from "@/components/ui/Button";
-import { Field, Input } from "@/components/ui/Input";
+import { Check } from "lucide-react";
 import { LuumuLogo, Mascot } from "@/components/ui/Mascot";
+import { AuthForm } from "../AuthForm";
 
 const perks = [
   "14 dias grátis, sem cartão",
@@ -23,20 +22,7 @@ export default function SignupPage() {
           <h1 className="font-display text-3xl font-extrabold tracking-tight">Comece grátis</h1>
           <p className="mt-1.5 text-sm text-fg-mut">Transforme feedback em crescimento hoje.</p>
 
-          <form className="mt-8 flex flex-col gap-4">
-            <Field label="Nome">
-              <Input placeholder="Seu nome" />
-            </Field>
-            <Field label="E-mail de trabalho">
-              <Input type="email" placeholder="voce@empresa.com" />
-            </Field>
-            <Field label="Senha">
-              <Input type="password" placeholder="Crie uma senha" />
-            </Field>
-            <Button href="/dashboard" size="lg" className="mt-2 w-full">
-              Criar conta <ArrowRight className="size-4" />
-            </Button>
-          </form>
+          <AuthForm mode="signup" />
 
           <p className="mt-6 text-center text-sm text-fg-mut">
             Já tem conta?{" "}

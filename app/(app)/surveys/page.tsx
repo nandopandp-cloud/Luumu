@@ -4,13 +4,15 @@ import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SurveysTable, type SurveyListItem } from "@/components/survey/SurveysTable";
 import { listSurveys } from "@/lib/db/surveys";
+import { getCurrentWorkspaceId } from "@/lib/auth/current";
 import { timeAgo } from "@/lib/utils";
 import type { SurveyStatus } from "@/lib/mock/surveys";
 
 export const dynamic = "force-dynamic";
 
 export default async function SurveysPage() {
-  const rows = await listSurveys();
+  const workspaceId = await getCurrentWorkspaceId();
+  const rows = await listSurveys(workspaceId);
 
   const items: SurveyListItem[] = rows.map((s) => ({
     id: s.id,

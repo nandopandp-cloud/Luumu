@@ -5,14 +5,22 @@ import { cn } from "@/lib/utils";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+export function AppShell({
+  children,
+  user,
+  workspace,
+}: {
+  children: React.ReactNode;
+  user: { name: string; email: string };
+  workspace: { name: string; plan: string };
+}) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
     <div className="flex min-h-screen">
       {/* Sidebar desktop */}
       <div className="sticky top-0 hidden h-screen shrink-0 lg:block">
-        <Sidebar />
+        <Sidebar workspace={workspace} />
       </div>
 
       {/* Sidebar mobile (drawer) */}
@@ -23,14 +31,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             onClick={() => setMobileOpen(false)}
           />
           <div className="absolute inset-y-0 left-0 h-full shadow-[var(--shadow-lg)]">
-            <Sidebar onNavigate={() => setMobileOpen(false)} />
+            <Sidebar workspace={workspace} onNavigate={() => setMobileOpen(false)} />
           </div>
         </div>
       )}
 
       {/* Conteúdo */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar onMenu={() => setMobileOpen(true)} />
+        <Topbar onMenu={() => setMobileOpen(true)} user={user} />
         <main className={cn("mx-auto w-full max-w-[1280px] flex-1 px-4 py-7 md:px-8")}>
           {children}
         </main>

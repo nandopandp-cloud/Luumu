@@ -1,14 +1,26 @@
 import "server-only";
-import { desc, eq, count, avg, sql } from "drizzle-orm";
+import { and, desc, eq, count, avg, sql, type SQL } from "drizzle-orm";
 import { db } from "./client";
 import { responses, answers, surveys } from "@/db/schema";
 import { responseId, answerId } from "./ids";
 
 export type ResponseRow = typeof responses.$inferSelect;
 
-/** Feed de respostas (opcionalmente de uma pesquisa específica) com o comentário principal. */
-export async function listResponses(surveyIdFilter?: string) {
-  const base = db
+interface Scope {
+  workspaceId: string;
+  surveyId?: string; // opcional: restringe a uma pesquisa do workspace
+}
+
+/** Filtro combinado: sempre por workspace (via join com surveys), opcionalmente por pesquisa. */
+function scopeWhere(scope: Scope): SQL | undefined {
+  const parts = [eq(surveys.workspaceId, scope.workspaceId)];
+  if (scope.surveyId) parts.push(eq(responses.surveyId, scope.surveyId));
+  return and(...parts);
+}
+
+/** Feed de respostas do workspace (ou de uma pesquisa dele) com o comentário principal. */
+export async function listResponses(scope: Scope) {
+  const rows = await db
     .select({
       id: responses.id,
       surveyId: responses.surveyId,
@@ -20,15 +32,11 @@ export async function listResponses(surveyIdFilter?: string) {
       surveyName: surveys.name,
     })
     .from(responses)
-    .leftJoin(surveys, eq(responses.surveyId, surveys.id))
+    .innerJoin(surveys, eq(responses.surveyId, surveys.id))
+    .where(scopeWhere(scope))
     .orderBy(desc(responses.createdAt))
     .limit(50);
 
-  const rows = surveyIdFilter
-    ? await base.where(eq(responses.surveyId, surveyIdFilter))
-    : await base;
-
-  // pega o comentário de texto (se houver) entre as answers da resposta
   const withComment = await Promise.all(
     rows.map(async (r) => {
       const rowAnswers = await db
@@ -51,23 +59,26 @@ function extractComment(value: unknown): string {
   return "";
 }
 
-/** Estatísticas agregadas de uma pesquisa (ou global). */
-export async function getStats(surveyIdFilter?: string) {
-  const where = surveyIdFilter ? eq(responses.surveyId, surveyIdFilter) : undefined;
+/** Estatísticas agregadas do workspace (ou de uma pesquisa dele). */
+export async function getStats(scope: Scope) {
+  const where = scopeWhere(scope);
 
   const [{ total } = { total: 0 }] = await db
     .select({ total: count() })
     .from(responses)
+    .innerJoin(surveys, eq(responses.surveyId, surveys.id))
     .where(where);
 
   const [{ avgScore } = { avgScore: null }] = await db
     .select({ avgScore: avg(responses.score) })
     .from(responses)
+    .innerJoin(surveys, eq(responses.surveyId, surveys.id))
     .where(where);
 
   const sentiments = await db
     .select({ sentiment: responses.sentiment, n: count() })
     .from(responses)
+    .innerJoin(surveys, eq(responses.surveyId, surveys.id))
     .where(where)
     .groupBy(responses.sentiment);
 
@@ -83,15 +94,15 @@ export async function getStats(surveyIdFilter?: string) {
 }
 
 /** Distribuição de notas 1–5 normalizada em % (para as barras). */
-export async function getScoreDistribution(surveyIdFilter?: string) {
-  const where = surveyIdFilter ? eq(responses.surveyId, surveyIdFilter) : undefined;
+export async function getScoreDistribution(scope: Scope) {
   const rows = await db
     .select({
       bucket: sql<number>`round(${responses.score})`.mapWith(Number).as("bucket"),
       n: count(),
     })
     .from(responses)
-    .where(where)
+    .innerJoin(surveys, eq(responses.surveyId, surveys.id))
+    .where(scopeWhere(scope))
     .groupBy(sql`round(${responses.score})`);
 
   const tones: Record<number, string> = {
@@ -107,7 +118,51 @@ export async function getScoreDistribution(surveyIdFilter?: string) {
   }));
 }
 
-/** Grava uma resposta com suas answers (usado pela página pública /s/[id]). */
+/** Distribuição real de respostas por canal, em %, para o donut do dashboard. */
+export async function getChannelSplit(scope: Scope) {
+  const rows = await db
+    .select({ channel: responses.channel, n: count() })
+    .from(responses)
+    .innerJoin(surveys, eq(responses.surveyId, surveys.id))
+    .where(scopeWhere(scope))
+    .groupBy(responses.channel)
+    .orderBy(desc(count()));
+
+  const palette = [
+    "var(--luumu-roxo)", "var(--luumu-roxo-claro)", "var(--luumu-verde)", "var(--sec-ciano)",
+  ];
+  const total = rows.reduce((s, r) => s + Number(r.n), 0) || 1;
+  return rows.map((r, i) => ({
+    name: r.channel,
+    value: Math.round((Number(r.n) / total) * 100),
+    color: palette[i % palette.length],
+  }));
+}
+
+/**
+ * Evolução da nota média por semana (últimas `weeks` semanas), para a área do dashboard.
+ * Só considera respostas com score. Retorna [{ date: "dd/mm", csat }].
+ */
+export async function getScoreTrend(scope: Scope, weeks = 8) {
+  const rows = await db
+    .select({
+      week: sql<string>`to_char(date_trunc('week', ${responses.createdAt}), 'DD/MM')`.as("week"),
+      weekStart: sql<string>`date_trunc('week', ${responses.createdAt})`.as("week_start"),
+      avgScore: avg(responses.score),
+    })
+    .from(responses)
+    .innerJoin(surveys, eq(responses.surveyId, surveys.id))
+    .where(and(scopeWhere(scope), sql`${responses.score} is not null`))
+    .groupBy(sql`date_trunc('week', ${responses.createdAt})`)
+    .orderBy(sql`date_trunc('week', ${responses.createdAt})`);
+
+  return rows.slice(-weeks).map((r) => ({
+    date: r.week,
+    csat: r.avgScore != null ? Math.round(Number(r.avgScore) * 10) / 10 : 0,
+  }));
+}
+
+/** Grava uma resposta com suas answers (a validação de tenant é feita antes, na API). */
 export async function submitResponse(input: {
   surveyId: string;
   channel?: string;

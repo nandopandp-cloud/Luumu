@@ -7,8 +7,15 @@ import { cn } from "@/lib/utils";
 import { LuumuLogo } from "@/components/ui/Mascot";
 import { NAV } from "./nav";
 
-export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
+export function Sidebar({
+  onNavigate,
+  workspace,
+}: {
+  onNavigate?: () => void;
+  workspace: { name: string; plan: string };
+}) {
   const pathname = usePathname();
+  const planLabel = { starter: "Plano Starter", growth: "Plano Growth", enterprise: "Plano Enterprise" }[workspace.plan] ?? "Plano Growth";
 
   return (
     <aside className="flex h-full w-[260px] flex-col gap-1 overflow-y-auto border-r border-line bg-bg-elev px-3 py-5">
@@ -22,11 +29,11 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       <button className="mb-3 flex items-center justify-between gap-2 rounded-xl border border-line bg-bg-sunken px-3 py-2 text-left transition hover:border-line-strong">
         <div className="flex items-center gap-2.5">
           <span className="grid size-8 place-items-center rounded-lg text-sm font-bold text-white [background:var(--grad-roxo)]">
-            J
+            {workspace.name.charAt(0).toUpperCase()}
           </span>
           <div className="leading-tight">
-            <div className="text-sm font-semibold">Jovens Gênios</div>
-            <div className="text-[11px] text-fg-mut">Plano Growth</div>
+            <div className="text-sm font-semibold">{workspace.name}</div>
+            <div className="text-[11px] text-fg-mut">{planLabel}</div>
           </div>
         </div>
         <ChevronsUpDown className="size-4 text-fg-mut" />

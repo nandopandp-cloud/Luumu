@@ -5,6 +5,7 @@ import { ResponsesView, type ResponseItem } from "@/components/responses/Respons
 import { SurveySubnav } from "@/components/survey/SurveySubnav";
 import { getSurvey } from "@/lib/db/surveys";
 import { listResponses, getStats, getScoreDistribution } from "@/lib/db/responses";
+import { getCurrentWorkspaceId } from "@/lib/auth/current";
 import { timeAgo } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -15,13 +16,14 @@ export default async function SurveyResponsesPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const survey = await getSurvey(id);
+  const workspaceId = await getCurrentWorkspaceId();
+  const survey = await getSurvey(id, workspaceId);
   if (!survey) notFound();
 
   const [rows, stats, distribution] = await Promise.all([
-    listResponses(id),
-    getStats(id),
-    getScoreDistribution(id),
+    listResponses({ workspaceId, surveyId: id }),
+    getStats({ workspaceId, surveyId: id }),
+    getScoreDistribution({ workspaceId, surveyId: id }),
   ]);
 
   const items: ResponseItem[] = rows.map((r) => ({

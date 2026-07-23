@@ -56,6 +56,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
   const ORIGIN = scriptSrc ? new URL(scriptSrc).origin : location.origin;
   const API = `${ORIGIN}/api/v1`;
   const keyFromAttr = currentScript?.getAttribute("data-luumu") || "";
+  let activeKey = ""; // SDK key em uso (setada em start())
 
   const seen = (id: string) => {
     try {
@@ -214,6 +215,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            key: activeKey,
             surveyId: survey.id,
             channel: "SDK",
             answers: vis.map((q) => ({ questionId: q.uid, value: normalize(q, answers[q.uid]) })),
@@ -386,9 +388,9 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     render();
   }
 
-  async function fetchSurvey(id: string): Promise<SurveyData | null> {
+  async function fetchSurvey(id: string, key: string): Promise<SurveyData | null> {
     try {
-      const r = await fetch(`${API}/surveys/${id}`);
+      const r = await fetch(`${API}/surveys/${id}?key=${encodeURIComponent(key)}`);
       if (!r.ok) return null;
       return (await r.json()) as SurveyData;
     } catch {
@@ -408,13 +410,16 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
   }
 
   async function start(opts: { key?: string; surveyId?: string; force?: boolean }) {
+    const key = opts.key || keyFromAttr;
+    if (!key) return;
+    activeKey = key;
     let survey: SurveyData | null = null;
     if (opts.surveyId) {
-      survey = await fetchSurvey(opts.surveyId);
-    } else if (opts.key) {
-      const active = await fetchActive(opts.key);
+      survey = await fetchSurvey(opts.surveyId, key);
+    } else {
+      const active = await fetchActive(key);
       const target = active.find((s) => opts.force || !seen(s.id));
-      if (target) survey = await fetchSurvey(target.id);
+      if (target) survey = await fetchSurvey(target.id, key);
     }
     if (!survey) return;
     if (!opts.force && seen(survey.id)) return;
@@ -434,6 +439,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
 
   w.Luumu = Luumu;
 
-  // auto-init se houver data-luumu no script
-  if (keyFromAttr) Luumu.init({ key: keyFromAttr });
+  // auto-init se houver data-luumu (a menos que data-luumu-auto="false")
+  const autoAttr = currentScript?.getAttribute("data-luumu-auto");
+  if (keyFromAttr && autoAttr !== "false") Luumu.init({ key: keyFromAttr });
 })();

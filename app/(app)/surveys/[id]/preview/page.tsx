@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/Badge";
 import { LuumuLogo } from "@/components/ui/Mascot";
 import { SurveyRenderer } from "@/components/survey/SurveyRenderer";
 import { getSurveyWithQuestions } from "@/lib/db/surveys";
+import { getCurrentWorkspaceId } from "@/lib/auth/current";
 import type { BuilderQuestion } from "@/lib/builder";
 
 export default async function PreviewPage({
@@ -14,7 +15,8 @@ export default async function PreviewPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const data = await getSurveyWithQuestions(id);
+  const workspaceId = await getCurrentWorkspaceId();
+  const data = await getSurveyWithQuestions(id, workspaceId);
   if (!data) notFound();
   const { survey, questions } = data;
 

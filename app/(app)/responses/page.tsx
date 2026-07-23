@@ -4,15 +4,17 @@ import { Button } from "@/components/ui/Button";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { ResponsesView, type ResponseItem } from "@/components/responses/ResponsesView";
 import { listResponses, getStats, getScoreDistribution } from "@/lib/db/responses";
+import { getCurrentWorkspaceId } from "@/lib/auth/current";
 import { timeAgo } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
 export default async function ResponsesPage() {
+  const workspaceId = await getCurrentWorkspaceId();
   const [rows, stats, distribution] = await Promise.all([
-    listResponses(),
-    getStats(),
-    getScoreDistribution(),
+    listResponses({ workspaceId }),
+    getStats({ workspaceId }),
+    getScoreDistribution({ workspaceId }),
   ]);
 
   const items: ResponseItem[] = rows.map((r) => ({

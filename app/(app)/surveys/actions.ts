@@ -15,11 +15,14 @@ import {
 import { submitResponse } from "@/lib/db/responses";
 import { deriveSentiment } from "@/lib/sentiment";
 import { normalizeAppearance } from "@/lib/builder";
+import { getCurrentWorkspaceId } from "@/lib/auth/current";
+import { getSurvey } from "@/lib/db/surveys";
 import type { SurveyType, SurveyStatus } from "@/lib/mock/surveys";
 
 /* ---------- Criar (a partir de template) ---------- */
 export async function createSurveyAction(type: SurveyType) {
-  const id = await createSurveyFromTemplate(type);
+  const workspaceId = await getCurrentWorkspaceId();
+  const id = await createSurveyFromTemplate(workspaceId, type);
   revalidatePath("/surveys");
   redirect(`/surveys/${id}/builder`);
 }
@@ -41,8 +44,9 @@ const saveDraftSchema = z.object({
 
 export async function saveDraftAction(input: unknown) {
   const data = saveDraftSchema.parse(input);
-  await updateSurvey(data.id, { name: data.name });
-  await replaceQuestions(data.id, data.questions);
+  const workspaceId = await getCurrentWorkspaceId();
+  await updateSurvey(data.id, workspaceId, { name: data.name });
+  await replaceQuestions(data.id, workspaceId, data.questions);
   revalidatePath(`/surveys/${data.id}/builder`);
   revalidatePath("/surveys");
   return { ok: true as const, savedAt: Date.now() };
@@ -64,20 +68,22 @@ const settingsSchema = z.object({
 
 export async function saveSettingsAction(input: unknown) {
   const { id, ...patch } = settingsSchema.parse(input);
-  await updateSurvey(id, patch);
+  const workspaceId = await getCurrentWorkspaceId();
+  await updateSurvey(id, workspaceId, patch);
   revalidatePath(`/surveys/${id}/settings`);
   return { ok: true as const };
 }
 
 /* ---------- Publicar (valida nome + >=1 pergunta) ---------- */
 export async function publishSurveyAction(id: string) {
-  const data = await getSurveyWithQuestions(id);
+  const workspaceId = await getCurrentWorkspaceId();
+  const data = await getSurveyWithQuestions(id, workspaceId);
   if (!data) return { ok: false as const, error: "Pesquisa não encontrada." };
   if (!data.survey.name.trim()) return { ok: false as const, error: "Dê um nome à pesquisa antes de publicar." };
   if (data.questions.length === 0)
     return { ok: false as const, error: "Adicione ao menos uma pergunta antes de publicar." };
 
-  await publishSurvey(id);
+  await publishSurvey(id, workspaceId);
   revalidatePath(`/surveys/${id}/builder`);
   revalidatePath("/surveys");
   revalidatePath("/dashboard");
@@ -86,7 +92,8 @@ export async function publishSurveyAction(id: string) {
 
 /* ---------- Status (pausar / encerrar / reativar) ---------- */
 export async function setStatusAction(id: string, status: SurveyStatus) {
-  await setSurveyStatus(id, status);
+  const workspaceId = await getCurrentWorkspaceId();
+  await setSurveyStatus(id, workspaceId, status);
   revalidatePath("/surveys");
   revalidatePath(`/surveys/${id}/builder`);
   return { ok: true as const };
@@ -101,6 +108,11 @@ const submitSchema = z.object({
 
 export async function submitResponseAction(input: unknown) {
   const data = submitSchema.parse(input);
+  // caminho público (preview/link direto): só grava se a pesquisa existir e estiver ativa
+  const survey = await getSurvey(data.surveyId);
+  if (!survey || survey.status !== "ativa") {
+    return { ok: false as const, error: "Pesquisa indisponível." };
+  }
   await submitResponse({
     surveyId: data.surveyId,
     answers: data.answers as { questionId: string; value: unknown }[],
@@ -115,8 +127,9 @@ export async function submitResponseAction(input: unknown) {
 
 /* ---------- Aparência do widget (aba Exibição) ---------- */
 export async function saveAppearanceAction(id: string, appearance: unknown) {
+  const workspaceId = await getCurrentWorkspaceId();
   const normalized = normalizeAppearance(appearance);
-  await saveAppearance(id, normalized);
+  await saveAppearance(id, workspaceId, normalized);
   revalidatePath(`/surveys/${id}/appearance`);
   return { ok: true as const, appearance: normalized };
 }

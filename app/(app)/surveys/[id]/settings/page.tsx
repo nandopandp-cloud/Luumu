@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { SurveySettingsForm } from "@/components/survey/SurveySettingsForm";
 import { SurveySubnav } from "@/components/survey/SurveySubnav";
 import { getSurvey } from "@/lib/db/surveys";
+import { getCurrentWorkspaceId } from "@/lib/auth/current";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,8 @@ export default async function SurveySettingsPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const survey = await getSurvey(id);
+  const workspaceId = await getCurrentWorkspaceId();
+  const survey = await getSurvey(id, workspaceId);
   if (!survey) notFound();
 
   return (

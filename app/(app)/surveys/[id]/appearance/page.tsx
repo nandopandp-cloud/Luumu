@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/Badge";
 import { SurveySubnav } from "@/components/survey/SurveySubnav";
 import { AppearanceEditor } from "@/components/survey/AppearanceEditor";
 import { getSurveyWithQuestions } from "@/lib/db/surveys";
+import { getCurrentWorkspaceId } from "@/lib/auth/current";
 import { normalizeAppearance, type BuilderQuestion } from "@/lib/builder";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +20,8 @@ export default async function AppearancePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const data = await getSurveyWithQuestions(id);
+  const workspaceId = await getCurrentWorkspaceId();
+  const data = await getSurveyWithQuestions(id, workspaceId);
   if (!data) notFound();
   const { survey, questions } = data;
 

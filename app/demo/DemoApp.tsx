@@ -20,7 +20,7 @@ declare global {
  * Produto SaaS FAKE que carrega o sdk.js REAL da Luumu.
  * Prova o job-to-be-done: o script exibe a pesquisa dentro do "produto do cliente".
  */
-export function DemoApp({ surveys }: { surveys: DemoSurvey[] }) {
+export function DemoApp({ surveys, sdkKey }: { surveys: DemoSurvey[]; sdkKey: string }) {
   const [ready, setReady] = useState(false);
 
   // limpa o "já visto" para a demo poder reexibir sempre
@@ -38,8 +38,8 @@ export function DemoApp({ surveys }: { surveys: DemoSurvey[] }) {
 
   return (
     <div className="min-h-screen bg-[#0b1220] text-white">
-      {/* SDK real da Luumu */}
-      <Script src="/sdk.js" strategy="afterInteractive" onLoad={() => setReady(true)} />
+      {/* SDK real da Luumu — data-luumu fornece a key; auto=false p/ disparar via clique */}
+      <Script src="/sdk.js" data-luumu={sdkKey} data-luumu-auto="false" strategy="afterInteractive" onLoad={() => setReady(true)} />
 
       {/* App fake ("Acme SaaS") */}
       <header className="flex items-center justify-between border-b border-white/10 px-6 py-4">

@@ -7,9 +7,9 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Mascot } from "@/components/ui/Mascot";
 import { AreaTrend, DonutChart } from "@/components/charts/Charts";
-import { csatTrend, channelSplit } from "@/lib/mock/dashboard";
 import { listSurveys } from "@/lib/db/surveys";
-import { getStats } from "@/lib/db/responses";
+import { getStats, getChannelSplit, getScoreTrend } from "@/lib/db/responses";
+import { requireUser } from "@/lib/auth/current";
 
 export const dynamic = "force-dynamic";
 
@@ -21,15 +21,28 @@ const statusTone = {
 } as const;
 
 export default async function DashboardPage() {
-  const [allSurveys, stats] = await Promise.all([listSurveys(), getStats()]);
+  const { workspaceId, name } = await requireUser();
+  const [allSurveys, stats, channelSplit, csatTrend] = await Promise.all([
+    listSurveys(workspaceId),
+    getStats({ workspaceId }),
+    getChannelSplit({ workspaceId }),
+    getScoreTrend({ workspaceId }),
+  ]);
   const activeCount = allSurveys.filter((s) => s.status === "ativa").length;
   const recent = allSurveys.slice(0, 5);
+  const firstName = name.split(" ")[0];
+
+  // variação % da nota entre a primeira e a última semana com dados
+  const trendDelta =
+    csatTrend.length >= 2 && csatTrend[0].csat > 0
+      ? Math.round(((csatTrend[csatTrend.length - 1].csat - csatTrend[0].csat) / csatTrend[0].csat) * 100)
+      : null;
 
   return (
     <div>
       <PageHeader
         eyebrow="Visão geral"
-        title="Olá, Fernando 👋"
+        title={`Olá, ${firstName} 👋`}
         description="Acompanhe o que está acontecendo com suas pesquisas e a voz dos seus clientes."
         actions={
           <>
@@ -56,12 +69,22 @@ export default async function DashboardPage() {
         <Card className="lg:col-span-2">
           <CardHeader>
             <div>
-              <CardTitle>Evolução do CSAT</CardTitle>
-              <CardSubtitle>Média semanal · últimos 2 meses</CardSubtitle>
+              <CardTitle>Evolução da nota</CardTitle>
+              <CardSubtitle>Média semanal · últimas 8 semanas</CardSubtitle>
             </div>
-            <Badge tone="success">↑ 8%</Badge>
+            {trendDelta != null && (
+              <Badge tone={trendDelta >= 0 ? "success" : "warn"}>
+                {trendDelta >= 0 ? "↑" : "↓"} {Math.abs(trendDelta)}%
+              </Badge>
+            )}
           </CardHeader>
-          <AreaTrend data={csatTrend} dataKey="csat" />
+          {csatTrend.length > 0 ? (
+            <AreaTrend data={csatTrend} dataKey="csat" />
+          ) : (
+            <div className="flex h-[220px] items-center justify-center text-sm text-fg-mut">
+              Ainda sem respostas com nota para exibir a evolução.
+            </div>
+          )}
         </Card>
 
         <Card>
@@ -71,15 +94,23 @@ export default async function DashboardPage() {
               <CardSubtitle>Distribuição no período</CardSubtitle>
             </div>
           </CardHeader>
-          <DonutChart data={channelSplit} />
-          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1.5">
-            {channelSplit.map((c) => (
-              <div key={c.name} className="flex items-center gap-1.5 text-xs text-fg-mut">
-                <span className="size-2 rounded-full" style={{ background: c.color }} />
-                {c.name} <span className="font-semibold text-fg">{c.value}%</span>
+          {channelSplit.length > 0 ? (
+            <>
+              <DonutChart data={channelSplit} />
+              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1.5">
+                {channelSplit.map((c) => (
+                  <div key={c.name} className="flex items-center gap-1.5 text-xs text-fg-mut">
+                    <span className="size-2 rounded-full" style={{ background: c.color }} />
+                    {c.name} <span className="font-semibold text-fg">{c.value}%</span>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </>
+          ) : (
+            <div className="flex h-[220px] items-center justify-center text-sm text-fg-mut">
+              Sem respostas no período.
+            </div>
+          )}
         </Card>
       </div>
 
