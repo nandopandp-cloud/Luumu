@@ -43,3 +43,7 @@ export const Select = forwardRef<
 >(function Select({ className, ...props }, ref) {
   return <select ref={ref} className={cn(inputBase, "cursor-pointer", className)} {...props} />;
 });
+
+// inputBase é usado pelo PasswordInput em ./PasswordInput (arquivo client-only,
+// separado deste para não forçar "use client" em quem só usa Input/Select/Field).
+export { inputBase };

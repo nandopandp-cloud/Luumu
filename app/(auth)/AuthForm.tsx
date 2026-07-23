@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { ArrowRight, Loader2, AlertTriangle } from "lucide-react";
 import { Field, Input } from "@/components/ui/Input";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 import { loginAction, signupAction, type AuthResult } from "./actions";
 
 function SubmitButton({ label }: { label: string }) {
@@ -35,7 +36,12 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
         <Input name="email" type="email" placeholder="voce@empresa.com" required />
       </Field>
       <Field label="Senha">
-        <Input name="password" type="password" placeholder={mode === "signup" ? "Crie uma senha" : "••••••••"} required />
+        <PasswordInput
+          name="password"
+          placeholder={mode === "signup" ? "Crie uma senha" : "••••••••"}
+          autoComplete={mode === "signup" ? "new-password" : "current-password"}
+          required
+        />
       </Field>
 
       {state?.error && (
