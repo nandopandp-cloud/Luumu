@@ -11,6 +11,7 @@ import {
   setSurveyStatus,
   getSurveyWithQuestions,
   saveAppearance,
+  deleteSurvey,
 } from "@/lib/db/surveys";
 import { submitResponse } from "@/lib/db/responses";
 import { deriveSentiment } from "@/lib/sentiment";
@@ -97,6 +98,32 @@ export async function setStatusAction(id: string, status: SurveyStatus) {
   await setSurveyStatus(id, workspaceId, status);
   revalidatePath("/surveys");
   revalidatePath(`/surveys/${id}/builder`);
+  return { ok: true as const };
+}
+
+/* ---------- Renomear ---------- */
+const renameSchema = z.object({
+  id: z.string(),
+  name: z.string().trim().min(1, "O nome não pode ficar vazio.").max(120, "Nome muito longo."),
+});
+
+export async function renameSurveyAction(input: unknown) {
+  const parsed = renameSchema.safeParse(input);
+  if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0].message };
+  const workspaceId = await getCurrentWorkspaceId();
+  await updateSurvey(parsed.data.id, workspaceId, { name: parsed.data.name });
+  revalidatePath("/surveys");
+  revalidatePath(`/surveys/${parsed.data.id}/builder`);
+  revalidatePath("/dashboard");
+  return { ok: true as const };
+}
+
+/* ---------- Excluir ---------- */
+export async function deleteSurveyAction(id: string) {
+  const workspaceId = await getCurrentWorkspaceId();
+  await deleteSurvey(id, workspaceId);
+  revalidatePath("/surveys");
+  revalidatePath("/dashboard");
   return { ok: true as const };
 }
 

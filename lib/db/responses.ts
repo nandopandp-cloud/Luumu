@@ -162,6 +162,59 @@ export async function getScoreTrend(scope: Scope, weeks = 8) {
   }));
 }
 
+export interface ExportRow {
+  id: string;
+  surveyName: string;
+  respondent: string;
+  channel: string;
+  sentiment: string;
+  score: number | null;
+  comment: string;
+  createdAt: Date;
+}
+
+/**
+ * Todas as respostas do escopo (sem limite), achatadas para exportação.
+ * Inclui o comentário principal de cada resposta. Ordenado do mais recente ao mais antigo.
+ */
+export async function listResponsesForExport(scope: Scope): Promise<ExportRow[]> {
+  const rows = await db
+    .select({
+      id: responses.id,
+      surveyId: responses.surveyId,
+      respondent: responses.respondent,
+      channel: responses.channel,
+      sentiment: responses.sentiment,
+      score: responses.score,
+      createdAt: responses.createdAt,
+      surveyName: surveys.name,
+    })
+    .from(responses)
+    .innerJoin(surveys, eq(responses.surveyId, surveys.id))
+    .where(scopeWhere(scope))
+    .orderBy(desc(responses.createdAt));
+
+  return Promise.all(
+    rows.map(async (r) => {
+      const rowAnswers = await db
+        .select({ value: answers.value })
+        .from(answers)
+        .where(eq(answers.responseId, r.id));
+      const comment = rowAnswers.map((a) => extractComment(a.value)).find((c) => c) ?? "";
+      return {
+        id: r.id,
+        surveyName: r.surveyName,
+        respondent: r.respondent ?? "Anônimo",
+        channel: r.channel,
+        sentiment: r.sentiment ?? "—",
+        score: r.score,
+        comment,
+        createdAt: r.createdAt,
+      };
+    })
+  );
+}
+
 /** Grava uma resposta com suas answers (a validação de tenant é feita antes, na API). */
 export async function submitResponse(input: {
   surveyId: string;

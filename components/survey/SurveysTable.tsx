@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Search, MoreHorizontal, Pause, Play, Square, Eye, Pencil } from "lucide-react";
+import { Search, MoreHorizontal, Pause, Play, Square, Eye, Pencil, Type, Trash2, Loader2, AlertTriangle } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/Input";
 import { SegmentedControl } from "@/components/ui/Tabs";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils";
-import { setStatusAction } from "@/app/(app)/surveys/actions";
+import { setStatusAction, renameSurveyAction, deleteSurveyAction } from "@/app/(app)/surveys/actions";
 import type { SurveyStatus } from "@/lib/mock/surveys";
 
 export interface SurveyListItem {
@@ -35,6 +35,8 @@ export function SurveysTable({ items }: { items: SurveyListItem[] }) {
   const [filter, setFilter] = useState<Filter>("todas");
   const [q, setQ] = useState("");
   const [menuFor, setMenuFor] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState<SurveyListItem | null>(null);
+  const [deleting, setDeleting] = useState<SurveyListItem | null>(null);
   const [, startTransition] = useTransition();
   const router = useRouter();
   const toast = useToast();
@@ -48,6 +50,32 @@ export function SurveysTable({ items }: { items: SurveyListItem[] }) {
     startTransition(async () => {
       await setStatusAction(id, status);
       toast("success", label);
+      router.refresh();
+    });
+  }
+
+  function doRename(name: string) {
+    if (!renaming) return;
+    const target = renaming;
+    startTransition(async () => {
+      const res = await renameSurveyAction({ id: target.id, name });
+      if (res.ok) {
+        toast("success", "Pesquisa renomeada.");
+        setRenaming(null);
+        router.refresh();
+      } else {
+        toast("error", res.error ?? "Não foi possível renomear.");
+      }
+    });
+  }
+
+  function doDelete() {
+    if (!deleting) return;
+    const target = deleting;
+    startTransition(async () => {
+      await deleteSurveyAction(target.id);
+      toast("success", "Pesquisa excluída.");
+      setDeleting(null);
       router.refresh();
     });
   }
@@ -113,6 +141,7 @@ export function SurveysTable({ items }: { items: SurveyListItem[] }) {
                           <div className="fixed inset-0 z-10" onClick={() => setMenuFor(null)} />
                           <div className="absolute right-0 top-8 z-20 w-44 overflow-hidden rounded-xl border border-line bg-bg-elev py-1 text-left shadow-[var(--shadow-lg)]">
                             <MenuLink href={`/surveys/${s.id}/builder`} icon={<Pencil className="size-4" />}>Editar</MenuLink>
+                            <MenuBtn onClick={() => { setMenuFor(null); setRenaming(s); }} icon={<Type className="size-4" />}>Renomear</MenuBtn>
                             <MenuLink href={`/surveys/${s.id}/preview`} icon={<Eye className="size-4" />}>Preview</MenuLink>
                             {s.status === "ativa" && (
                               <MenuBtn onClick={() => changeStatus(s.id, "pausada", "Pesquisa pausada.")} icon={<Pause className="size-4" />}>Pausar</MenuBtn>
@@ -121,8 +150,10 @@ export function SurveysTable({ items }: { items: SurveyListItem[] }) {
                               <MenuBtn onClick={() => changeStatus(s.id, "ativa", "Pesquisa reativada.")} icon={<Play className="size-4" />}>Reativar</MenuBtn>
                             )}
                             {(s.status === "ativa" || s.status === "pausada") && (
-                              <MenuBtn onClick={() => changeStatus(s.id, "encerrada", "Pesquisa encerrada.")} icon={<Square className="size-4" />} danger>Encerrar</MenuBtn>
+                              <MenuBtn onClick={() => changeStatus(s.id, "encerrada", "Pesquisa encerrada.")} icon={<Square className="size-4" />}>Encerrar</MenuBtn>
                             )}
+                            <div className="my-1 border-t border-line" />
+                            <MenuBtn onClick={() => { setMenuFor(null); setDeleting(s); }} icon={<Trash2 className="size-4" />} danger>Excluir</MenuBtn>
                           </div>
                         </>
                       )}
@@ -137,7 +168,92 @@ export function SurveysTable({ items }: { items: SurveyListItem[] }) {
           </table>
         </div>
       </Card>
+
+      {renaming && (
+        <RenameDialog
+          initial={renaming.name}
+          onCancel={() => setRenaming(null)}
+          onConfirm={doRename}
+        />
+      )}
+
+      {deleting && (
+        <ConfirmDialog
+          title="Excluir pesquisa?"
+          survey={deleting}
+          onCancel={() => setDeleting(null)}
+          onConfirm={doDelete}
+        />
+      )}
     </div>
+  );
+}
+
+function Backdrop({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-md rounded-2xl border border-line bg-bg-elev p-6 shadow-[var(--shadow-lg)]">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function RenameDialog({ initial, onCancel, onConfirm }: { initial: string; onCancel: () => void; onConfirm: (name: string) => void }) {
+  const [name, setName] = useState(initial);
+  const [saving, start] = useTransition();
+  const valid = name.trim().length > 0 && name.trim() !== initial;
+  return (
+    <Backdrop onClose={onCancel}>
+      <h3 className="font-display text-lg font-bold">Renomear pesquisa</h3>
+      <p className="mt-1 text-sm text-fg-mut">Dê um novo nome a esta pesquisa.</p>
+      <Input
+        autoFocus
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter" && valid) start(() => onConfirm(name.trim())); }}
+        className="mt-4"
+        placeholder="Nome da pesquisa"
+      />
+      <div className="mt-5 flex justify-end gap-2">
+        <Button variant="ghost" size="sm" onClick={onCancel}>Cancelar</Button>
+        <Button size="sm" disabled={!valid || saving} onClick={() => start(() => onConfirm(name.trim()))}>
+          {saving ? <Loader2 className="size-4 animate-spin" /> : null} Salvar
+        </Button>
+      </div>
+    </Backdrop>
+  );
+}
+
+function ConfirmDialog({ title, survey, onCancel, onConfirm }: { title: string; survey: SurveyListItem; onCancel: () => void; onConfirm: () => void }) {
+  const [saving, start] = useTransition();
+  return (
+    <Backdrop onClose={onCancel}>
+      <div className="flex items-start gap-3">
+        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-erro/12 text-erro">
+          <AlertTriangle className="size-5" />
+        </span>
+        <div>
+          <h3 className="font-display text-lg font-bold">{title}</h3>
+          <p className="mt-1 text-sm text-fg-soft">
+            A pesquisa <strong>{survey.name}</strong>
+            {survey.responseCount > 0 ? (
+              <> e suas <strong>{survey.responseCount} {survey.responseCount === 1 ? "resposta" : "respostas"}</strong> serão excluídas permanentemente.</>
+            ) : (
+              <> será excluída permanentemente.</>
+            )}{" "}
+            Esta ação não pode ser desfeita.
+          </p>
+        </div>
+      </div>
+      <div className="mt-5 flex justify-end gap-2">
+        <Button variant="ghost" size="sm" onClick={onCancel}>Cancelar</Button>
+        <Button variant="danger" size="sm" disabled={saving} onClick={() => start(onConfirm)}>
+          {saving ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />} Excluir
+        </Button>
+      </div>
+    </Backdrop>
   );
 }
 
