@@ -43,6 +43,13 @@
       "when": 1784860653116,
       "tag": "0005_mighty_the_order",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1784896213478,
+      "tag": "0006_colossal_taskmaster",
+      "breakpoints": true
     }
   ]
 }

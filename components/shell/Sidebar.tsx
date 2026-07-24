@@ -16,7 +16,7 @@ export function Sidebar({
 }: {
   onNavigate?: () => void;
   workspace: { name: string; plan: string; logoUrl: string | null };
-  projects: { id: string; name: string }[];
+  projects: { id: string; name: string; logoUrl: string | null }[];
   activeProjectId: string | null;
 }) {
   const pathname = usePathname();

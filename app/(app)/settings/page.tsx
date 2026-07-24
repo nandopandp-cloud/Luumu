@@ -34,7 +34,7 @@ export default async function SettingsPage() {
         }}
         aside={
           <ProjectsCard
-            projects={projectList.map((p) => ({ id: p.id, name: p.name, surveyCount: p.surveyCount }))}
+            projects={projectList.map((p) => ({ id: p.id, name: p.name, surveyCount: p.surveyCount, logoUrl: p.logoUrl }))}
             activeProjectId={activeProject?.id ?? null}
             canManage={canManage}
           />

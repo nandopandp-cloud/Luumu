@@ -81,6 +81,14 @@ export async function deleteProject(projectId: string, workspaceId: string) {
   await db.delete(projects).where(and(eq(projects.id, projectId), eq(projects.workspaceId, workspaceId)));
 }
 
+/** Atualiza a logo do projeto (ou remove, passando null). */
+export async function updateProjectLogo(projectId: string, workspaceId: string, logoUrl: string | null) {
+  await db
+    .update(projects)
+    .set({ logoUrl })
+    .where(and(eq(projects.id, projectId), eq(projects.workspaceId, workspaceId)));
+}
+
 /** Quantos projetos o workspace tem (para impedir excluir o último). */
 export async function countProjects(workspaceId: string): Promise<number> {
   const [{ n } = { n: 0 }] = await db

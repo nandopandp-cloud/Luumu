@@ -57,6 +57,7 @@ export const projects = pgTable(
     workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     slug: text("slug").notNull(),
+    logoUrl: text("logo_url"), // URL da logo no blob storage (null = usa a inicial do nome)
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("projects_ws_idx").on(t.workspaceId)]

@@ -24,7 +24,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <AppShell
         user={{ name: session.name, email: session.email }}
         workspace={{ name: ws?.name ?? "Workspace", plan: ws?.plan ?? "growth", logoUrl: ws?.logoUrl ?? null }}
-        projects={projectList.map((p) => ({ id: p.id, name: p.name }))}
+        projects={projectList.map((p) => ({ id: p.id, name: p.name, logoUrl: p.logoUrl }))}
         activeProjectId={activeProject?.id ?? null}
       >
         {children}

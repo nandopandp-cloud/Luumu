@@ -15,7 +15,7 @@ export function AppShell({
   children: React.ReactNode;
   user: { name: string; email: string };
   workspace: { name: string; plan: string; logoUrl: string | null };
-  projects: { id: string; name: string }[];
+  projects: { id: string; name: string; logoUrl: string | null }[];
   activeProjectId: string | null;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);

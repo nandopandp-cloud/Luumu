@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { FolderKanban, Plus, MoreHorizontal, Type, Trash2, Loader2, AlertTriangle } from "lucide-react";
+import Image from "next/image";
+import { FolderKanban, Plus, MoreHorizontal, Type, Trash2, Loader2, AlertTriangle, Upload } from "lucide-react";
 import { Card, CardTitle, CardSubtitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Field, Input } from "@/components/ui/Input";
@@ -14,6 +15,7 @@ export interface ProjectItem {
   id: string;
   name: string;
   surveyCount: number;
+  logoUrl: string | null;
 }
 
 export function ProjectsCard({
@@ -29,11 +31,33 @@ export function ProjectsCard({
   const [creating, setCreating] = useState(false);
   const [renaming, setRenaming] = useState<ProjectItem | null>(null);
   const [deleting, setDeleting] = useState<ProjectItem | null>(null);
+  const [uploadingId, setUploadingId] = useState<string | null>(null);
+  const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const [, start] = useTransition();
   const router = useRouter();
   const toast = useToast();
 
   const isLast = projects.length <= 1;
+
+  async function onLogoPick(projectId: string, e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingId(projectId);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch(`/api/projects/${projectId}/logo`, { method: "POST", body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Falha no upload.");
+      toast("success", "Logo do projeto atualizada.");
+      router.refresh();
+    } catch (err) {
+      toast("error", err instanceof Error ? err.message : "Falha no upload.");
+    } finally {
+      setUploadingId(null);
+      e.target.value = "";
+    }
+  }
 
   function doDelete() {
     if (!deleting) return;
@@ -69,9 +93,38 @@ export function ProjectsCard({
         {projects.map((p) => (
           <div key={p.id} className="flex items-center justify-between rounded-xl border border-line p-3">
             <div className="flex min-w-0 items-center gap-3">
-              <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-surface-brand text-sm font-bold text-accent">
-                {p.name.charAt(0).toUpperCase()}
-              </span>
+              <input
+                ref={(el) => { fileRefs.current[p.id] = el; }}
+                type="file"
+                accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                className="hidden"
+                onChange={(e) => onLogoPick(p.id, e)}
+                disabled={!canManage}
+              />
+              <button
+                type="button"
+                onClick={() => canManage && fileRefs.current[p.id]?.click()}
+                disabled={!canManage}
+                title={canManage ? "Alterar logo do projeto" : undefined}
+                className="group relative size-9 shrink-0 overflow-hidden rounded-lg disabled:cursor-default"
+              >
+                {p.logoUrl ? (
+                  <Image src={p.logoUrl} alt="" width={36} height={36} className="size-9 object-cover" />
+                ) : (
+                  <span className="grid size-9 place-items-center bg-surface-brand text-sm font-bold text-accent">
+                    {p.name.charAt(0).toUpperCase()}
+                  </span>
+                )}
+                {canManage && (
+                  <span className="absolute inset-0 hidden items-center justify-center bg-black/50 group-hover:flex">
+                    {uploadingId === p.id ? (
+                      <Loader2 className="size-3.5 animate-spin text-white" />
+                    ) : (
+                      <Upload className="size-3.5 text-white" />
+                    )}
+                  </span>
+                )}
+              </button>
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="truncate text-sm font-semibold">{p.name}</span>
