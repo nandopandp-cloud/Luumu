@@ -1,22 +1,13 @@
 import { Shield } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card, CardTitle } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
 import { SettingsNav } from "@/components/settings/SettingsNav";
 import { InviteMemberButton } from "@/components/settings/InviteMemberButton";
+import { MembersTable } from "@/components/settings/MembersTable";
 import { requireUser, canManageWorkspace } from "@/lib/auth/current";
 import { listWorkspaceMembers } from "@/lib/db/users";
 
 export const dynamic = "force-dynamic";
-
-// role do banco (minúsculo) → rótulo + tom do badge
-const roleMeta: Record<string, { label: string; tone: "brand" | "info" | "success" | "neutral" }> = {
-  owner: { label: "Owner", tone: "brand" },
-  admin: { label: "Admin", tone: "info" },
-  editor: { label: "Editor", tone: "success" },
-  viewer: { label: "Viewer", tone: "neutral" },
-};
 
 const roles = [
   { role: "Owner", desc: "Acesso total, incluindo billing e exclusão do workspace." },
@@ -42,50 +33,7 @@ export default async function MembersPage() {
       />
       <SettingsNav />
 
-      <Card padded={false} className="mb-4">
-        <div className="p-6 pb-3">
-          <CardTitle>Membros ({members.length})</CardTitle>
-        </div>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-y border-line text-left font-mono text-[11px] uppercase tracking-wide text-fg-mut">
-              <th className="px-6 py-2.5 font-semibold">Membro</th>
-              <th className="px-3 py-2.5 font-semibold">Papel</th>
-              <th className="px-6 py-2.5 text-right font-semibold">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {members.map((m) => {
-              const meta = roleMeta[m.role] ?? { label: m.role, tone: "neutral" as const };
-              const isCurrent = m.id === userId;
-              return (
-                <tr key={m.id} className="border-b border-line last:border-0 hover:bg-bg-sunken/50">
-                  <td className="px-6 py-3.5">
-                    <div className="flex items-center gap-3">
-                      <span className="grid size-9 place-items-center rounded-full text-sm font-bold text-white [background:var(--grad-marca)]">
-                        {m.name.charAt(0).toUpperCase()}
-                      </span>
-                      <div>
-                        <div className="font-semibold">
-                          {m.name}
-                          {isCurrent && <span className="ml-2 text-xs font-normal text-fg-mut">(você)</span>}
-                        </div>
-                        <div className="text-xs text-fg-mut">{m.email}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-3 py-3.5">
-                    <Badge tone={meta.tone} dot={false}>{meta.label}</Badge>
-                  </td>
-                  <td className="px-6 py-3.5 text-right">
-                    <Button variant="ghost" size="sm" disabled={isCurrent}>Editar</Button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </Card>
+      <MembersTable members={members} currentUserId={userId} canManage={canManage} />
 
       <Card>
         <div className="mb-3 flex items-center gap-2">

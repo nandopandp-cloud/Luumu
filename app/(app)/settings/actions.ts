@@ -2,9 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireUser, canManageWorkspace } from "@/lib/auth/current";
+import { requireUser, canManageWorkspace, getCurrentRole } from "@/lib/auth/current";
 import { updateWorkspace } from "@/lib/db/workspace";
-import { addMemberToWorkspace, findUserByEmail } from "@/lib/db/users";
+import { addMemberToWorkspace, findUserByEmail, getMembership, removeMemberFromWorkspace } from "@/lib/db/users";
 
 export type ActionResult = { ok: boolean; error?: string };
 
@@ -78,6 +78,41 @@ export async function inviteMemberAction(input: unknown): Promise<ActionResult> 
     throw err;
   }
 
+  revalidatePath("/settings/members");
+  return { ok: true };
+}
+
+/**
+ * Remove um membro do workspace. Regras:
+ * - só owner/admin podem remover;
+ * - ninguém remove a si mesmo por aqui;
+ * - o owner nunca pode ser removido (o workspace precisa de um dono);
+ * - um admin não pode remover outro admin (só editor/viewer) — evita que
+ *   admins se removam entre si; só o owner pode remover admins.
+ */
+export async function removeMemberAction(targetUserId: string): Promise<ActionResult> {
+  const { workspaceId, userId } = await requireUser();
+
+  if (targetUserId === userId) {
+    return { ok: false, error: "Você não pode remover a si mesmo." };
+  }
+
+  const myRole = await getCurrentRole();
+  if (myRole !== "owner" && myRole !== "admin") {
+    return { ok: false, error: "Você não tem permissão para remover membros." };
+  }
+
+  const target = await getMembership(workspaceId, targetUserId);
+  if (!target) return { ok: false, error: "Membro não encontrado." };
+
+  if (target.role === "owner") {
+    return { ok: false, error: "O owner do workspace não pode ser removido." };
+  }
+  if (target.role === "admin" && myRole !== "owner") {
+    return { ok: false, error: "Apenas o owner pode remover um admin." };
+  }
+
+  await removeMemberFromWorkspace(workspaceId, targetUserId);
   revalidatePath("/settings/members");
   return { ok: true };
 }

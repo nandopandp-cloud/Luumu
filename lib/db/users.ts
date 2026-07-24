@@ -1,5 +1,5 @@
 import "server-only";
-import { eq } from "drizzle-orm";
+import { and, count, eq } from "drizzle-orm";
 import { db } from "./client";
 import { users, memberships, workspaces } from "@/db/schema";
 import { newId } from "./ids";
@@ -44,6 +44,36 @@ export async function addMemberToWorkspace(input: {
     role: input.role,
   });
   return userId;
+}
+
+/** Membership de um usuário específico dentro de um workspace (ou null). */
+export async function getMembership(workspaceId: string, userId: string) {
+  const [m] = await db
+    .select({ id: memberships.id, role: memberships.role })
+    .from(memberships)
+    .where(and(eq(memberships.workspaceId, workspaceId), eq(memberships.userId, userId)))
+    .limit(1);
+  return m ?? null;
+}
+
+/**
+ * Remove um membro do workspace (deleta a membership). Se, depois disso, o usuário
+ * não pertencer a mais nenhum workspace, a conta em si também é removida — senão
+ * ficaria uma conta "fantasma" sem acesso a nada.
+ */
+export async function removeMemberFromWorkspace(workspaceId: string, userId: string) {
+  await db
+    .delete(memberships)
+    .where(and(eq(memberships.workspaceId, workspaceId), eq(memberships.userId, userId)));
+
+  const [{ n } = { n: 0 }] = await db
+    .select({ n: count() })
+    .from(memberships)
+    .where(eq(memberships.userId, userId));
+
+  if (Number(n) === 0) {
+    await db.delete(users).where(eq(users.id, userId));
+  }
 }
 
 export async function listWorkspaceMembers(workspaceId: string) {
