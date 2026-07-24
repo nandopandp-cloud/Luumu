@@ -44,7 +44,6 @@ export default async function PreviewPage({
       <Card className="p-8 md:p-10">
         <div className="mb-8 flex items-center gap-2 border-b border-line pb-6">
           <LuumuLogo size={28} />
-          <span className="font-display text-lg font-extrabold tracking-tight">Luumu</span>
         </div>
         <h1 className="mb-1 font-display text-2xl font-extrabold tracking-tight">{survey.name}</h1>
         <p className="mb-8 text-sm text-fg-mut">Sua opinião ajuda a melhorar. Leva menos de 1 minuto.</p>

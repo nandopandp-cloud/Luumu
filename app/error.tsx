@@ -20,7 +20,6 @@ export default function GlobalError({
     <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-bg px-6 py-16 text-center">
       <div className="flex items-center gap-2">
         <LuumuLogo size={32} />
-        <span className="font-display text-xl font-extrabold tracking-tight text-fg">Luumu</span>
       </div>
 
       <Mascot name="Preocupado" size={140} float />

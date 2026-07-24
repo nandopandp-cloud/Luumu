@@ -66,7 +66,6 @@ function Shell({ children }: { children: React.ReactNode }) {
       <div className="w-full max-w-2xl">
         <div className="mb-4 flex items-center gap-2">
           <LuumuLogo size={28} />
-          <span className="font-display text-lg font-extrabold tracking-tight">Luumu</span>
         </div>
         <div className="rounded-2xl border border-line bg-bg-elev p-8 shadow-[var(--shadow-md)] md:p-10">
           {children}

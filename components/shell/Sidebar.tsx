@@ -24,9 +24,8 @@ export function Sidebar({
   return (
     <aside className="flex h-full w-[260px] flex-col gap-1 overflow-y-auto border-r border-line bg-bg-elev px-3 py-5">
       {/* Marca */}
-      <Link href="/dashboard" className="mb-2 flex items-center gap-2 px-2" onClick={onNavigate}>
+      <Link href="/dashboard" className="mb-2 flex items-center px-2" onClick={onNavigate}>
         <LuumuLogo size={34} />
-        <span className="font-display text-xl font-extrabold tracking-tight">Luumu</span>
       </Link>
 
       {/* Seletor de projeto ativo */}

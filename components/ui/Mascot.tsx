@@ -1,6 +1,8 @@
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 
+export { LuumuLogo } from "./LuumuLogo";
+
 /** Nomes de arquivo dos SVGs oficiais em /public/mascot (assets/icones). */
 export type MascotName =
   | "Feliz" | "Animado" | "Piscando" | "Pensativo" | "Surpreso" | "Apaixonado"
@@ -29,20 +31,6 @@ export function Mascot({
       height={size}
       className={cn("select-none", float && "float", className)}
       priority={false}
-    />
-  );
-}
-
-/** Logo oficial (mascote + wordmark). */
-export function LuumuLogo({ size = 32, className }: { size?: number; className?: string }) {
-  return (
-    <Image
-      src="/mascot/logo.svg"
-      alt="Luumu"
-      width={size}
-      height={size}
-      className={cn("select-none", className)}
-      priority
     />
   );
 }

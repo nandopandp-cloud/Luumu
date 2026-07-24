@@ -55,7 +55,6 @@ export function SurveyWidget({
       <div className={cn("flex items-center justify-between gap-2 px-4", isBar ? "pt-3" : "pt-4")}>
         <div className="flex items-center gap-1.5">
           <LuumuLogo size={18} />
-          <span className="text-[11px] font-semibold text-fg-mut">Luumu</span>
         </div>
         {onClose && (
           <button onClick={onClose} className="text-fg-mut hover:text-fg" aria-label="Fechar">

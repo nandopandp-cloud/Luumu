@@ -16,7 +16,6 @@ export default function SignupPage() {
         <div className="mx-auto w-full max-w-sm">
           <Link href="/" className="mb-10 flex items-center gap-2">
             <LuumuLogo size={36} />
-            <span className="font-display text-2xl font-extrabold tracking-tight">Luumu</span>
           </Link>
 
           <h1 className="font-display text-3xl font-extrabold tracking-tight">Comece grátis</h1>
