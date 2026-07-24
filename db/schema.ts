@@ -19,6 +19,8 @@ export const workspaces = pgTable("workspaces", {
   name: text("name").notNull(),
   slug: text("slug").notNull(),
   plan: text("plan").notNull().default("growth"),
+  timezone: text("timezone").notNull().default("America/Sao_Paulo"),
+  logoUrl: text("logo_url"), // URL da logo no blob storage (null = usa a inicial)
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

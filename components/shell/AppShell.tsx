@@ -12,7 +12,7 @@ export function AppShell({
 }: {
   children: React.ReactNode;
   user: { name: string; email: string };
-  workspace: { name: string; plan: string };
+  workspace: { name: string; plan: string; logoUrl: string | null };
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
 

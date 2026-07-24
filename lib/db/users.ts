@@ -21,6 +21,31 @@ export async function getUserWorkspace(userId: string) {
   return m ?? null;
 }
 
+/**
+ * Cria um usuário e o adiciona ao workspace com o papel dado (convite simples).
+ * Retorna o userId. Lança se o e-mail já existir (constraint única).
+ */
+export async function addMemberToWorkspace(input: {
+  workspaceId: string;
+  name: string;
+  email: string;
+  password: string;
+  role: "admin" | "editor" | "viewer";
+}) {
+  const email = input.email.toLowerCase();
+  const userId = newId("usr");
+  const passwordHash = await hashPassword(input.password);
+
+  await db.insert(users).values({ id: userId, email, name: input.name, passwordHash });
+  await db.insert(memberships).values({
+    id: newId("mem"),
+    userId,
+    workspaceId: input.workspaceId,
+    role: input.role,
+  });
+  return userId;
+}
+
 export async function listWorkspaceMembers(workspaceId: string) {
   return db
     .select({

@@ -1,10 +1,11 @@
-import { UserPlus, Shield } from "lucide-react";
+import { Shield } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { SettingsNav } from "@/components/settings/SettingsNav";
-import { requireUser } from "@/lib/auth/current";
+import { InviteMemberButton } from "@/components/settings/InviteMemberButton";
+import { requireUser, canManageWorkspace } from "@/lib/auth/current";
 import { listWorkspaceMembers } from "@/lib/db/users";
 
 export const dynamic = "force-dynamic";
@@ -26,7 +27,10 @@ const roles = [
 
 export default async function MembersPage() {
   const { workspaceId, userId } = await requireUser();
-  const members = await listWorkspaceMembers(workspaceId);
+  const [members, canManage] = await Promise.all([
+    listWorkspaceMembers(workspaceId),
+    canManageWorkspace(),
+  ]);
 
   return (
     <div>
@@ -34,11 +38,7 @@ export default async function MembersPage() {
         eyebrow="Configuração"
         title="Membros & Permissões"
         description="Convide seu time e controle o acesso por papel."
-        actions={
-          <Button size="sm">
-            <UserPlus className="size-4" /> Convidar membro
-          </Button>
-        }
+        actions={<InviteMemberButton canManage={canManage} />}
       />
       <SettingsNav />
 

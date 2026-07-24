@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { ChevronsUpDown, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -12,7 +13,7 @@ export function Sidebar({
   workspace,
 }: {
   onNavigate?: () => void;
-  workspace: { name: string; plan: string };
+  workspace: { name: string; plan: string; logoUrl: string | null };
 }) {
   const pathname = usePathname();
   const planLabel = { starter: "Plano Starter", growth: "Plano Growth", enterprise: "Plano Enterprise" }[workspace.plan] ?? "Plano Growth";
@@ -28,9 +29,19 @@ export function Sidebar({
       {/* Seletor de workspace (mock) */}
       <button className="mb-3 flex items-center justify-between gap-2 rounded-xl border border-line bg-bg-sunken px-3 py-2 text-left transition hover:border-line-strong">
         <div className="flex items-center gap-2.5">
-          <span className="grid size-8 place-items-center rounded-lg text-sm font-bold text-white [background:var(--grad-roxo)]">
-            {workspace.name.charAt(0).toUpperCase()}
-          </span>
+          {workspace.logoUrl ? (
+            <Image
+              src={workspace.logoUrl}
+              alt=""
+              width={32}
+              height={32}
+              className="size-8 rounded-lg object-cover"
+            />
+          ) : (
+            <span className="grid size-8 place-items-center rounded-lg text-sm font-bold text-white [background:var(--grad-roxo)]">
+              {workspace.name.charAt(0).toUpperCase()}
+            </span>
+          )}
           <div className="leading-tight">
             <div className="text-sm font-semibold">{workspace.name}</div>
             <div className="text-[11px] text-fg-mut">{planLabel}</div>

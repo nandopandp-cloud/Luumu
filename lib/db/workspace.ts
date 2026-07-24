@@ -3,6 +3,22 @@ import { and, count, eq } from "drizzle-orm";
 import { db } from "./client";
 import { workspaces, surveys, responses, memberships } from "@/db/schema";
 
+export type WorkspaceRow = typeof workspaces.$inferSelect;
+
+/** Dados completos do workspace (para a aba de Configurações). */
+export async function getWorkspace(workspaceId: string): Promise<WorkspaceRow | null> {
+  const [ws] = await db.select().from(workspaces).where(eq(workspaces.id, workspaceId)).limit(1);
+  return ws ?? null;
+}
+
+/** Atualiza campos editáveis do workspace. */
+export async function updateWorkspace(
+  workspaceId: string,
+  patch: Partial<Pick<WorkspaceRow, "name" | "slug" | "timezone" | "logoUrl">>
+) {
+  await db.update(workspaces).set(patch).where(eq(workspaces.id, workspaceId));
+}
+
 /** Limites por plano (fonte da verdade dos planos oferecidos). */
 export const PLAN_LIMITS: Record<
   string,
