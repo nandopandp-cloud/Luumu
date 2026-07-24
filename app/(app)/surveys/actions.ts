@@ -16,14 +16,14 @@ import {
 import { submitResponse } from "@/lib/db/responses";
 import { deriveSentiment } from "@/lib/sentiment";
 import { normalizeAppearance } from "@/lib/builder";
-import { getCurrentWorkspaceId } from "@/lib/auth/current";
+import { getCurrentWorkspaceId, getCurrentProjectId } from "@/lib/auth/current";
 import { getSurvey } from "@/lib/db/surveys";
 import type { SurveyType, SurveyStatus } from "@/lib/mock/surveys";
 
 /* ---------- Criar (a partir de template) ---------- */
 export async function createSurveyAction(type: SurveyType) {
-  const workspaceId = await getCurrentWorkspaceId();
-  const id = await createSurveyFromTemplate(workspaceId, type);
+  const [workspaceId, projectId] = await Promise.all([getCurrentWorkspaceId(), getCurrentProjectId()]);
+  const id = await createSurveyFromTemplate(workspaceId, projectId, type);
   revalidatePath("/surveys");
   redirect(`/surveys/${id}/builder`);
 }
@@ -79,7 +79,7 @@ export async function saveSettingsAction(input: unknown) {
 /* ---------- Publicar (valida nome + >=1 pergunta) ---------- */
 export async function publishSurveyAction(id: string) {
   const workspaceId = await getCurrentWorkspaceId();
-  const data = await getSurveyWithQuestions(id, workspaceId);
+  const data = await getSurveyWithQuestions(id, { workspaceId });
   if (!data) return { ok: false as const, error: "Pesquisa não encontrada." };
   if (!data.survey.name.trim()) return { ok: false as const, error: "Dê um nome à pesquisa antes de publicar." };
   if (data.questions.length === 0)

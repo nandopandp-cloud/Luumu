@@ -16,11 +16,10 @@ export default async function SurveySettingsPage({
 }) {
   const { id } = await params;
   const workspaceId = await getCurrentWorkspaceId();
-  const [survey, events] = await Promise.all([
-    getSurvey(id, workspaceId),
-    listEvents(workspaceId),
-  ]);
+  const survey = await getSurvey(id, { workspaceId });
   if (!survey) notFound();
+  // eventos disponíveis como gatilho são os do projeto desta pesquisa
+  const events = await listEvents(survey.projectId);
 
   return (
     <div>

@@ -2,14 +2,21 @@ import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { SettingsNav } from "@/components/settings/SettingsNav";
 import { WorkspaceForm } from "@/components/settings/WorkspaceForm";
-import { requireUser, canManageWorkspace } from "@/lib/auth/current";
+import { ProjectsCard } from "@/components/settings/ProjectsCard";
+import { requireUser, canManageWorkspace, getCurrentProject } from "@/lib/auth/current";
 import { getWorkspace } from "@/lib/db/workspace";
+import { listProjects } from "@/lib/db/projects";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
   const { workspaceId } = await requireUser();
-  const [ws, canManage] = await Promise.all([getWorkspace(workspaceId), canManageWorkspace()]);
+  const [ws, canManage, projectList, activeProject] = await Promise.all([
+    getWorkspace(workspaceId),
+    canManageWorkspace(),
+    listProjects(workspaceId),
+    getCurrentProject(),
+  ]);
   if (!ws) notFound();
 
   return (
@@ -25,6 +32,13 @@ export default async function SettingsPage() {
           timezone: ws.timezone,
           logoUrl: ws.logoUrl,
         }}
+        aside={
+          <ProjectsCard
+            projects={projectList.map((p) => ({ id: p.id, name: p.name, surveyCount: p.surveyCount }))}
+            activeProjectId={activeProject?.id ?? null}
+            canManage={canManage}
+          />
+        }
       />
     </div>
   );

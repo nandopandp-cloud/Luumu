@@ -21,7 +21,7 @@ export default async function AppearancePage({
 }) {
   const { id } = await params;
   const workspaceId = await getCurrentWorkspaceId();
-  const data = await getSurveyWithQuestions(id, workspaceId);
+  const data = await getSurveyWithQuestions(id, { workspaceId });
   if (!data) notFound();
   const { survey, questions } = data;
 

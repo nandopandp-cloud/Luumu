@@ -12,13 +12,14 @@ export function sha256(v: string) {
   return createHash("sha256").update(v).digest("hex");
 }
 
-/** Cria um par de chaves para o workspace. Retorna a secret em claro UMA vez. */
-export async function createApiKey(workspaceId: string, name = "Default") {
+/** Cria um par de chaves para o projeto. Retorna a secret em claro UMA vez. */
+export async function createApiKey(workspaceId: string, projectId: string, name = "Default") {
   const publicKey = `pk_${rand()}`;
   const secret = `sk_${rand()}${rand()}`;
   await db.insert(apiKeys).values({
     id: newId("key"),
     workspaceId,
+    projectId,
     name,
     publicKey,
     secretHash: sha256(secret),
@@ -27,8 +28,8 @@ export async function createApiKey(workspaceId: string, name = "Default") {
   return { publicKey, secret };
 }
 
-/** Lista as chaves ativas do workspace (sem expor a secret). */
-export async function listApiKeys(workspaceId: string) {
+/** Lista as chaves ativas do projeto (sem expor a secret). */
+export async function listApiKeys(projectId: string) {
   return db
     .select({
       id: apiKeys.id,
@@ -39,31 +40,31 @@ export async function listApiKeys(workspaceId: string) {
       createdAt: apiKeys.createdAt,
     })
     .from(apiKeys)
-    .where(and(eq(apiKeys.workspaceId, workspaceId), isNull(apiKeys.revokedAt)))
+    .where(and(eq(apiKeys.projectId, projectId), isNull(apiKeys.revokedAt)))
     .orderBy(desc(apiKeys.createdAt));
 }
 
-/** Chave pública primária do workspace (a mais antiga ativa). */
-export async function getPrimaryPublicKey(workspaceId: string): Promise<string | null> {
+/** Chave pública primária do projeto (a mais antiga ativa). */
+export async function getPrimaryPublicKey(projectId: string): Promise<string | null> {
   const [k] = await db
     .select({ publicKey: apiKeys.publicKey })
     .from(apiKeys)
-    .where(and(eq(apiKeys.workspaceId, workspaceId), isNull(apiKeys.revokedAt)))
+    .where(and(eq(apiKeys.projectId, projectId), isNull(apiKeys.revokedAt)))
     .orderBy(apiKeys.createdAt)
     .limit(1);
   return k?.publicKey ?? null;
 }
 
-export async function revokeApiKey(workspaceId: string, id: string) {
+export async function revokeApiKey(projectId: string, id: string) {
   await db
     .update(apiKeys)
     .set({ revokedAt: new Date() })
-    .where(and(eq(apiKeys.id, id), eq(apiKeys.workspaceId, workspaceId)));
+    .where(and(eq(apiKeys.id, id), eq(apiKeys.projectId, projectId)));
 }
 
-export async function setKeyDomains(workspaceId: string, id: string, domains: string[]) {
+export async function setKeyDomains(projectId: string, id: string, domains: string[]) {
   await db
     .update(apiKeys)
     .set({ domains })
-    .where(and(eq(apiKeys.id, id), eq(apiKeys.workspaceId, workspaceId)));
+    .where(and(eq(apiKeys.id, id), eq(apiKeys.projectId, projectId)));
 }

@@ -17,13 +17,14 @@ export default async function SurveyResponsesPage({
 }) {
   const { id } = await params;
   const workspaceId = await getCurrentWorkspaceId();
-  const survey = await getSurvey(id, workspaceId);
+  const survey = await getSurvey(id, { workspaceId });
   if (!survey) notFound();
 
+  const scope = { projectId: survey.projectId, surveyId: id };
   const [rows, stats, distribution] = await Promise.all([
-    listResponses({ workspaceId, surveyId: id }),
-    getStats({ workspaceId, surveyId: id }),
-    getScoreDistribution({ workspaceId, surveyId: id }),
+    listResponses(scope),
+    getStats(scope),
+    getScoreDistribution(scope),
   ]);
 
   const items: ResponseItem[] = rows.map((r) => ({

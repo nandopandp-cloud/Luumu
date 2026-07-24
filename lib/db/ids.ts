@@ -9,3 +9,4 @@ export const questionId = () => newId("qst");
 export const responseId = () => newId("res");
 export const answerId = () => newId("ans");
 export const eventId = () => newId("evt");
+export const projectId = () => newId("prj");

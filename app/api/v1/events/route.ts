@@ -50,6 +50,6 @@ export async function POST(req: Request) {
   const ok = await checkRateLimit(`evt:${ip}:${key}`, 240, 60);
   if (!ok) return jsonCors({ error: "Muitas requisições." }, { status: 429, origin: allowOrigin });
 
-  const name = await recordEvent(resolved.workspaceId, parsed.data.event);
+  const name = await recordEvent(resolved.workspaceId, resolved.projectId, parsed.data.event);
   return jsonCors({ ok: true, event: name }, { origin: allowOrigin });
 }

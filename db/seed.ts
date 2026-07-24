@@ -6,7 +6,7 @@ import { drizzle } from "drizzle-orm/neon-http";
 import { customAlphabet } from "nanoid";
 import { randomBytes, scryptSync, createHash } from "crypto";
 import * as schema from "./schema";
-import { workspaces, surveys, questions, responses, answers, users, memberships, apiKeys, rateLimits } from "./schema";
+import { workspaces, projects, surveys, questions, responses, answers, users, memberships, apiKeys, rateLimits } from "./schema";
 import { surveys as mockSurveys } from "../lib/mock/surveys";
 import { responses as mockResponses } from "../lib/mock/responses";
 import { questionTemplates } from "../lib/survey-templates";
@@ -28,6 +28,7 @@ const sql = neon(process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL!)
 const db = drizzle(sql, { schema });
 
 const WORKSPACE_ID = "ws_luumu";
+const PROJECT_ID = "prj_demo_luumu";
 // chave pública fixa da conta demo (usada pela página /demo)
 const DEMO_PUBLIC_KEY = "pk_demo_jovensgenios";
 const DEMO_SECRET = "sk_demo_jovensgenios_secret";
@@ -44,6 +45,7 @@ async function main() {
   await db.delete(questions);
   await db.delete(surveys);
   await db.delete(apiKeys);
+  await db.delete(projects);
   await db.delete(memberships);
   await db.delete(users);
   await db.delete(workspaces);
@@ -54,6 +56,14 @@ async function main() {
     name: "Jovens Gênios",
     slug: "jovensgenios",
     plan: "growth",
+  });
+
+  // projeto Padrão (unidade de isolamento; keys/surveys/eventos pendem dele)
+  await db.insert(projects).values({
+    id: PROJECT_ID,
+    workspaceId: WORKSPACE_ID,
+    name: "Padrão",
+    slug: "padrao",
   });
 
   // usuário demo (owner) + membership + SDK keys reais
@@ -73,6 +83,7 @@ async function main() {
   await db.insert(apiKeys).values({
     id: id("key"),
     workspaceId: WORKSPACE_ID,
+    projectId: PROJECT_ID,
     name: "Default",
     publicKey: DEMO_PUBLIC_KEY,
     secretHash: sha256(DEMO_SECRET),
@@ -85,6 +96,7 @@ async function main() {
     await db.insert(surveys).values({
       id: s.id,
       workspaceId: WORKSPACE_ID,
+      projectId: PROJECT_ID,
       name: s.name,
       type: s.type,
       status,

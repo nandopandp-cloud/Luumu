@@ -9,7 +9,7 @@ import { Mascot } from "@/components/ui/Mascot";
 import { AreaTrend, DonutChart } from "@/components/charts/Charts";
 import { listSurveys } from "@/lib/db/surveys";
 import { getStats, getChannelSplit, getScoreTrend } from "@/lib/db/responses";
-import { requireUser } from "@/lib/auth/current";
+import { requireUser, getCurrentProjectId } from "@/lib/auth/current";
 
 export const dynamic = "force-dynamic";
 
@@ -21,12 +21,13 @@ const statusTone = {
 } as const;
 
 export default async function DashboardPage() {
-  const { workspaceId, name } = await requireUser();
+  const { name } = await requireUser();
+  const projectId = await getCurrentProjectId();
   const [allSurveys, stats, channelSplit, csatTrend] = await Promise.all([
-    listSurveys(workspaceId),
-    getStats({ workspaceId }),
-    getChannelSplit({ workspaceId }),
-    getScoreTrend({ workspaceId }),
+    listSurveys(projectId),
+    getStats({ projectId }),
+    getChannelSplit({ projectId }),
+    getScoreTrend({ projectId }),
   ]);
   const activeCount = allSurveys.filter((s) => s.status === "ativa").length;
   const recent = allSurveys.slice(0, 5);

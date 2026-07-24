@@ -7,7 +7,6 @@ import { Loader2, Check, Upload } from "lucide-react";
 import { Card, CardTitle, CardSubtitle } from "@/components/ui/Card";
 import { Field, Input, Select } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
 import { useToast } from "@/components/ui/Toast";
 import { saveWorkspaceAction } from "@/app/(app)/settings/actions";
 
@@ -26,7 +25,15 @@ const TIMEZONES = [
   { value: "America/Mexico_City", label: "(GMT-6) Cidade do México" },
 ];
 
-export function WorkspaceForm({ initial, canManage }: { initial: WorkspaceValues; canManage: boolean }) {
+export function WorkspaceForm({
+  initial,
+  canManage,
+  aside,
+}: {
+  initial: WorkspaceValues;
+  canManage: boolean;
+  aside?: React.ReactNode;
+}) {
   const [v, setV] = useState(initial);
   const [saving, startSaving] = useTransition();
   const [saved, setSaved] = useState(false);
@@ -131,17 +138,7 @@ export function WorkspaceForm({ initial, canManage }: { initial: WorkspaceValues
           </div>
         </Card>
 
-        <Card>
-          <div className="flex items-center justify-between">
-            <CardTitle>Projetos</CardTitle>
-            <Badge tone="warn" dot={false}>Em breve</Badge>
-          </div>
-          <CardSubtitle>Ambientes isolados dentro do workspace.</CardSubtitle>
-          <p className="mt-4 rounded-xl border border-line bg-bg-sunken p-4 text-sm text-fg-mut">
-            Em breve você poderá separar produção, staging e times diferentes em projetos isolados dentro do
-            mesmo workspace.
-          </p>
-        </Card>
+        {aside}
       </div>
 
       {canManage ? (

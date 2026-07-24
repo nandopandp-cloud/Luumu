@@ -9,10 +9,14 @@ export function AppShell({
   children,
   user,
   workspace,
+  projects,
+  activeProjectId,
 }: {
   children: React.ReactNode;
   user: { name: string; email: string };
   workspace: { name: string; plan: string; logoUrl: string | null };
+  projects: { id: string; name: string }[];
+  activeProjectId: string | null;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -20,7 +24,7 @@ export function AppShell({
     <div className="flex min-h-screen">
       {/* Sidebar desktop */}
       <div className="sticky top-0 hidden h-screen shrink-0 lg:block">
-        <Sidebar workspace={workspace} />
+        <Sidebar workspace={workspace} projects={projects} activeProjectId={activeProjectId} />
       </div>
 
       {/* Sidebar mobile (drawer) */}
@@ -31,7 +35,12 @@ export function AppShell({
             onClick={() => setMobileOpen(false)}
           />
           <div className="absolute inset-y-0 left-0 h-full shadow-[var(--shadow-lg)]">
-            <Sidebar workspace={workspace} onNavigate={() => setMobileOpen(false)} />
+            <Sidebar
+              workspace={workspace}
+              projects={projects}
+              activeProjectId={activeProjectId}
+              onNavigate={() => setMobileOpen(false)}
+            />
           </div>
         </div>
       )}

@@ -26,7 +26,7 @@ export async function GET(req: Request) {
     return jsonCors({ error: "Origem não autorizada." }, { status: 403, origin: null });
   }
 
-  const active = await listActiveSurveys(resolved.workspaceId);
+  const active = await listActiveSurveys(resolved.projectId);
   return jsonCors(
     {
       surveys: active.map((s) => ({

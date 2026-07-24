@@ -7,13 +7,13 @@ import { responseId, answerId } from "./ids";
 export type ResponseRow = typeof responses.$inferSelect;
 
 interface Scope {
-  workspaceId: string;
-  surveyId?: string; // opcional: restringe a uma pesquisa do workspace
+  projectId: string;
+  surveyId?: string; // opcional: restringe a uma pesquisa do projeto
 }
 
-/** Filtro combinado: sempre por workspace (via join com surveys), opcionalmente por pesquisa. */
+/** Filtro combinado: sempre por projeto (via join com surveys), opcionalmente por pesquisa. */
 function scopeWhere(scope: Scope): SQL | undefined {
-  const parts = [eq(surveys.workspaceId, scope.workspaceId)];
+  const parts = [eq(surveys.projectId, scope.projectId)];
   if (scope.surveyId) parts.push(eq(responses.surveyId, scope.surveyId));
   return and(...parts);
 }

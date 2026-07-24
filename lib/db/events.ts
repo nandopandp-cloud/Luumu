@@ -22,24 +22,25 @@ export function normalizeEventName(raw: string): string {
 }
 
 /**
- * Registra a ocorrência de um evento do workspace (chamado pela ingestão do SDK).
+ * Registra a ocorrência de um evento do projeto (chamado pela ingestão do SDK).
  * UPSERT atômico: cria na primeira vez, incrementa count e atualiza last_seen_at depois.
+ * A unicidade é por (projeto, nome) — o mesmo evento pode existir em projetos diferentes.
  */
-export async function recordEvent(workspaceId: string, rawName: string) {
+export async function recordEvent(workspaceId: string, projectId: string, rawName: string) {
   const name = normalizeEventName(rawName);
   if (!name) return null;
   await db
     .insert(events)
-    .values({ id: eventId(), workspaceId, name, count: 1 })
+    .values({ id: eventId(), workspaceId, projectId, name, count: 1 })
     .onConflictDoUpdate({
-      target: [events.workspaceId, events.name],
+      target: [events.projectId, events.name],
       set: { count: sql`${events.count} + 1`, lastSeenAt: new Date() },
     });
   return name;
 }
 
-/** Lista os eventos do workspace (mais recentes/frequentes primeiro) para o seletor de gatilho. */
-export async function listEvents(workspaceId: string) {
+/** Lista os eventos do projeto (mais recentes/frequentes primeiro) para o seletor de gatilho. */
+export async function listEvents(projectId: string) {
   return db
     .select({
       name: events.name,
@@ -47,16 +48,16 @@ export async function listEvents(workspaceId: string) {
       lastSeenAt: events.lastSeenAt,
     })
     .from(events)
-    .where(eq(events.workspaceId, workspaceId))
+    .where(eq(events.projectId, projectId))
     .orderBy(desc(events.lastSeenAt));
 }
 
-/** Verifica se um evento existe no workspace (usado ao salvar o gatilho de uma survey). */
-export async function eventExists(workspaceId: string, name: string) {
+/** Verifica se um evento existe no projeto (usado ao salvar o gatilho de uma survey). */
+export async function eventExists(projectId: string, name: string) {
   const [row] = await db
     .select({ name: events.name })
     .from(events)
-    .where(and(eq(events.workspaceId, workspaceId), eq(events.name, normalizeEventName(name))))
+    .where(and(eq(events.projectId, projectId), eq(events.name, normalizeEventName(name))))
     .limit(1);
   return !!row;
 }

@@ -1,22 +1,25 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { ChevronsUpDown, Lock } from "lucide-react";
+import { Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LuumuLogo } from "@/components/ui/Mascot";
+import { ProjectSwitcher } from "./ProjectSwitcher";
 import { NAV } from "./nav";
 
 export function Sidebar({
   onNavigate,
   workspace,
+  projects,
+  activeProjectId,
 }: {
   onNavigate?: () => void;
   workspace: { name: string; plan: string; logoUrl: string | null };
+  projects: { id: string; name: string }[];
+  activeProjectId: string | null;
 }) {
   const pathname = usePathname();
-  const planLabel = { starter: "Plano Starter", growth: "Plano Growth", enterprise: "Plano Enterprise" }[workspace.plan] ?? "Plano Growth";
 
   return (
     <aside className="flex h-full w-[260px] flex-col gap-1 overflow-y-auto border-r border-line bg-bg-elev px-3 py-5">
@@ -26,29 +29,13 @@ export function Sidebar({
         <span className="font-display text-xl font-extrabold tracking-tight">Luumu</span>
       </Link>
 
-      {/* Seletor de workspace (mock) */}
-      <button className="mb-3 flex items-center justify-between gap-2 rounded-xl border border-line bg-bg-sunken px-3 py-2 text-left transition hover:border-line-strong">
-        <div className="flex items-center gap-2.5">
-          {workspace.logoUrl ? (
-            <Image
-              src={workspace.logoUrl}
-              alt=""
-              width={32}
-              height={32}
-              className="size-8 rounded-lg object-cover"
-            />
-          ) : (
-            <span className="grid size-8 place-items-center rounded-lg text-sm font-bold text-white [background:var(--grad-roxo)]">
-              {workspace.name.charAt(0).toUpperCase()}
-            </span>
-          )}
-          <div className="leading-tight">
-            <div className="text-sm font-semibold">{workspace.name}</div>
-            <div className="text-[11px] text-fg-mut">{planLabel}</div>
-          </div>
-        </div>
-        <ChevronsUpDown className="size-4 text-fg-mut" />
-      </button>
+      {/* Seletor de projeto ativo */}
+      <ProjectSwitcher
+        projects={projects}
+        activeProjectId={activeProjectId}
+        workspaceName={workspace.name}
+        onNavigate={onNavigate}
+      />
 
       <nav className="flex flex-col gap-4">
         {NAV.map((group) => (

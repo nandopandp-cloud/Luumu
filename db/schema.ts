@@ -45,11 +45,29 @@ export const memberships = pgTable(
   (t) => [index("memberships_user_idx").on(t.userId), index("memberships_ws_idx").on(t.workspaceId)]
 );
 
+/**
+ * Projeto — unidade de isolamento dentro do workspace. Cada projeto tem sua
+ * própria SDK key e agrupa surveys, eventos e respostas. O cliente instala o
+ * script de um projeto no produto correspondente.
+ */
+export const projects = pgTable(
+  "projects",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("projects_ws_idx").on(t.workspaceId)]
+);
+
 export const apiKeys = pgTable(
   "api_keys",
   {
     id: text("id").primaryKey(),
     workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+    projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
     name: text("name").notNull().default("Default"),
     publicKey: text("public_key").notNull().unique(), // pk_...
     secretHash: text("secret_hash").notNull(), // hash da sk_...
@@ -58,7 +76,11 @@ export const apiKeys = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
   },
-  (t) => [index("api_keys_ws_idx").on(t.workspaceId), index("api_keys_pk_idx").on(t.publicKey)]
+  (t) => [
+    index("api_keys_ws_idx").on(t.workspaceId),
+    index("api_keys_project_idx").on(t.projectId),
+    index("api_keys_pk_idx").on(t.publicKey),
+  ]
 );
 
 export const rateLimits = pgTable(
@@ -81,14 +103,17 @@ export const events = pgTable(
     workspaceId: text("workspace_id")
       .notNull()
       .references(() => workspaces.id, { onDelete: "cascade" }),
-    name: text("name").notNull(), // slug do evento, único por workspace
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    name: text("name").notNull(), // slug do evento, único por projeto
     count: integer("count").notNull().default(0),
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
     firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    uniqueIndex("events_ws_name_uidx").on(t.workspaceId, t.name),
-    index("events_ws_idx").on(t.workspaceId),
+    uniqueIndex("events_project_name_uidx").on(t.projectId, t.name),
+    index("events_project_idx").on(t.projectId),
   ]
 );
 
@@ -99,6 +124,9 @@ export const surveys = pgTable(
     workspaceId: text("workspace_id")
       .notNull()
       .references(() => workspaces.id, { onDelete: "cascade" }),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     type: text("type").notNull(), // CSAT | NPS | CES | ...
     status: text("status").notNull().default("rascunho"), // rascunho|ativa|pausada|encerrada
@@ -119,7 +147,7 @@ export const surveys = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     publishedAt: timestamp("published_at", { withTimezone: true }),
   },
-  (t) => [index("surveys_workspace_idx").on(t.workspaceId)]
+  (t) => [index("surveys_workspace_idx").on(t.workspaceId), index("surveys_project_idx").on(t.projectId)]
 );
 
 export const questions = pgTable(
@@ -179,3 +207,4 @@ export type User = typeof users.$inferSelect;
 export type Membership = typeof memberships.$inferSelect;
 export type ApiKey = typeof apiKeys.$inferSelect;
 export type Event = typeof events.$inferSelect;
+export type Project = typeof projects.$inferSelect;

@@ -10,12 +10,12 @@ import type { SurveyType, SurveyStatus } from "@/lib/mock/surveys";
 export type SurveyRow = typeof surveys.$inferSelect;
 export type QuestionRow = typeof questions.$inferSelect;
 
-/** Lista de pesquisas do workspace com métricas derivadas (nº respostas + score médio). */
-export async function listSurveys(workspaceId: string) {
+/** Lista de pesquisas do projeto com métricas derivadas (nº respostas + score médio). */
+export async function listSurveys(projectId: string) {
   const rows = await db
     .select()
     .from(surveys)
-    .where(eq(surveys.workspaceId, workspaceId))
+    .where(eq(surveys.projectId, projectId))
     .orderBy(desc(surveys.updatedAt));
 
   const withStats = await Promise.all(
@@ -39,18 +39,20 @@ export async function listSurveys(workspaceId: string) {
 }
 
 /**
- * Busca uma pesquisa. Se `workspaceId` for informado, exige que pertença ao tenant
- * (retorna null caso contrário) — usado no painel. A API pública passa o workspace da key.
+ * Busca uma pesquisa. Restringe pelo tenant/projeto informado (retorna null caso
+ * a survey não pertença a ele). O painel passa workspaceId; a API pública passa
+ * projectId (resolvido da SDK key).
  */
-export async function getSurvey(id: string, workspaceId?: string) {
+export async function getSurvey(id: string, scope?: { workspaceId?: string; projectId?: string }) {
   const [s] = await db.select().from(surveys).where(eq(surveys.id, id)).limit(1);
   if (!s) return null;
-  if (workspaceId && s.workspaceId !== workspaceId) return null;
+  if (scope?.workspaceId && s.workspaceId !== scope.workspaceId) return null;
+  if (scope?.projectId && s.projectId !== scope.projectId) return null;
   return s;
 }
 
-export async function getSurveyWithQuestions(id: string, workspaceId?: string) {
-  const s = await getSurvey(id, workspaceId);
+export async function getSurveyWithQuestions(id: string, scope?: { workspaceId?: string; projectId?: string }) {
+  const s = await getSurvey(id, scope);
   if (!s) return null;
   const qs = await db
     .select()
@@ -62,20 +64,21 @@ export async function getSurveyWithQuestions(id: string, workspaceId?: string) {
 
 /** Garante que a pesquisa pertence ao workspace; lança se não. */
 async function assertOwned(id: string, workspaceId: string) {
-  const s = await getSurvey(id);
-  if (!s || s.workspaceId !== workspaceId) {
+  const s = await getSurvey(id, { workspaceId });
+  if (!s) {
     throw new Error("Pesquisa não encontrada neste workspace.");
   }
   return s;
 }
 
 /** Cria uma pesquisa a partir de um template de tipo, com perguntas-semente. */
-export async function createSurveyFromTemplate(workspaceId: string, type: SurveyType) {
+export async function createSurveyFromTemplate(workspaceId: string, projectId: string, type: SurveyType) {
   const tpl = questionTemplates[type] ?? questionTemplates.Personalizada;
   const id = surveyId();
   await db.insert(surveys).values({
     id,
     workspaceId,
+    projectId,
     name: tpl.name,
     type,
     status: "rascunho",
@@ -156,11 +159,11 @@ export async function saveAppearance(id: string, workspaceId: string, appearance
   await db.update(surveys).set({ appearance, updatedAt: new Date() }).where(eq(surveys.id, id));
 }
 
-/** Pesquisas ativas de um workspace (para a API pública do SDK). */
-export async function listActiveSurveys(workspaceId: string) {
+/** Pesquisas ativas de um projeto (para a API pública do SDK). */
+export async function listActiveSurveys(projectId: string) {
   return db
     .select()
     .from(surveys)
-    .where(and(eq(surveys.workspaceId, workspaceId), eq(surveys.status, "ativa")))
+    .where(and(eq(surveys.projectId, projectId), eq(surveys.status, "ativa")))
     .orderBy(desc(surveys.publishedAt));
 }

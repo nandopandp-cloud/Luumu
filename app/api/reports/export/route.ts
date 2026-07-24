@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
+import { getCurrentProject } from "@/lib/auth/current";
 import { listResponsesForExport, getStats } from "@/lib/db/responses";
 import { getSurvey } from "@/lib/db/surveys";
 import { toCsv } from "@/lib/export/csv";
@@ -23,19 +24,22 @@ export async function GET(req: Request) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
 
+  const project = await getCurrentProject();
+  if (!project) return NextResponse.json({ error: "Nenhum projeto ativo." }, { status: 400 });
+
   const { searchParams } = new URL(req.url);
   const format = (searchParams.get("format") || "csv").toLowerCase();
   const surveyId = searchParams.get("surveyId") || undefined;
 
-  // se filtrou por pesquisa, precisa pertencer ao workspace
+  // se filtrou por pesquisa, precisa pertencer ao projeto ativo
   let scopeName = "Todas as pesquisas";
   if (surveyId) {
-    const survey = await getSurvey(surveyId, session.workspaceId);
+    const survey = await getSurvey(surveyId, { projectId: project.id });
     if (!survey) return NextResponse.json({ error: "Pesquisa não encontrada." }, { status: 404 });
     scopeName = survey.name;
   }
 
-  const scope = { workspaceId: session.workspaceId, surveyId };
+  const scope = { projectId: project.id, surveyId };
   const rows = await listResponsesForExport(scope);
 
   const dateTag = new Date().toISOString().slice(0, 10);

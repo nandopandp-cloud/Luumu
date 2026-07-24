@@ -30,7 +30,7 @@ export async function GET(
   }
 
   // exige que a pesquisa pertença ao workspace da key
-  const data = await getSurveyWithQuestions(id, resolved.workspaceId);
+  const data = await getSurveyWithQuestions(id, { projectId: resolved.projectId });
   if (!data) return jsonCors({ error: "Pesquisa não encontrada." }, { status: 404, origin: allowOrigin });
   if (data.survey.status !== "ativa") {
     return jsonCors({ error: "Pesquisa não está ativa." }, { status: 403, origin: allowOrigin });

@@ -4,7 +4,7 @@ import { db } from "./client";
 import { users, memberships, workspaces } from "@/db/schema";
 import { newId } from "./ids";
 import { hashPassword } from "@/lib/auth/password";
-import { createApiKey } from "./keys";
+import { createProject } from "./projects";
 
 export async function findUserByEmail(email: string) {
   const [u] = await db.select().from(users).where(eq(users.email, email.toLowerCase())).limit(1);
@@ -112,7 +112,8 @@ export async function createAccount(input: { name: string; email: string; passwo
     workspaceId,
     role: "owner",
   });
-  await createApiKey(workspaceId, "Default");
+  // todo workspace nasce com um projeto "Padrão" já com SDK key própria
+  await createProject(workspaceId, "Padrão");
 
   return { userId, workspaceId };
 }

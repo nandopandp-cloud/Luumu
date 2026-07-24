@@ -57,7 +57,7 @@ export async function POST(req: Request) {
   if (!ok) return jsonCors({ error: "Muitas requisições." }, { status: 429, origin: allowOrigin });
 
   // a pesquisa precisa pertencer ao workspace da key e estar ativa
-  const survey = await getSurvey(data.surveyId, resolved.workspaceId);
+  const survey = await getSurvey(data.surveyId, { projectId: resolved.projectId });
   if (!survey || survey.status !== "ativa") {
     return jsonCors({ error: "Pesquisa indisponível." }, { status: 403, origin: allowOrigin });
   }

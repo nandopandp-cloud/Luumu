@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { CodeBlock } from "@/components/ui/CodeBlock";
 import { InstallSnippets } from "@/components/sdk/InstallSnippets";
 import { EventDetector } from "@/components/sdk/EventDetector";
-import { getCurrentWorkspaceId } from "@/lib/auth/current";
+import { getCurrentProjectId } from "@/lib/auth/current";
 import { getPrimaryPublicKey } from "@/lib/db/keys";
 import { listEvents } from "@/lib/db/events";
 import { listActiveSurveys } from "@/lib/db/surveys";
@@ -31,11 +31,11 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
 }
 
 export default async function SdkPage() {
-  const workspaceId = await getCurrentWorkspaceId();
+  const projectId = await getCurrentProjectId();
   const [sdkKey, events, activeSurveys] = await Promise.all([
-    getPrimaryPublicKey(workspaceId),
-    listEvents(workspaceId),
-    listActiveSurveys(workspaceId),
+    getPrimaryPublicKey(projectId),
+    listEvents(projectId),
+    listActiveSurveys(projectId),
   ]);
 
   const initialStatus = {

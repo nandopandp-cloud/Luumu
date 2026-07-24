@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { SoonBanner } from "@/components/ui/SoonBanner";
 import { ExportPanel } from "@/components/reports/ExportPanel";
-import { getCurrentWorkspaceId } from "@/lib/auth/current";
+import { getCurrentProjectId } from "@/lib/auth/current";
 import { listSurveys } from "@/lib/db/surveys";
 import { getStats } from "@/lib/db/responses";
 
@@ -17,10 +17,10 @@ const scheduled = [
 ];
 
 export default async function ReportsPage() {
-  const workspaceId = await getCurrentWorkspaceId();
+  const projectId = await getCurrentProjectId();
   const [surveys, stats] = await Promise.all([
-    listSurveys(workspaceId),
-    getStats({ workspaceId }),
+    listSurveys(projectId),
+    getStats({ projectId }),
   ]);
 
   const surveyOpts = surveys
