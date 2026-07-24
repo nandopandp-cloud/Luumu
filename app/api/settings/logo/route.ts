@@ -41,10 +41,26 @@ export async function POST(req: Request) {
   }
 
   const ext = file.name.split(".").pop()?.toLowerCase() || "png";
-  const blob = await put(`workspaces/${session.workspaceId}/logo-${Date.now()}.${ext}`, file, {
-    access: "public",
-    contentType: file.type,
-  });
+  let blob;
+  try {
+    blob = await put(`workspaces/${session.workspaceId}/logo-${Date.now()}.${ext}`, file, {
+      access: "public",
+      contentType: file.type,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "";
+    if (msg.includes("private access")) {
+      return NextResponse.json(
+        {
+          error:
+            "O Blob Store conectado é privado, e a Vercel não permite trocar o modo de acesso depois de criado. " +
+            "Crie um novo Blob Store com acesso \"Public\" e atualize BLOB_READ_WRITE_TOKEN.",
+        },
+        { status: 503 }
+      );
+    }
+    throw err;
+  }
 
   await updateWorkspace(session.workspaceId, { logoUrl: blob.url });
   return NextResponse.json({ url: blob.url });
