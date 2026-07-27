@@ -37,7 +37,7 @@ export default function HeatmapsPage() {
 
       <SoonBanner className="mb-4">
         Heatmaps dependem de <strong>captura de interações</strong> (cliques, movimento, scroll) no produto
-        do cliente — algo que o SDK ainda não coleta. O mapa abaixo é uma demonstração de layout, não dados
+        do cliente, algo que o SDK ainda não coleta. O mapa abaixo é uma demonstração de layout, não dados
         do seu workspace.
       </SoonBanner>
 

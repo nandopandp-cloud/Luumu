@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 
 /**
- * Logo oficial da Luumu (mascote colorido + wordmark) — extraída dos símbolos
+ * Logo oficial da Luumu (mascote colorido + wordmark), extraída dos símbolos
  * SVG oficiais de assets/logo.svg / luumus_ds.html. Renderiza mascote e
  * wordmark lado a lado, nas proporções originais. O wordmark usa currentColor
  * (respeita o tema claro/escuro via a cor de texto do elemento pai).

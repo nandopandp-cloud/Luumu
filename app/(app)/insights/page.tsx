@@ -30,7 +30,7 @@ export default function InsightsPage() {
 
       <SoonBanner className="mb-4">
         A análise por IA (sentimento, temas, riscos de churn) ainda não está ligada às suas respostas reais.
-        O conteúdo abaixo é um exemplo do formato dos insights — não uma análise do seu workspace.
+        O conteúdo abaixo é um exemplo do formato dos insights, não uma análise do seu workspace.
       </SoonBanner>
 
       {/* Resumo executivo com mascote */}
@@ -43,7 +43,7 @@ export default function InsightsPage() {
             No último período, o sentimento geral está <strong>72% positivo</strong>. Usuários
             elogiam a <strong>facilidade de uso</strong> e a <strong>qualidade dos insights</strong>,
             mas apontam atrito na <strong>exportação de dados</strong> e na{" "}
-            <strong>performance dos heatmaps</strong>. Recomendamos priorizar a exportação para Excel —
+            <strong>performance dos heatmaps</strong>. Recomendamos priorizar a exportação para Excel:
             alto impacto, baixo esforço.
           </p>
         </div>

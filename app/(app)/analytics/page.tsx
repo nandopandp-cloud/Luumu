@@ -27,7 +27,7 @@ export default function AnalyticsPage() {
       <PageHeader
         eyebrow="Inteligência"
         title="Analytics de comportamento"
-        description="Funis, retenção, cohorts e engajamento — entenda o comportamento ao longo do tempo."
+        description="Funis, retenção, cohorts e engajamento, entenda o comportamento ao longo do tempo."
       />
 
       {/* Aviso: esta área depende de coleta de comportamento que ainda não existe */}
@@ -36,12 +36,12 @@ export default function AnalyticsPage() {
           <Info className="mt-0.5 size-5 shrink-0 text-aviso" />
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-sm font-bold text-fg">Prévia — dados ilustrativos</span>
+              <span className="text-sm font-bold text-fg">Prévia: dados ilustrativos</span>
               <Badge tone="warn" dot={false}>Em breve</Badge>
             </div>
             <p className="mt-1 max-w-3xl text-sm text-fg-soft">
               Estas métricas (DAU/MAU, funil, retenção, cohorts) dependem de uma camada de{" "}
-              <strong>analytics de comportamento</strong> que ainda não coletamos — o SDK hoje registra{" "}
+              <strong>analytics de comportamento</strong> que ainda não coletamos. O SDK hoje registra{" "}
               <em>eventos nomeados</em> e <em>respostas de pesquisa</em>. Os números abaixo são exemplos de layout,
               não dados do seu workspace. Enquanto isso, use o{" "}
               <a href="/dashboard" className="font-semibold text-accent hover:underline">Dashboard</a> e a{" "}

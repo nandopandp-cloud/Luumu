@@ -9,7 +9,7 @@ import { QuestionField, isVisible, type Answers } from "./fields";
 
 /**
  * Cartão da pesquisa nos 4 formatos (popup/slider/modal/bar).
- * É a MESMA UI que o SDK vanilla produz — usado no preview dentro da Luumu.
+ * É a MESMA UI que o SDK vanilla produz, usado no preview dentro da Luumu.
  * Renderiza uma pergunta por vez (fluxo de widget), diferente do SurveyRenderer
  * (que lista todas numa página).
  */
@@ -139,7 +139,7 @@ export function WidgetStage({
   );
 }
 
-/* campo do widget — mesma renderização dos fields, mas compacto */
+/* campo do widget, mesma renderização dos fields, mas compacto */
 function WidgetField({ q, value, onChange }: { q: BuilderQuestion; value: unknown; onChange: (v: unknown) => void }) {
   return <QuestionField q={q} value={value} onChange={onChange} />;
 }

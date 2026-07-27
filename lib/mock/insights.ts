@@ -11,12 +11,12 @@ export const clusters = [
 
 export const pains = [
   "Configurar disparo por evento é confuso para novos usuários",
-  "Exportação limitada — falta Excel nativo e agendamento",
+  "Exportação limitada, falta Excel nativo e agendamento",
   "Heatmaps demoram a carregar em páginas longas",
 ];
 
 export const praises = [
-  "Interface intuitiva e agradável — o mascote encanta",
+  "Interface intuitiva e agradável, o mascote encanta",
   "Insights de IA economizam horas de análise manual",
   "Dashboards claros e prontos para apresentar",
 ];

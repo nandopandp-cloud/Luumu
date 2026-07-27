@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 type AnimName = "Feliz" | "Animado" | "Pensativo";
 
 /**
- * Mascote animado. WEBM (VP9 + alfa) primeiro — transparência sobre qualquer fundo;
+ * Mascote animado. WEBM (VP9 + alfa) primeiro, transparência sobre qualquer fundo;
  * MP4 como fallback. Sempre muted/loop/playsinline. Só "Feliz" tem MP4.
  */
 export function MascotAnimated({
@@ -25,7 +25,7 @@ export function MascotAnimated({
       preload="metadata"
       width={size}
       height={size}
-      aria-label={`Mascote Luumu animado — ${name}`}
+      aria-label={`Mascote Luumu animado: ${name}`}
       className={cn("select-none", className)}
       style={{ width: size, height: "auto" }}
     >

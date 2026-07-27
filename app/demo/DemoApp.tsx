@@ -38,7 +38,7 @@ export function DemoApp({ surveys, sdkKey }: { surveys: DemoSurvey[]; sdkKey: st
 
   return (
     <div className="min-h-screen bg-[#0b1220] text-white">
-      {/* SDK real da Luumu — data-luumu fornece a key; auto=false p/ disparar via clique */}
+      {/* SDK real da Luumu, data-luumu fornece a key; auto=false p/ disparar via clique */}
       <Script src="/sdk.js" data-luumu={sdkKey} data-luumu-auto="false" strategy="afterInteractive" onLoad={() => setReady(true)} />
 
       {/* App fake ("Acme SaaS") */}
@@ -84,7 +84,7 @@ export function DemoApp({ surveys, sdkKey }: { surveys: DemoSurvey[]; sdkKey: st
         <div className="mt-10">
           <h2 className="mb-3 text-lg font-bold">Disparar uma pesquisa</h2>
           <p className="mb-4 text-sm text-white/60">
-            Cada botão chama <code className="rounded bg-white/10 px-1.5 py-0.5">Luumu.show(id)</code> — o mesmo que
+            Cada botão chama <code className="rounded bg-white/10 px-1.5 py-0.5">Luumu.show(id)</code>, o mesmo que
             aconteceria automaticamente por evento/trigger no produto real.
           </p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">

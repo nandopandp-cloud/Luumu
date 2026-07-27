@@ -41,7 +41,7 @@ export default async function ReportsPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {/* Agendamentos — ainda não implementado */}
+        {/* Agendamentos, ainda não implementado */}
         <div className="flex flex-col gap-3">
           <SoonBanner>
             Envio automático de relatórios por e-mail em uma agenda ainda não está disponível. Por enquanto,
@@ -69,7 +69,7 @@ export default async function ReportsPage() {
           </Card>
         </div>
 
-        {/* Links públicos — ainda não implementado */}
+        {/* Links públicos, ainda não implementado */}
         <div className="flex flex-col gap-3">
           <SoonBanner>
             Links públicos de dashboards para quem não tem acesso à Luumu ainda estão em desenvolvimento.

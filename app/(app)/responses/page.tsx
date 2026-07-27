@@ -32,7 +32,7 @@ export default async function ResponsesPage() {
       <PageHeader
         eyebrow="Respostas"
         title="Respostas"
-        description="A voz dos seus clientes, agregada de todas as pesquisas — com sentimento e temas."
+        description="A voz dos seus clientes, agregada de todas as pesquisas, com sentimento e temas."
         actions={
           <Button variant="ghost" size="sm">
             <Download className="size-4" /> Exportar

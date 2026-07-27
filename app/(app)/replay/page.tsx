@@ -13,12 +13,12 @@ export default function ReplayPage() {
       <PageHeader
         eyebrow="Behavior"
         title="Session Replay"
-        description="Assista às sessões reais dos seus usuários — com eventos, erros e rage clicks."
+        description="Assista às sessões reais dos seus usuários, com eventos, erros e rage clicks."
       />
 
       <SoonBanner className="mb-4">
         Session Replay depende de <strong>gravação de sessões</strong> (DOM, cliques, navegação) no produto
-        do cliente — captura que o SDK ainda não faz. As sessões abaixo são exemplos de layout, não dados do
+        do cliente, captura que o SDK ainda não faz. As sessões abaixo são exemplos de layout, não dados do
         seu workspace.
       </SoonBanner>
 

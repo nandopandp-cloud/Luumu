@@ -22,7 +22,7 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Luumu — Ouça. Entenda. Melhore.",
+  title: "Luumu · Ouça. Entenda. Melhore.",
   description:
     "Plataforma de Voice of Customer: pesquisas, analytics e behavior. Transforme feedback em crescimento.",
 };

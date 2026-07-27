@@ -20,7 +20,7 @@ export interface NavItem {
   href: string;
   label: string;
   icon: LucideIcon;
-  /** Área ainda sem fonte de dados real — item desabilitado na sidebar e rota bloqueada. */
+  /** Área ainda sem fonte de dados real, item desabilitado na sidebar e rota bloqueada. */
   locked?: boolean;
 }
 

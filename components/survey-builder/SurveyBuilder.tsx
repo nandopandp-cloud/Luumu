@@ -232,7 +232,7 @@ export function SurveyBuilder({
       const block = builderBlocks.find((b) => b.id === blockId);
       const uid = newUid();
       const nq: BuilderQuestion = {
-        uid, blockId, title: `Nova pergunta — ${block?.label}`, required: false,
+        uid, blockId, title: `Nova pergunta: ${block?.label}`, required: false,
         config: defaultConfig(blockId), logic: {},
       };
       setQuestions((prev) => {

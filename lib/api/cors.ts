@@ -38,7 +38,7 @@ export function jsonCors(data: unknown, opts: { status?: number; origin?: string
   });
 }
 
-/** Preflight OPTIONS — libera amplamente (a checagem real é no GET/POST). */
+/** Preflight OPTIONS, libera amplamente (a checagem real é no GET/POST). */
 export function preflight(origin: string | null) {
   return new NextResponse(null, { status: 204, headers: corsHeaders(origin || "*") });
 }

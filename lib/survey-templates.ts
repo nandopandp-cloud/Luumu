@@ -9,7 +9,7 @@ export interface SeedQuestion {
   logic?: Record<string, unknown>;
 }
 
-/** Perguntas iniciais por tipo de pesquisa — usadas ao criar do template e no seed. */
+/** Perguntas iniciais por tipo de pesquisa, usadas ao criar do template e no seed. */
 export const questionTemplates: Record<SurveyType, { name: string; questions: SeedQuestion[] }> = {
   CSAT: {
     name: "Pesquisa de Satisfação (CSAT)",

@@ -29,7 +29,7 @@ export default function GlobalError({
           Algo não saiu como esperado
         </h1>
         <p className="mt-2 text-sm text-fg-mut">
-          Nossa equipe já foi notificada. Tente novamente — se o problema persistir, fale com o suporte.
+          Nossa equipe já foi notificada. Tente novamente, se o problema persistir, fale com o suporte.
         </p>
         {error.digest && (
           <p className="mt-2 font-mono text-xs text-fg-mut">Referência: {error.digest}</p>

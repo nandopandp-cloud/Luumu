@@ -95,7 +95,7 @@ export function EventDetector({ initial }: { initial: Status }) {
           <CheckCircle2 className="size-5 text-sucesso" />
         )}
         <span className="text-sm font-semibold text-fg">
-          SDK conectado — {status.total} {status.total === 1 ? "evento recebido" : "eventos recebidos"}
+          SDK conectado: {status.total} {status.total === 1 ? "evento recebido" : "eventos recebidos"}
         </span>
       </div>
       <ul className="flex flex-col gap-2">

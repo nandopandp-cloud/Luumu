@@ -62,7 +62,7 @@ export async function GET(req: Request) {
   if (format === "pdf") {
     const stats = await getStats(scope);
     const buf = await toPdf(rows, {
-      title: `Relatório de respostas — ${scopeName}`,
+      title: `Relatório de respostas: ${scopeName}`,
       summary: { total: stats.total, avgScore: stats.avgScore, positivePct: stats.positivePct },
     });
     return fileResponse(buf, `${base}.pdf`, "application/pdf");

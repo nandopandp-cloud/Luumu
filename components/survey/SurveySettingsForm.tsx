@@ -86,7 +86,7 @@ function EventMultiSelect({
         className="flex min-h-[46px] flex-wrap items-center gap-1.5 rounded-xl border border-line-strong bg-bg-elev px-2.5 py-2 text-sm transition focus-within:border-accent"
       >
         {selected.length === 0 && (
-          <span className="px-1 text-fg-mut">Nenhum — exibir no carregamento</span>
+          <span className="px-1 text-fg-mut">Nenhum: exibir no carregamento</span>
         )}
         {selected.map((name) => (
           <span
@@ -395,7 +395,7 @@ export function SurveySettingsForm({
               {events.length === 0 && v.triggerEvents.length === 0 ? (
                 <p className="text-xs leading-relaxed text-fg-mut">
                   Nenhum evento capturado ainda. Assim que o SDK for instalado no site, cliques e
-                  navegações do produto do cliente aparecem aqui automaticamente — sem precisar
+                  navegações do produto do cliente aparecem aqui automaticamente, sem precisar
                   escrever código.
                 </p>
               ) : v.triggerEvents.length > 0 ? (

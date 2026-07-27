@@ -87,7 +87,7 @@ export async function inviteMemberAction(input: unknown): Promise<ActionResult> 
  * - só owner/admin podem remover;
  * - ninguém remove a si mesmo por aqui;
  * - o owner nunca pode ser removido (o workspace precisa de um dono);
- * - um admin não pode remover outro admin (só editor/viewer) — evita que
+ * - um admin não pode remover outro admin (só editor/viewer), evita que
  *   admins se removam entre si; só o owner pode remover admins.
  */
 export async function removeMemberAction(targetUserId: string): Promise<ActionResult> {

@@ -55,7 +55,7 @@ export default async function SdkPage() {
     return list;
   };
   const withTrigger = activeSurveys.filter((s) => triggersOf(s).length > 0);
-  const trackSnippet = `// Chame no momento exato em que a ação de negócio acontece —
+  const trackSnippet = `// Chame no momento exato em que a ação de negócio acontece,
 // algo que um clique sozinho não descreve (ex: fluxo concluído,
 // meta atingida, processamento terminado no backend).
 
@@ -79,7 +79,7 @@ async function handleLoginSuccess(user) {
       <PageHeader
         eyebrow="Configuração"
         title="Instalar o SDK"
-        description="Três passos para começar a coletar feedback dentro do seu produto — sem redirecionar o usuário."
+        description="Três passos para começar a coletar feedback dentro do seu produto, sem redirecionar o usuário."
         actions={
           <Button href="/demo" size="sm" variant="ghost">
             <MonitorSmartphone className="size-4" /> Ver demonstração <ArrowUpRight className="size-3.5" />
@@ -109,7 +109,7 @@ async function handleLoginSuccess(user) {
           <Step n={2} title="O que é automático x o que precisa de código">
             <p className="mb-4 max-w-2xl text-sm text-fg-mut">
               O SDK funciona em duas camadas. Uma parte já funciona sozinha assim que o script é colado. A
-              outra — identificar o usuário e marcar ações importantes do negócio — exige{" "}
+              outra, identificar o usuário e marcar ações importantes do negócio, exige{" "}
               <strong>duas ou três linhas de código</strong> no produto do cliente. Veja exatamente onde entra
               cada uma.
             </p>
@@ -117,7 +117,7 @@ async function handleLoginSuccess(user) {
             <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="rounded-xl border border-sucesso/30 bg-sucesso/5 p-3.5">
                 <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-sucesso">
-                  <Sparkles className="size-4" /> Automático — zero código
+                  <Sparkles className="size-4" /> Automático, zero código
                 </div>
                 <ul className="flex flex-col gap-1.5 text-xs leading-relaxed text-fg-soft">
                   <li>• Páginas visitadas</li>
@@ -135,11 +135,11 @@ async function handleLoginSuccess(user) {
                 </div>
                 <ul className="flex flex-col gap-1.5 text-xs leading-relaxed text-fg-soft">
                   <li>
-                    • <strong>Identificar o usuário</strong> — para segmentar por e-mail/ID (
+                    • <strong>Identificar o usuário</strong>, para segmentar por e-mail/ID (
                     <code className="font-mono text-[11.5px]">Luumu.identify()</code>)
                   </li>
                   <li>
-                    • <strong>Ações de negócio</strong> — algo que não é um clique: fluxo concluído, meta
+                    • <strong>Ações de negócio</strong>, algo que não é um clique: fluxo concluído, meta
                     atingida, processo terminado no backend (
                     <code className="font-mono text-[11.5px]">Luumu.track()</code>)
                   </li>
@@ -154,7 +154,7 @@ async function handleLoginSuccess(user) {
               <EventDetector initial={initialStatus} />
             </div>
 
-            {/* Bloco 1: identify — necessário para segmentação por usuário */}
+            {/* Bloco 1: identify, necessário para segmentação por usuário */}
             <div className="mb-5 rounded-xl border border-line bg-bg-sunken p-4">
               <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-fg">
                 <UserCheck className="size-4 text-accent" /> 1. Identificar o usuário logado
@@ -162,31 +162,31 @@ async function handleLoginSuccess(user) {
               <p className="mb-3 max-w-2xl text-sm text-fg-mut">
                 Chame <strong>uma única vez</strong>, logo após o login (ou quando a sessão do usuário for
                 carregada). Sem isso, pesquisas configuradas para &quot;Usuários específicos&quot; não
-                encontram ninguém para exibir — o SDK não sabe quem está navegando.
+                encontram ninguém para exibir, o SDK não sabe quem está navegando.
               </p>
               <CodeBlock code={identifySnippet} lang="js" />
               <p className="mt-3 max-w-2xl text-xs text-fg-mut">
                 Onde colar: dentro da função que trata o login com sucesso (ou no carregamento inicial, se a
                 sessão já existir salva). Pode passar <code className="font-mono text-[12px]">id</code>,{" "}
                 <code className="font-mono text-[12px]">email</code>, ou os dois. A identidade fica salva no
-                navegador — não precisa chamar de novo a cada página.
+                navegador, não precisa chamar de novo a cada página.
               </p>
             </div>
 
-            {/* Bloco 2: track — eventos de negócio */}
+            {/* Bloco 2: track, eventos de negócio */}
             <div className="rounded-xl border border-line bg-bg-sunken p-4">
               <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-fg">
                 <Zap className="size-4 text-accent" /> 2. Marcar uma ação de negócio
               </div>
               <p className="mb-3 max-w-2xl text-sm text-fg-mut">
-                Chame no exato momento em que a ação acontece no seu código — geralmente logo após uma chamada
+                Chame no exato momento em que a ação acontece no seu código, geralmente logo após uma chamada
                 de API ter sucesso.
               </p>
               <CodeBlock code={trackSnippet} lang="js" />
               <p className="mt-3 max-w-2xl text-xs text-fg-mut">
                 Dica: para nomear um clique específico sem escrever JS, adicione{" "}
                 <code className="font-mono text-[12px]">data-luumu-track=&quot;nome&quot;</code> no elemento
-                HTML — ou <code className="font-mono text-[12px]">data-luumu-ignore</code> para excluí-lo do
+                HTML, ou <code className="font-mono text-[12px]">data-luumu-ignore</code> para excluí-lo do
                 auto-tracking.
               </p>
             </div>
@@ -247,7 +247,7 @@ async function handleLoginSuccess(user) {
               <span className="font-mono text-xs text-fg-soft">{sdkKey ?? "—"}</span>
             </div>
             <p className="mt-3 text-xs leading-relaxed text-fg-mut">
-              Pode ficar exposta no front-end do seu produto — ela só resolve para este workspace e respeita a
+              Pode ficar exposta no front-end do seu produto, ela só resolve para este workspace e respeita a
               lista de domínios permitidos.
             </p>
           </Card>

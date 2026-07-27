@@ -26,7 +26,7 @@ export function Mascot({
   return (
     <Image
       src={`/mascot/${encodeURIComponent(name)}.svg`}
-      alt={`Mascote Luumu — ${name}`}
+      alt={`Mascote Luumu: ${name}`}
       width={size}
       height={size}
       className={cn("select-none", float && "float", className)}

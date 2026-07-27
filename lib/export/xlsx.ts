@@ -11,7 +11,7 @@ export async function toXlsx(rows: ExportRow[], title: string): Promise<Buffer> 
   wb.creator = "Luumu";
   wb.created = new Date();
 
-  wb.title = `Luumu — ${title}`;
+  wb.title = `Luumu: ${title}`;
   const ws = wb.addWorksheet("Respostas", {
     views: [{ state: "frozen", ySplit: 1 }],
   });

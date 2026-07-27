@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 /**
  * GET /api/events/status
  * Rota INTERNA do painel (autenticada por sessão, não por SDK key).
- * Retorna os eventos já recebidos do projeto ativo — usada no onboarding para
+ * Retorna os eventos já recebidos do projeto ativo, usada no onboarding para
  * detectar ao vivo quando a instalação do SDK começa a enviar eventos.
  */
 export async function GET() {

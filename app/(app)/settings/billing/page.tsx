@@ -46,7 +46,7 @@ export default async function BillingPage() {
       <PageHeader eyebrow="Configuração" title="Plano & Cobrança" description="Gerencie sua assinatura, uso e forma de pagamento." />
       <SettingsNav />
 
-      {/* Uso atual — REAL */}
+      {/* Uso atual (real) */}
       <Card className="mb-4">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -64,7 +64,7 @@ export default async function BillingPage() {
         </div>
       </Card>
 
-      {/* Planos oferecidos — plano atual destacado pelo dado real */}
+      {/* Planos oferecidos, plano atual destacado pelo dado real */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {plans.map((p) => {
           const current = p.key === plan;
@@ -93,7 +93,7 @@ export default async function BillingPage() {
         })}
       </div>
 
-      {/* Pagamento — depende de gateway, ainda não implementado */}
+      {/* Pagamento, depende de gateway, ainda não implementado */}
       <div className="mt-4">
         <SoonBanner className="mb-3">
           Troca de plano e forma de pagamento serão habilitadas com a integração ao gateway de pagamento. O uso

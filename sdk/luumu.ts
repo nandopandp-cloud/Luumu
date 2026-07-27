@@ -1,5 +1,5 @@
 /**
- * Luumu SDK — widget embutido de pesquisas (Voice of Customer).
+ * Luumu SDK, widget embutido de pesquisas (Voice of Customer).
  * Vanilla TS, sem dependências, isolado via Shadow DOM.
  * Compilado para /public/sdk.js (IIFE). Fonte da verdade dos blocos: lib/builder.ts.
  *
@@ -184,7 +184,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     .thanks { text-align: center; padding: 8px 16px 20px; }
     .thanks .t { font-size: 16px; font-weight: 800; margin-top: 8px; }
     .thanks .s { font-size: 12px; color: ${mut}; margin-top: 2px; }
-    .thanks svg { width: 84px; height: 84px; }
+    .thanks img { width: 96px; height: auto; }
     `;
   }
 
@@ -203,8 +203,8 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     '<path d="M490.665 2.83118C505.305 2.03918 534.99 4.29618 546.735 13.3967C555.65 20.3032 559.62 30.4377 561.005 41.4552C563.165 58.6442 563.315 83.1377 552.67 97.6717C541.765 112.555 521.89 111.414 505.05 113.634C502.64 116.064 500.935 117.517 498.29 119.697C496.01 121.608 489.885 127.149 487.245 127.932C481.785 129.554 483.15 116.198 479.12 114.026C470.19 109.212 460.03 109.649 451.81 102.209C441.36 92.7552 438.525 74.8907 437.525 61.6277C436.37 46.3152 437.185 27.7292 447.83 15.6392C457.01 5.21368 477.49 3.28618 490.665 2.83118Z" fill="#88D029"/>' +
     '<path d="M513.275 34.1446C514.12 34.0826 514.965 34.0416 515.81 34.0206C531.84 33.7201 537.575 51.9506 529.41 63.0711C521.645 73.6441 509.265 83.2626 499.77 92.4916C495.35 88.5156 489.92 84.2406 485.26 80.4231C476.225 73.0011 463.79 64.1216 463.86 51.2581C463.875 46.4951 465.925 41.9651 469.495 38.8126C473.035 35.6031 477.765 34.0331 482.525 34.4886C490.115 35.1866 494.075 39.5156 498.58 44.8221C503.085 38.6456 505.72 35.9111 513.275 34.1446Z" fill="#FBFAFA"/>' +
     "</svg>";
-  const PLUM_HAPPY =
-    '<svg viewBox="0 0 104 104"><path d="M40 14C30 6 16 8 12 20c12 4 26 2 32-8Z" fill="#7ED957"/><circle cx="52" cy="54" r="34" fill="#6B2BD9"/><circle cx="42" cy="50" r="6.5" fill="#0D0F1A"/><circle cx="62" cy="50" r="6.5" fill="#0D0F1A"/><path d="M42 63q10 9 20 0" stroke="#0D0F1A" stroke-width="3" fill="#FF6B8A" stroke-linecap="round"/></svg>';
+  // mascote "Comemorando" do design system oficial da Luumu, servido pelo mesmo host do sdk.js
+  const plumHappy = () => `<img src="${ORIGIN}/mascot/Comemorando.svg" alt="" width="104" height="114" />`;
 
   function mount(survey: SurveyData) {
     const ap = survey.appearance;
@@ -295,7 +295,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
 
       if (done) {
         const t = el("div", { class: "thanks" });
-        t.innerHTML = PLUM_HAPPY + '<div class="t">Obrigado! 💜</div><div class="s">Sua resposta ajuda a melhorar.</div>';
+        t.innerHTML = plumHappy() + '<div class="t">Obrigado! 💜</div><div class="s">Sua resposta ajuda a melhorar.</div>';
         bd.append(t);
         setTimeout(close, 2600);
         return;
@@ -339,7 +339,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
       bd.append(foot);
     }
 
-    // grava a resposta sem disparar render() — usado nos campos de texto p/ não perder o foco a cada tecla
+    // grava a resposta sem disparar render(), usado nos campos de texto p/ não perder o foco a cada tecla
     function onChangeSilent(uid: string, v: unknown) {
       answers[uid] = v;
     }
@@ -475,7 +475,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     catalogLoaded = true;
   }
 
-  // slug de evento — DEVE casar com normalizeEventName() do servidor (lib/db/events.ts)
+  // slug de evento, DEVE casar com normalizeEventName() do servidor (lib/db/events.ts)
   const slug = (s: string) =>
     s
       .normalize("NFD")
@@ -590,7 +590,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
   function autoTrack(name: string) {
     if (!name) return;
     // dedupe por nome: cada evento automático só é enviado uma vez por sessão.
-    // (eventos diferentes disparados no mesmo instante — ex: form_submit + form_submit_x — passam ambos)
+    // (eventos diferentes disparados no mesmo instante, ex: form_submit + form_submit_x, passam ambos)
     if (autoSeen.has(name)) return;
     autoSeen.add(name);
     track(name);

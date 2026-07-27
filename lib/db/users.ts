@@ -58,7 +58,7 @@ export async function getMembership(workspaceId: string, userId: string) {
 
 /**
  * Remove um membro do workspace (deleta a membership). Se, depois disso, o usuário
- * não pertencer a mais nenhum workspace, a conta em si também é removida — senão
+ * não pertencer a mais nenhum workspace, a conta em si também é removida, senão
  * ficaria uma conta "fantasma" sem acesso a nada.
  */
 export async function removeMemberFromWorkspace(workspaceId: string, userId: string) {

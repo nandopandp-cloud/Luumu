@@ -24,7 +24,7 @@ export function normalizeEventName(raw: string): string {
 /**
  * Registra a ocorrência de um evento do projeto (chamado pela ingestão do SDK).
  * UPSERT atômico: cria na primeira vez, incrementa count e atualiza last_seen_at depois.
- * A unicidade é por (projeto, nome) — o mesmo evento pode existir em projetos diferentes.
+ * A unicidade é por (projeto, nome), o mesmo evento pode existir em projetos diferentes.
  */
 export async function recordEvent(workspaceId: string, projectId: string, rawName: string) {
   const name = normalizeEventName(rawName);
