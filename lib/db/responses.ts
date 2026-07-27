@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, count, avg, sql, inArray, type SQL } from "drizzle-orm";
+import { and, desc, eq, count, avg, sql, inArray, gte, lte, type SQL } from "drizzle-orm";
 import { db } from "./client";
 import { responses, answers, surveys, questions } from "@/db/schema";
 import { responseId, answerId } from "./ids";
@@ -21,12 +21,16 @@ export type ResponseRow = typeof responses.$inferSelect;
 interface Scope {
   projectId: string;
   surveyId?: string; // opcional: restringe a uma pesquisa do projeto
+  dateFrom?: Date; // opcional: só respostas a partir desta data (inclusive)
+  dateTo?: Date; // opcional: só respostas até esta data (inclusive)
 }
 
-/** Filtro combinado: sempre por projeto (via join com surveys), opcionalmente por pesquisa. */
+/** Filtro combinado: sempre por projeto (via join com surveys), opcionalmente por pesquisa e período. */
 function scopeWhere(scope: Scope): SQL | undefined {
   const parts = [eq(surveys.projectId, scope.projectId)];
   if (scope.surveyId) parts.push(eq(responses.surveyId, scope.surveyId));
+  if (scope.dateFrom) parts.push(gte(responses.createdAt, scope.dateFrom));
+  if (scope.dateTo) parts.push(lte(responses.createdAt, scope.dateTo));
   return and(...parts);
 }
 

@@ -1,20 +1,31 @@
 import { PageHeader } from "@/components/ui/PageHeader";
 import { MetricCard } from "@/components/ui/MetricCard";
+import { DataFilters } from "@/components/ui/DataFilters";
+import { periodToDateFrom } from "@/lib/period";
 import { ResponsesView, type ResponseItem } from "@/components/responses/ResponsesView";
 import { ExportMenu } from "@/components/responses/ExportMenu";
 import { listResponses, getStats, getScoreDistribution, getWordCloud } from "@/lib/db/responses";
+import { listSurveyOptions } from "@/lib/db/surveys";
 import { getCurrentProjectId } from "@/lib/auth/current";
 import { timeAgo } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
-export default async function ResponsesPage() {
+export default async function ResponsesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ surveyId?: string; period?: string }>;
+}) {
+  const { surveyId, period } = await searchParams;
   const projectId = await getCurrentProjectId();
-  const [rows, stats, distribution, wordCloud] = await Promise.all([
-    listResponses({ projectId }),
-    getStats({ projectId }),
-    getScoreDistribution({ projectId }),
-    getWordCloud({ projectId }),
+  const scope = { projectId, surveyId: surveyId || undefined, dateFrom: periodToDateFrom(period) };
+
+  const [rows, stats, distribution, wordCloud, surveyOptions] = await Promise.all([
+    listResponses(scope),
+    getStats(scope),
+    getScoreDistribution(scope),
+    getWordCloud(scope),
+    listSurveyOptions(projectId),
   ]);
 
   const items: ResponseItem[] = rows.map((r) => ({
@@ -33,8 +44,12 @@ export default async function ResponsesPage() {
         eyebrow="Respostas"
         title="Respostas"
         description="A voz dos seus clientes, agregada de todas as pesquisas, com sentimento e temas."
-        actions={<ExportMenu />}
+        actions={<ExportMenu surveyId={surveyId} />}
       />
+
+      <div className="mb-4">
+        <DataFilters surveys={surveyOptions} />
+      </div>
 
       <div className="mb-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <MetricCard label="Total de respostas" value={stats.total} accent="roxo" />

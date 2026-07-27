@@ -10,6 +10,15 @@ import type { SurveyType, SurveyStatus } from "@/lib/mock/surveys";
 export type SurveyRow = typeof surveys.$inferSelect;
 export type QuestionRow = typeof questions.$inferSelect;
 
+/** Lista leve (id + nome) das pesquisas do projeto — usada para popular seletores/filtros. */
+export async function listSurveyOptions(projectId: string) {
+  return db
+    .select({ id: surveys.id, name: surveys.name })
+    .from(surveys)
+    .where(eq(surveys.projectId, projectId))
+    .orderBy(desc(surveys.updatedAt));
+}
+
 /** Lista de pesquisas do projeto com métricas derivadas (nº respostas + score médio). */
 export async function listSurveys(projectId: string) {
   const rows = await db

@@ -6,8 +6,10 @@ import { Card, CardHeader, CardTitle, CardSubtitle } from "@/components/ui/Card"
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Mascot } from "@/components/ui/Mascot";
+import { DataFilters } from "@/components/ui/DataFilters";
+import { periodToDateFrom } from "@/lib/period";
 import { AreaTrend, DonutChart } from "@/components/charts/Charts";
-import { listSurveys } from "@/lib/db/surveys";
+import { listSurveys, listSurveyOptions } from "@/lib/db/surveys";
 import { getStats, getChannelSplit, getScoreTrend } from "@/lib/db/responses";
 import { requireUser, getCurrentProjectId } from "@/lib/auth/current";
 
@@ -20,14 +22,25 @@ const statusTone = {
   rascunho: "brand",
 } as const;
 
-export default async function DashboardPage() {
+const TREND_WEEKS_BY_PERIOD: Record<string, number> = { "7d": 1, "30d": 5, "90d": 13, "12m": 52 };
+
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ surveyId?: string; period?: string }>;
+}) {
   const { name } = await requireUser();
+  const { surveyId, period } = await searchParams;
   const projectId = await getCurrentProjectId();
-  const [allSurveys, stats, channelSplit, csatTrend] = await Promise.all([
+  const scope = { projectId, surveyId: surveyId || undefined, dateFrom: periodToDateFrom(period) };
+  const trendWeeks = period ? (TREND_WEEKS_BY_PERIOD[period] ?? 8) : 8;
+
+  const [allSurveys, surveyOptions, stats, channelSplit, csatTrend] = await Promise.all([
     listSurveys(projectId),
-    getStats({ projectId }),
-    getChannelSplit({ projectId }),
-    getScoreTrend({ projectId }),
+    listSurveyOptions(projectId),
+    getStats(scope),
+    getChannelSplit(scope),
+    getScoreTrend(scope, trendWeeks),
   ]);
   const activeCount = allSurveys.filter((s) => s.status === "ativa").length;
   const recent = allSurveys.slice(0, 5);
@@ -46,16 +59,15 @@ export default async function DashboardPage() {
         title={`Olá, ${firstName} 👋`}
         description="Acompanhe o que está acontecendo com suas pesquisas e a voz dos seus clientes."
         actions={
-          <>
-            <Button variant="ghost" size="sm">
-              Últimos 30 dias
-            </Button>
-            <Button href="/surveys/new" size="sm">
-              <Plus className="size-4" /> Nova pesquisa
-            </Button>
-          </>
+          <Button href="/surveys/new" size="sm">
+            <Plus className="size-4" /> Nova pesquisa
+          </Button>
         }
       />
+
+      <div className="mb-4">
+        <DataFilters surveys={surveyOptions} />
+      </div>
 
       {/* Métricas */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -71,7 +83,7 @@ export default async function DashboardPage() {
           <CardHeader>
             <div>
               <CardTitle>Evolução da nota</CardTitle>
-              <CardSubtitle>Média semanal · últimas 8 semanas</CardSubtitle>
+              <CardSubtitle>Média semanal · {trendWeeks === 1 ? "última semana" : `últimas ${trendWeeks} semanas`}</CardSubtitle>
             </div>
             {trendDelta != null && (
               <Badge tone={trendDelta >= 0 ? "success" : "warn"}>
