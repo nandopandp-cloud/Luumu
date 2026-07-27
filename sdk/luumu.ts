@@ -466,10 +466,108 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     }
   }
 
+  // ---------- Auto-tracking (zero-config) ----------
+  // Sem o cliente escrever nenhum código: captura page views e cliques em
+  // elementos interativos, gerando nomes de evento legíveis automaticamente.
+  // `data-luumu-track="nome"` (ou `data-luumu-ignore`) permite ao cliente
+  // ajustar/silenciar pontualmente, sem exigir instrumentação manual.
+  const autoSeen = new Set<string>(); // dedupe: mesmo evento não repete na mesma sessão
+  let lastAutoAt = 0;
+
+  function textLabel(node: Element): string {
+    const aria = node.getAttribute("aria-label");
+    if (aria) return aria;
+    const txt = (node.textContent || "").trim().replace(/\s+/g, " ");
+    if (txt) return txt.slice(0, 40);
+    const alt = node.querySelector("img[alt]")?.getAttribute("alt");
+    if (alt) return alt;
+    return "";
+  }
+
+  // sobe até 3 níveis a partir do alvo do clique procurando um elemento "trackável"
+  function closestTrackable(start: Element): Element | null {
+    let node: Element | null = start;
+    for (let i = 0; i < 4 && node; i++) {
+      if (node.hasAttribute("data-luumu-ignore")) return null;
+      if (node.hasAttribute("data-luumu-track")) return node;
+      const tag = node.tagName.toLowerCase();
+      if (tag === "button" || tag === "a" || node.getAttribute("role") === "button") return node;
+      if (tag === "input") {
+        const type = (node as HTMLInputElement).type;
+        if (type === "submit" || type === "button") return node;
+      }
+      node = node.parentElement;
+    }
+    return null;
+  }
+
+  function autoEventName(node: Element): string | null {
+    const explicit = node.getAttribute("data-luumu-track");
+    if (explicit) return `click_${slug(explicit)}`;
+    const tag = node.tagName.toLowerCase();
+    const label = textLabel(node) || node.getAttribute("name") || node.id || tag;
+    const kind = tag === "a" ? "link" : "click";
+    return `${kind}_${slug(label)}`;
+  }
+
+  function autoTrack(name: string) {
+    if (!name) return;
+    // rate-limit simples: no máx. 1 evento automático a cada 150ms (evita rajadas de clique duplo)
+    const now = Date.now();
+    if (now - lastAutoAt < 150) return;
+    lastAutoAt = now;
+    if (autoSeen.has(name)) return; // não repete o mesmo evento auto na mesma sessão
+    autoSeen.add(name);
+    track(name);
+  }
+
+  function trackPageView() {
+    const path = location.pathname + location.search;
+    autoTrack(`page_view_${slug(path || "home")}`);
+  }
+
+  function installAutoTracking() {
+    document.addEventListener(
+      "click",
+      (e) => {
+        const target = e.target as Element | null;
+        if (!target) return;
+        const node = closestTrackable(target);
+        if (!node) return;
+        const name = autoEventName(node);
+        if (name) autoTrack(name);
+      },
+      { capture: true, passive: true }
+    );
+
+    // navegação: load inicial + trocas de rota em SPA (pushState/replaceState/popstate)
+    const notifyRouteChange = () => trackPageView();
+    const origPush = history.pushState;
+    const origReplace = history.replaceState;
+    history.pushState = function (...args: Parameters<History["pushState"]>) {
+      origPush.apply(history, args);
+      notifyRouteChange();
+    };
+    history.replaceState = function (...args: Parameters<History["replaceState"]>) {
+      origReplace.apply(history, args);
+      notifyRouteChange();
+    };
+    window.addEventListener("popstate", notifyRouteChange);
+
+    if (document.readyState === "complete") trackPageView();
+    else window.addEventListener("load", trackPageView, { once: true });
+  }
+
+  let autoTrackingInstalled = false;
+
   async function start(opts: { key?: string; surveyId?: string; force?: boolean }) {
     const key = opts.key || keyFromAttr;
     if (!key) return;
     activeKey = key;
+    if (!autoTrackingInstalled && currentScript?.getAttribute("data-luumu-autotrack") !== "false") {
+      autoTrackingInstalled = true;
+      installAutoTracking();
+    }
     if (opts.surveyId) {
       // pedido explícito: ignora catálogo/gatilho
       const survey = await fetchSurvey(opts.surveyId, key);

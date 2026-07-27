@@ -167,9 +167,9 @@ export function SurveySettingsForm({
             <div className="rounded-xl bg-bg-sunken p-3">
               {events.length === 0 ? (
                 <p className="text-xs leading-relaxed text-fg-mut">
-                  Nenhum evento rastreado ainda. Instale o SDK e chame{" "}
-                  <code className="rounded bg-bg px-1 py-0.5 font-mono text-[11px]">luumu.track(&quot;seu_evento&quot;)</code>{" "}
-                  no seu produto — os eventos aparecerão aqui para servir de gatilho.
+                  Nenhum evento capturado ainda. Assim que o SDK for instalado no site, cliques e
+                  navegações do produto do cliente aparecem aqui automaticamente — sem precisar
+                  escrever código. Clique em &quot;Atualizar&quot; após a instalação.
                 </p>
               ) : v.triggerEvent ? (
                 <div className="flex flex-wrap items-center gap-2 text-xs text-fg-soft">
