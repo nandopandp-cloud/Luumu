@@ -303,7 +303,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
       bd.append(field(q, answers[q.uid], (v) => {
         answers[q.uid] = v;
         render();
-      }));
+      }, onChangeSilent));
 
       const foot = el("div", { class: "foot" });
       const prog = el("div", { class: "prog" });
@@ -325,7 +325,17 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
       bd.append(foot);
     }
 
-    function field(q: Question, value: unknown, onChange: (v: unknown) => void): Node {
+    // grava a resposta sem disparar render() — usado nos campos de texto p/ não perder o foco a cada tecla
+    function onChangeSilent(uid: string, v: unknown) {
+      answers[uid] = v;
+    }
+
+    function field(
+      q: Question,
+      value: unknown,
+      onChange: (v: unknown) => void,
+      onChangeSilent: (uid: string, v: unknown) => void
+    ): Node {
       const cfg = q.config || {};
       const b = q.blockId;
 
@@ -408,14 +418,15 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
       if (b === "short") {
         const i = el("input", { type: "text", placeholder: cfg.placeholder || "" }) as HTMLInputElement;
         if (typeof value === "string") i.value = value;
-        i.oninput = () => onChange(i.value);
+        // grava direto em answers, sem re-renderizar a cada tecla (evita perder o foco)
+        i.oninput = () => onChangeSilent(q.uid, i.value);
         return i;
       }
 
       // long (default)
       const ta = el("textarea", { rows: "3", placeholder: cfg.placeholder || "" }) as HTMLTextAreaElement;
       if (typeof value === "string") ta.value = value;
-      ta.oninput = () => onChange(ta.value);
+      ta.oninput = () => onChangeSilent(q.uid, ta.value);
       return ta;
     }
 
