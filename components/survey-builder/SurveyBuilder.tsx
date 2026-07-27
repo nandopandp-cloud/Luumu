@@ -181,7 +181,7 @@ export function SurveyBuilder({
         id: surveyId,
         name: surveyName,
         questions: questions.map((q) => ({
-          blockId: q.blockId, title: q.title, required: q.required,
+          uid: q.uid, blockId: q.blockId, title: q.title, required: q.required,
           config: q.config, logic: q.logic,
         })),
       });

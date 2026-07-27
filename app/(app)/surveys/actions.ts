@@ -30,6 +30,7 @@ export async function createSurveyAction(type: SurveyType) {
 
 /* ---------- Salvar rascunho (builder) ---------- */
 const questionSchema = z.object({
+  uid: z.string().optional(), // uid temporário do builder (client), usado só para remapear logic.showIf
   blockId: z.string(),
   title: z.string(),
   required: z.boolean(),

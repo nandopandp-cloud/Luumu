@@ -110,26 +110,47 @@ export async function updateSurvey(
   await db.update(surveys).set({ ...patch, updatedAt: new Date() }).where(eq(surveys.id, id));
 }
 
-/** Substitui todas as perguntas da pesquisa (usado ao salvar o builder). */
+/**
+ * Substitui todas as perguntas da pesquisa (usado ao salvar o builder).
+ * O `uid` de cada pergunta é o identificador temporário gerado no client (builder);
+ * como cada save gera um `id` real novo, remapeamos aqui as referências de
+ * `logic.showIf.questionUid` (que apontam para o `uid` de outra pergunta do array)
+ * para o `id` real correspondente, senão a lógica condicional nunca casa com as
+ * respostas gravadas (que são indexadas pelo `id` real).
+ */
 export async function replaceQuestions(
   id: string,
   workspaceId: string,
-  qs: { blockId: string; title: string; required: boolean; config?: unknown; logic?: unknown }[]
+  qs: { uid?: string; blockId: string; title: string; required: boolean; config?: unknown; logic?: unknown }[]
 ) {
   await assertOwned(id, workspaceId);
   await db.delete(questions).where(eq(questions.surveyId, id));
   if (qs.length) {
+    const realIds = qs.map(() => questionId());
+    const uidToRealId = new Map<string, string>();
+    qs.forEach((q, i) => {
+      if (q.uid) uidToRealId.set(q.uid, realIds[i]);
+    });
+
     await db.insert(questions).values(
-      qs.map((q, i) => ({
-        id: questionId(),
-        surveyId: id,
-        order: i,
-        blockId: q.blockId,
-        title: q.title,
-        required: q.required,
-        config: (q.config as object) ?? {},
-        logic: (q.logic as object) ?? {},
-      }))
+      qs.map((q, i) => {
+        const logic = (q.logic as { showIf?: { questionUid?: string } }) ?? {};
+        const showIf = logic.showIf;
+        const remappedLogic =
+          showIf?.questionUid && uidToRealId.has(showIf.questionUid)
+            ? { ...logic, showIf: { ...showIf, questionUid: uidToRealId.get(showIf.questionUid) } }
+            : logic;
+        return {
+          id: realIds[i],
+          surveyId: id,
+          order: i,
+          blockId: q.blockId,
+          title: q.title,
+          required: q.required,
+          config: (q.config as object) ?? {},
+          logic: remappedLogic as object,
+        };
+      })
     );
   }
   await db.update(surveys).set({ updatedAt: new Date() }).where(eq(surveys.id, id));
