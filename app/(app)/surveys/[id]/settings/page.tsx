@@ -43,12 +43,17 @@ export default async function SurveySettingsPage({
           id: survey.id,
           channel: survey.channel,
           audience: survey.audience,
-          segment: survey.segment,
           language: survey.language,
-          trigger: survey.trigger,
-          triggerEvent: survey.triggerEvent ?? "",
+          // gatilhos: usa o array novo; se vazio mas houver o legado, converte
+          triggerEvents:
+            ((survey.triggerEvents as string[]) ?? []).length > 0
+              ? (survey.triggerEvents as string[])
+              : survey.triggerEvent
+              ? [survey.triggerEvent]
+              : [],
+          audienceMode: (survey.audienceMode as "email" | "id" | null) ?? null,
+          audienceList: (survey.audienceList as string[]) ?? [],
           frequency: survey.frequency,
-          delay: survey.delay,
           startsAt: survey.startsAt ?? "",
           endsAt: survey.endsAt ?? "",
         }}

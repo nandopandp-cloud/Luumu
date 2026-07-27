@@ -48,7 +48,13 @@ export default async function SdkPage() {
     })),
   };
 
-  const withTrigger = activeSurveys.filter((s) => s.triggerEvent);
+  // gatilhos consolidados (array novo, com fallback pro campo legado)
+  const triggersOf = (s: (typeof activeSurveys)[number]): string[] => {
+    const list = ((s.triggerEvents as string[] | null) ?? []).slice();
+    if (list.length === 0 && s.triggerEvent) list.push(s.triggerEvent);
+    return list;
+  };
+  const withTrigger = activeSurveys.filter((s) => triggersOf(s).length > 0);
   const trackSnippet = `// Chame no momento exato em que a ação de negócio acontece —
 // algo que um clique sozinho não descreve (ex: fluxo concluído,
 // meta atingida, processamento terminado no backend).
@@ -133,7 +139,11 @@ Luumu.track("treino_concluido");`;
                     {withTrigger.map((s) => (
                       <li key={s.id} className="flex items-center justify-between gap-3 text-sm">
                         <span className="truncate text-fg-soft">{s.name}</span>
-                        <Badge tone="brand" dot={false}>{s.triggerEvent}</Badge>
+                        <span className="flex flex-wrap justify-end gap-1">
+                          {triggersOf(s).map((ev) => (
+                            <Badge key={ev} tone="brand" dot={false}>{ev}</Badge>
+                          ))}
+                        </span>
                       </li>
                     ))}
                   </ul>

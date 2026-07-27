@@ -19,6 +19,8 @@ const schema = z.object({
   channel: z.string().optional(),
   answers: z.array(z.object({ questionId: z.string(), value: z.unknown() })),
   score: z.number().nullable(),
+  respondent: z.string().max(200).nullish(), // id externo (Luumu.identify)
+  respondentEmail: z.string().max(200).nullish(), // email (Luumu.identify)
 });
 
 /**
@@ -68,6 +70,8 @@ export async function POST(req: Request) {
     answers: data.answers as { questionId: string; value: unknown }[],
     score: data.score,
     sentiment: deriveSentiment(data.score),
+    respondent: data.respondent ?? null,
+    respondentEmail: data.respondentEmail ?? null,
   });
 
   revalidatePath("/responses");

@@ -58,19 +58,25 @@ const settingsSchema = z.object({
   id: z.string(),
   channel: z.string().optional(),
   audience: z.string().optional(),
-  segment: z.string().optional(),
   language: z.string().optional(),
-  trigger: z.string().optional(),
-  triggerEvent: z.string().nullable().optional(),
+  triggerEvents: z.array(z.string()).optional(),
+  audienceMode: z.enum(["email", "id"]).nullable().optional(),
+  audienceList: z.array(z.string()).optional(),
   frequency: z.string().optional(),
-  delay: z.string().optional(),
   startsAt: z.string().optional(),
   endsAt: z.string().optional(),
 });
 
 export async function saveSettingsAction(input: unknown) {
-  const { id, ...patch } = settingsSchema.parse(input);
+  const { id, triggerEvents, ...rest } = settingsSchema.parse(input);
   const workspaceId = await getCurrentWorkspaceId();
+  // mantém o campo legado triggerEvent em sincronia (primeiro da lista, ou null)
+  const patch = {
+    ...rest,
+    ...(triggerEvents !== undefined
+      ? { triggerEvents, triggerEvent: triggerEvents[0] ?? null }
+      : {}),
+  };
   await updateSurvey(id, workspaceId, patch);
   revalidatePath(`/surveys/${id}/settings`);
   return { ok: true as const };

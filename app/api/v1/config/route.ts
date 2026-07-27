@@ -35,7 +35,11 @@ export async function GET(req: Request) {
         type: s.type,
         appearance: normalizeAppearance(s.appearance),
         trigger: s.trigger,
-        triggerEvent: s.triggerEvent, // evento que dispara a survey (null = mostra no load)
+        triggerEvent: s.triggerEvent, // [legado] evento único que dispara a survey
+        triggerEvents: (s.triggerEvents as string[]) ?? [], // gatilhos por evento (dispara se QUALQUER um ocorrer)
+        audience: s.audience, // "Todos os usuários" | "Usuários específicos"
+        audienceMode: s.audienceMode, // "email" | "id" | null
+        audienceList: (s.audienceList as string[]) ?? [], // emails/IDs alvo
         frequency: s.frequency,
       })),
     },

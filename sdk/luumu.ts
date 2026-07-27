@@ -59,9 +59,24 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
   let activeKey = ""; // SDK key em uso (setada em start())
 
   // catálogo de surveys ativas do workspace (carregado uma vez), p/ resolver gatilhos por evento
-  type ActiveSurvey = { id: string; triggerEvent?: string | null; appearance?: Appearance };
+  type ActiveSurvey = {
+    id: string;
+    triggerEvent?: string | null; // legado (compat)
+    triggerEvents?: string[] | null; // fonte da verdade: dispara se QUALQUER um casar
+    audience?: string | null; // "Todos os usuários" | "Usuários específicos"
+    audienceMode?: "email" | "id" | null;
+    audienceList?: string[] | null;
+    appearance?: Appearance;
+  };
   let activeSurveys: ActiveSurvey[] = [];
   let catalogLoaded = false;
+
+  // identidade do usuário atual (informada pelo cliente via Luumu.identify)
+  let identity: { id?: string; email?: string } = {};
+  try {
+    const saved = localStorage.getItem("luumu_identity");
+    if (saved) identity = JSON.parse(saved);
+  } catch {}
 
   const seen = (id: string) => {
     try {
@@ -225,6 +240,8 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
             channel: "SDK",
             answers: vis.map((q) => ({ questionId: q.uid, value: normalize(q, answers[q.uid]) })),
             score,
+            respondent: identity.id || null,
+            respondentEmail: identity.email || null,
           }),
         });
       } catch {}
@@ -433,8 +450,32 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
       .replace(/^_|_$/g, "")
       .slice(0, 64);
 
-  // dispara a survey (respeitando "já visto", salvo force) buscando os detalhes sob demanda
-  async function trigger(surveyId: string, key: string, force = false) {
+  // consolida os gatilhos por evento da survey (array novo + campo legado)
+  function surveyTriggers(s: ActiveSurvey): string[] {
+    const list = Array.isArray(s.triggerEvents) ? s.triggerEvents.slice() : [];
+    if (s.triggerEvent) list.push(s.triggerEvent);
+    return list.map(slug).filter(Boolean);
+  }
+
+  // decide se o usuário atual está no público-alvo da survey
+  function inAudience(s: ActiveSurvey): boolean {
+    if (s.audience !== "Usuários específicos") return true; // "Todos os usuários" (ou não definido)
+    const list = (s.audienceList || []).map((x) => String(x).trim().toLowerCase()).filter(Boolean);
+    if (list.length === 0) return false; // específico sem lista = ninguém
+    if (s.audienceMode === "email") {
+      const email = (identity.email || "").trim().toLowerCase();
+      return !!email && list.indexOf(email) >= 0;
+    }
+    if (s.audienceMode === "id") {
+      const id = (identity.id || "").trim().toLowerCase();
+      return !!id && list.indexOf(id) >= 0;
+    }
+    return false;
+  }
+
+  // dispara a survey (respeitando "já visto" e público-alvo, salvo force) buscando os detalhes sob demanda
+  async function trigger(surveyId: string, key: string, force = false, audienceOk = true) {
+    if (!force && !audienceOk) return;
     if (!force && seen(surveyId)) return;
     const survey = await fetchSurvey(surveyId, key);
     if (!survey) return;
@@ -446,7 +487,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
   /**
    * Envia um evento do produto do cliente. Faz duas coisas:
    *  1. ingere o evento (para aparecer no painel como gatilho disponível);
-   *  2. dispara qualquer survey ativa cujo triggerEvent case com o nome.
+   *  2. dispara qualquer survey ativa cujo gatilho case com o nome (respeitando público-alvo).
    */
   async function track(rawEvent: string) {
     const key = activeKey || keyFromAttr;
@@ -459,10 +500,10 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ key, event: name }),
     }).catch(() => {});
-    // disparo por gatilho
+    // disparo por gatilho (qualquer evento da lista que case)
     await ensureCatalog(key);
     for (const s of activeSurveys) {
-      if (s.triggerEvent && slug(s.triggerEvent) === name) trigger(s.id, key);
+      if (surveyTriggers(s).indexOf(name) >= 0) trigger(s.id, key, false, inAudience(s));
     }
   }
 
@@ -472,7 +513,6 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
   // `data-luumu-track="nome"` (ou `data-luumu-ignore`) permite ao cliente
   // ajustar/silenciar pontualmente, sem exigir instrumentação manual.
   const autoSeen = new Set<string>(); // dedupe: mesmo evento não repete na mesma sessão
-  let lastAutoAt = 0;
 
   function textLabel(node: Element): string {
     const aria = node.getAttribute("aria-label");
@@ -512,11 +552,9 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
 
   function autoTrack(name: string) {
     if (!name) return;
-    // rate-limit simples: no máx. 1 evento automático a cada 150ms (evita rajadas de clique duplo)
-    const now = Date.now();
-    if (now - lastAutoAt < 150) return;
-    lastAutoAt = now;
-    if (autoSeen.has(name)) return; // não repete o mesmo evento auto na mesma sessão
+    // dedupe por nome: cada evento automático só é enviado uma vez por sessão.
+    // (eventos diferentes disparados no mesmo instante — ex: form_submit + form_submit_x — passam ambos)
+    if (autoSeen.has(name)) return;
     autoSeen.add(name);
     track(name);
   }
@@ -526,10 +564,25 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     autoTrack(`page_view_${slug(path || "home")}`);
   }
 
+  // --- Eventos padrão semânticos (reconhecidos em qualquer produto) ---
+  // Rage click: 3+ cliques no mesmo ponto em < 1s = sinal de frustração.
+  let clickBurst: { x: number; y: number; t: number; n: number } | null = null;
+  function detectRageClick(e: MouseEvent) {
+    const now = Date.now();
+    if (clickBurst && now - clickBurst.t < 1000 && Math.abs(e.clientX - clickBurst.x) < 30 && Math.abs(e.clientY - clickBurst.y) < 30) {
+      clickBurst.n++;
+      clickBurst.t = now;
+      if (clickBurst.n === 3) autoTrack("rage_click");
+    } else {
+      clickBurst = { x: e.clientX, y: e.clientY, t: now, n: 1 };
+    }
+  }
+
   function installAutoTracking() {
     document.addEventListener(
       "click",
       (e) => {
+        detectRageClick(e as MouseEvent);
         const target = e.target as Element | null;
         if (!target) return;
         const node = closestTrackable(target);
@@ -539,6 +592,44 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
       },
       { capture: true, passive: true }
     );
+
+    // Formulário enviado: qualquer <form> submetido no produto.
+    // Dispara sempre o evento canônico "form_submit" e, se houver id/name, também o específico.
+    document.addEventListener(
+      "submit",
+      (e) => {
+        const form = e.target as HTMLFormElement | null;
+        if (!form || form.hasAttribute("data-luumu-ignore")) return;
+        autoTrack("form_submit");
+        const label = form.getAttribute("data-luumu-track") || form.getAttribute("name") || form.id || "";
+        if (label) autoTrack(`form_submit_${slug(label)}`);
+      },
+      { capture: true, passive: true }
+    );
+
+    // Saída da página / intenção de abandono (mouse deixando o topo da viewport).
+    document.addEventListener("mouseout", (e) => {
+      const me = e as MouseEvent;
+      if (me.clientY <= 0 && !me.relatedTarget) autoTrack("exit_intent");
+    });
+    // Saída real (fechando/navegando para fora).
+    window.addEventListener("pagehide", () => autoTrack("page_leave"));
+
+    // Engajamento por tempo ativo na página (30s e 60s de permanência com aba visível).
+    let activeMs = 0;
+    let lastTick = Date.now();
+    const fired = new Set<number>();
+    setInterval(() => {
+      const now = Date.now();
+      if (!document.hidden) activeMs += now - lastTick;
+      lastTick = now;
+      for (const mark of [30000, 60000]) {
+        if (activeMs >= mark && !fired.has(mark)) {
+          fired.add(mark);
+          autoTrack(`engaged_${mark / 1000}s`);
+        }
+      }
+    }, 5000);
 
     // navegação: load inicial + trocas de rota em SPA (pushState/replaceState/popstate)
     const notifyRouteChange = () => trackPageView();
@@ -577,10 +668,12 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
       setTimeout(() => mount(survey), delay);
       return;
     }
-    // auto-init: só surveys SEM gatilho por evento aparecem no load;
-    // as que têm triggerEvent aguardam Luumu.track(...).
+    // auto-init: só surveys SEM gatilho por evento aparecem no load (respeitando público-alvo);
+    // as que têm gatilho por evento aguardam o evento correspondente (auto ou via track).
     await ensureCatalog(key);
-    const target = activeSurveys.find((s) => !s.triggerEvent && (opts.force || !seen(s.id)));
+    const target = activeSurveys.find(
+      (s) => surveyTriggers(s).length === 0 && (opts.force || !seen(s.id)) && (opts.force || inAudience(s))
+    );
     if (target) trigger(target.id, key, opts.force);
   }
 
@@ -595,6 +688,20 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     // registra um evento do produto e dispara surveys cujo gatilho case
     track(event: string) {
       track(event);
+    },
+    // informa quem é o usuário logado (habilita público-alvo por email/ID)
+    identify(user: { id?: string; email?: string } = {}) {
+      identity = { id: user.id, email: user.email };
+      try {
+        localStorage.setItem("luumu_identity", JSON.stringify(identity));
+      } catch {}
+    },
+    // limpa a identidade (ex.: logout)
+    reset() {
+      identity = {};
+      try {
+        localStorage.removeItem("luumu_identity");
+      } catch {}
     },
   };
 

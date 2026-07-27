@@ -222,6 +222,8 @@ export async function submitResponse(input: {
   answers: { questionId: string; value: unknown }[];
   score: number | null;
   sentiment: "positivo" | "neutro" | "negativo" | null;
+  respondent?: string | null;
+  respondentEmail?: string | null;
 }) {
   const rid = responseId();
   await db.insert(responses).values({
@@ -230,6 +232,8 @@ export async function submitResponse(input: {
     channel: input.channel ?? "Link",
     score: input.score ?? undefined,
     sentiment: input.sentiment ?? undefined,
+    respondent: input.respondent ?? undefined,
+    respondentEmail: input.respondentEmail ?? undefined,
   });
   if (input.answers.length) {
     await db.insert(answers).values(

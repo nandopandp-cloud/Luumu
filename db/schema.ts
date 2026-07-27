@@ -137,7 +137,14 @@ export const surveys = pgTable(
     language: text("language").notNull().default("pt"),
     trigger: text("trigger").notNull().default("Ao concluir onboarding"),
     // nome do evento (rastreado pelo SDK do cliente) que dispara esta survey; null = sem gatilho por evento
+    // [LEGADO] mantido por compatibilidade; a fonte da verdade agora é triggerEvents (array)
     triggerEvent: text("trigger_event"),
+    // lista de eventos que disparam esta survey (a survey aparece se QUALQUER um ocorrer); [] = sem gatilho
+    triggerEvents: jsonb("trigger_events").notNull().default([]),
+    // modo de público-alvo: "email" ou "id" quando audience = "Usuários específicos"; null caso "Todos"
+    audienceMode: text("audience_mode"), // "email" | "id" | null
+    // lista de emails ou IDs alvo quando audience = "Usuários específicos"
+    audienceList: jsonb("audience_list").notNull().default([]),
     frequency: text("frequency").notNull().default("Uma vez por usuário"),
     delay: text("delay").notNull().default("5s"),
     startsAt: text("starts_at"),
@@ -177,7 +184,8 @@ export const responses = pgTable(
     surveyId: text("survey_id")
       .notNull()
       .references(() => surveys.id, { onDelete: "cascade" }),
-    respondent: text("respondent"), // nullable (anônimo)
+    respondent: text("respondent"), // nullable (anônimo) — id externo informado via Luumu.identify()
+    respondentEmail: text("respondent_email"), // email informado via Luumu.identify() (nullable)
     channel: text("channel").notNull().default("Link"),
     sentiment: text("sentiment"), // positivo|neutro|negativo (derivado)
     score: real("score"), // nota principal (nullable)
