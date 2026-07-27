@@ -28,8 +28,9 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { Select } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
-import { builderBlocks } from "@/lib/mock/surveys";
+import { builderBlocks, surveyTemplates } from "@/lib/mock/surveys";
 import { defaultConfig, type BuilderQuestion } from "@/lib/builder";
 import { QuestionSettings } from "./QuestionSettings";
 import { saveDraftAction, publishSurveyAction } from "@/app/(app)/surveys/actions";
@@ -167,6 +168,7 @@ export function SurveyBuilder({
   const router = useRouter();
   const toast = useToast();
   const [name, setName] = useState(surveyName);
+  const [type, setType] = useState(surveyType);
   const [questions, setQuestions] = useState<BuilderQuestion[]>(initialQuestions);
   const [selectedUid, setSelectedUid] = useState<string | null>(initialQuestions[0]?.uid ?? null);
   const [activeDrag, setActiveDrag] = useState<string | null>(null);
@@ -181,6 +183,10 @@ export function SurveyBuilder({
   const selected = questions.find((q) => q.uid === selectedUid) ?? null;
   const selectedIndex = questions.findIndex((q) => q.uid === selectedUid);
 
+  // opções do dropdown de tipo: templates conhecidos + o tipo atual, caso seja um valor
+  // legado/customizado que não está na lista (evita perder a seleção original).
+  const typeOptions = Array.from(new Set([...surveyTemplates.map((t) => t.type), surveyType]));
+
   /* ----- salvar (chamado por autosave e botão) ----- */
   async function save(silent = false) {
     setSaveState("saving");
@@ -188,6 +194,7 @@ export function SurveyBuilder({
       await saveDraftAction({
         id: surveyId,
         name,
+        type,
         questions: questions.map((q) => ({
           uid: q.uid, blockId: q.blockId, title: q.title, required: q.required,
           config: q.config, logic: q.logic,
@@ -210,7 +217,7 @@ export function SurveyBuilder({
     const t = setTimeout(() => save(true), 1200);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [questions, name]);
+  }, [questions, name, type]);
 
   async function handlePublish() {
     setPublishing(true);
@@ -281,7 +288,18 @@ export function SurveyBuilder({
           size={Math.max(6, name.length || 14)}
           className="min-w-0 max-w-full truncate rounded-lg bg-transparent font-display text-2xl font-extrabold tracking-tight text-fg outline-none transition hover:bg-bg-sunken focus:bg-bg-sunken focus:px-1.5 focus:py-0.5"
         />
-        <Badge tone="brand" dot={false}>{surveyType}</Badge>
+        <Select
+          value={type}
+          onChange={(e) => setType(e.target.value)}
+          aria-label="Tipo da pesquisa"
+          className="w-auto rounded-full border-0 bg-surface-brand py-1 pl-3 pr-7 text-xs font-semibold text-accent"
+        >
+          {typeOptions.map((t) => (
+            <option key={t} value={t}>
+              {t}
+            </option>
+          ))}
+        </Select>
         <Badge tone={statusTone[status as keyof typeof statusTone] ?? "neutral"}>{status}</Badge>
       </div>
 

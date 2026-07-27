@@ -9,6 +9,7 @@ export function MetricCard({
   suffix,
   accent = "roxo",
   icon,
+  hint,
 }: {
   label: string;
   value: string | number;
@@ -16,6 +17,8 @@ export function MetricCard({
   suffix?: string;
   accent?: "roxo" | "verde" | "azul" | "laranja";
   icon?: React.ReactNode;
+  /** Explica o que o número representa (ex: fórmula da metodologia) — evita leitura errada do valor. */
+  hint?: string;
 }) {
   const up = (delta ?? 0) >= 0;
   const accentColor = {
@@ -35,6 +38,7 @@ export function MetricCard({
         {value}
         {suffix && <span className="ml-1 text-lg text-fg-mut">{suffix}</span>}
       </div>
+      {hint && <p className="mt-1 text-xs leading-snug text-fg-mut">{hint}</p>}
       {delta !== undefined && (
         <div
           className={cn(

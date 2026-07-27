@@ -4,10 +4,11 @@ import { DataFilters } from "@/components/ui/DataFilters";
 import { periodToDateFrom } from "@/lib/period";
 import { ResponsesView, type ResponseItem } from "@/components/responses/ResponsesView";
 import { ExportMenu } from "@/components/responses/ExportMenu";
-import { listResponses, getStats, getScoreDistribution, getWordCloud } from "@/lib/db/responses";
+import { listResponses, getStats, getScoreDistribution, getWordCloud, getMainScore } from "@/lib/db/responses";
 import { listSurveyOptions } from "@/lib/db/surveys";
 import { getCurrentProjectId } from "@/lib/auth/current";
 import { timeAgo } from "@/lib/utils";
+import { formatScore } from "@/lib/scoring";
 
 export const dynamic = "force-dynamic";
 
@@ -20,12 +21,13 @@ export default async function ResponsesPage({
   const projectId = await getCurrentProjectId();
   const scope = { projectId, surveyId: surveyId || undefined, dateFrom: periodToDateFrom(period) };
 
-  const [rows, stats, distribution, wordCloud, surveyOptions] = await Promise.all([
+  const [rows, stats, distribution, wordCloud, surveyOptions, mainScore] = await Promise.all([
     listResponses(scope),
     getStats(scope),
     getScoreDistribution(scope),
     getWordCloud(scope),
     listSurveyOptions(projectId),
+    getMainScore(scope),
   ]);
 
   const items: ResponseItem[] = rows.map((r) => ({
@@ -54,7 +56,12 @@ export default async function ResponsesPage({
       <div className="mb-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <MetricCard label="Total de respostas" value={stats.total} accent="roxo" />
         <MetricCard label="Sentimento positivo" value={`${stats.positivePct}%`} accent="verde" />
-        <MetricCard label="Nota média" value={stats.avgScore ?? "—"} accent="azul" />
+        <MetricCard
+          label={mainScore?.surveyName ? `${mainScore.label} · ${mainScore.surveyName}` : mainScore?.label ?? "Score"}
+          value={mainScore ? formatScore(mainScore) : "—"}
+          accent="azul"
+          hint={mainScore ? mainScore.formula : undefined}
+        />
         <MetricCard label="Com comentário" value={items.filter((i) => i.comment).length} accent="laranja" />
       </div>
 

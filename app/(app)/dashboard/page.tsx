@@ -10,7 +10,8 @@ import { DataFilters } from "@/components/ui/DataFilters";
 import { periodToDateFrom } from "@/lib/period";
 import { AreaTrend, DonutChart } from "@/components/charts/Charts";
 import { listSurveys, listSurveyOptions } from "@/lib/db/surveys";
-import { getStats, getChannelSplit, getScoreTrend } from "@/lib/db/responses";
+import { getStats, getChannelSplit, getScoreTrend, getMainScore } from "@/lib/db/responses";
+import { formatScore } from "@/lib/scoring";
 import { requireUser, getCurrentProjectId } from "@/lib/auth/current";
 
 export const dynamic = "force-dynamic";
@@ -35,12 +36,13 @@ export default async function DashboardPage({
   const scope = { projectId, surveyId: surveyId || undefined, dateFrom: periodToDateFrom(period) };
   const trendWeeks = period ? (TREND_WEEKS_BY_PERIOD[period] ?? 8) : 8;
 
-  const [allSurveys, surveyOptions, stats, channelSplit, csatTrend] = await Promise.all([
+  const [allSurveys, surveyOptions, stats, channelSplit, csatTrend, mainScore] = await Promise.all([
     listSurveys(projectId),
     listSurveyOptions(projectId),
     getStats(scope),
     getChannelSplit(scope),
     getScoreTrend(scope, trendWeeks),
+    getMainScore(scope),
   ]);
   const activeCount = allSurveys.filter((s) => s.status === "ativa").length;
   const recent = allSurveys.slice(0, 5);
@@ -71,7 +73,13 @@ export default async function DashboardPage({
 
       {/* Métricas */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <MetricCard label="Nota média" value={stats.avgScore ?? "—"} accent="roxo" icon={<Smile className="size-5" />} />
+        <MetricCard
+          label={mainScore?.surveyName ? `${mainScore.label} · ${mainScore.surveyName}` : mainScore?.label ?? "Score"}
+          value={mainScore ? formatScore(mainScore) : "—"}
+          accent="roxo"
+          icon={<Smile className="size-5" />}
+          hint={mainScore ? mainScore.formula : undefined}
+        />
         <MetricCard label="Sentimento positivo" value={`${stats.positivePct}%`} accent="verde" icon={<TrendingUp className="size-5" />} />
         <MetricCard label="Respostas" value={stats.total} accent="azul" icon={<Inbox className="size-5" />} />
         <MetricCard label="Pesquisas ativas" value={activeCount} accent="laranja" icon={<Users className="size-5" />} />
@@ -158,7 +166,7 @@ export default async function DashboardPage({
                     </td>
                     <td className="px-3 py-3 text-fg-soft">{s.responseCount}</td>
                     <td className="px-3 py-3 text-fg-soft">{s.type}</td>
-                    <td className="px-6 py-3 text-right font-bold text-luumu-roxo">{s.score ?? "—"}</td>
+                    <td className="px-6 py-3 text-right font-bold text-luumu-roxo">{s.score != null ? s.scoreLabel : "—"}</td>
                   </tr>
                 ))}
               </tbody>

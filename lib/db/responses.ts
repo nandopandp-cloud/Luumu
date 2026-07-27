@@ -1,20 +1,16 @@
 import "server-only";
-import { and, desc, eq, count, avg, sql, inArray, gte, lte, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, count, avg, sql, inArray, gte, lte, type SQL } from "drizzle-orm";
 import { db } from "./client";
 import { responses, answers, surveys, questions } from "@/db/schema";
 import { responseId, answerId } from "./ids";
 import { buildWordCloud } from "@/lib/wordcloud";
-
-// min/max default por bloco de nota, quando a pergunta não define config.min/max explícito
-const SCORE_RANGE_DEFAULTS: Record<string, { min: number; max: number }> = {
-  nps: { min: 0, max: 10 },
-  rating: { min: 1, max: 5 },
-  stars: { min: 1, max: 5 },
-  csat: { min: 1, max: 5 },
-  ces: { min: 1, max: 7 },
-  scale: { min: 1, max: 5 },
-};
-const SCORE_BLOCK_IDS = Object.keys(SCORE_RANGE_DEFAULTS);
+import {
+  methodologyForBlock,
+  defaultScaleForBlock,
+  computeScore,
+  SCORE_BLOCK_IDS,
+  type ScoreResult,
+} from "@/lib/scoring";
 
 export type ResponseRow = typeof responses.$inferSelect;
 
@@ -123,6 +119,65 @@ export async function getStats(scope: Scope) {
 }
 
 /**
+ * Score principal do escopo, calculado na metodologia correta de cada tipo de pesquisa
+ * (NPS = %promotores−%detratores, CSAT = % top-box, CES = média com direção invertida —
+ * ver lib/scoring.ts) em vez de uma média simples aplicada indiscriminadamente.
+ *
+ * Quando o escopo mistura pesquisas de metodologias diferentes (ex: workspace inteiro
+ * com uma pesquisa NPS e outra CSAT), não há como combinar os números em um só sem
+ * quebrar a metodologia de ambas — então o card mostra a metodologia PREDOMINANTE
+ * (a que tem mais respostas no escopo atual), com o nome da pesquisa de origem.
+ */
+export async function getMainScore(scope: Scope): Promise<(ScoreResult & { surveyName: string | null }) | null> {
+  // pergunta de score de cada survey do escopo (a primeira, na ordem do builder)
+  const surveyIds = scope.surveyId
+    ? [scope.surveyId]
+    : (await db.select({ id: surveys.id }).from(surveys).where(eq(surveys.projectId, scope.projectId))).map(
+        (s) => s.id
+      );
+  if (surveyIds.length === 0) return null;
+
+  const [scoreQuestions, rows] = await Promise.all([
+    db
+      .select({ surveyId: questions.surveyId, blockId: questions.blockId, config: questions.config, order: questions.order })
+      .from(questions)
+      .where(and(inArray(questions.surveyId, surveyIds), inArray(questions.blockId, SCORE_BLOCK_IDS)))
+      .orderBy(asc(questions.order)),
+    db
+      .select({ surveyId: responses.surveyId, surveyName: surveys.name, score: responses.score })
+      .from(responses)
+      .innerJoin(surveys, eq(responses.surveyId, surveys.id))
+      .where(and(scopeWhere(scope), sql`${responses.score} is not null`)),
+  ]);
+
+  // primeira pergunta de nota de cada survey (mesma regra usada no widget/SDK pra decidir o score da resposta)
+  const scoreQuestionBySurvey = new Map<string, { blockId: string; config: unknown }>();
+  for (const q of scoreQuestions) {
+    if (!scoreQuestionBySurvey.has(q.surveyId)) scoreQuestionBySurvey.set(q.surveyId, q);
+  }
+
+  const scoresBySurvey = new Map<string, { name: string; scores: number[] }>();
+  for (const r of rows) {
+    if (r.score == null) continue;
+    const entry = scoresBySurvey.get(r.surveyId) ?? { name: r.surveyName, scores: [] };
+    entry.scores.push(r.score);
+    scoresBySurvey.set(r.surveyId, entry);
+  }
+  if (scoresBySurvey.size === 0) return null;
+
+  // metodologia predominante: a survey com mais respostas no escopo
+  const [topSurveyId, top] = Array.from(scoresBySurvey.entries()).sort((a, b) => b[1].scores.length - a[1].scores.length)[0];
+  const scoreQuestion = scoreQuestionBySurvey.get(topSurveyId);
+  const methodology = methodologyForBlock(scoreQuestion?.blockId);
+  const cfg = (scoreQuestion?.config as { min?: number; max?: number }) ?? {};
+  const defaults = defaultScaleForBlock(scoreQuestion?.blockId);
+  const scale = { min: cfg.min ?? defaults.min, max: cfg.max ?? defaults.max };
+
+  const result = computeScore(top.scores, methodology, scale);
+  return { ...result, surveyName: scope.surveyId ? null : top.name };
+}
+
+/**
  * Nuvem de palavras real, extraída dos comentários (texto curto/longo) mais recentes do
  * escopo. Limitado às últimas 2000 respostas: a nuvem não perde utilidade amostrando as
  * mais recentes, e sem teto essa query cresceria sem limite conforme o workspace acumula
@@ -165,7 +220,7 @@ async function detectScoreScale(scope: Scope): Promise<{ min: number; max: numbe
   let min = 0;
   let max = 0;
   for (const q of qs) {
-    const defaults = SCORE_RANGE_DEFAULTS[q.blockId];
+    const defaults = defaultScaleForBlock(q.blockId);
     const cfg = (q.config as { min?: number; max?: number }) ?? {};
     const qMin = cfg.min ?? defaults.min;
     const qMax = cfg.max ?? defaults.max;

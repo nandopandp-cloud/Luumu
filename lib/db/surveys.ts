@@ -1,10 +1,11 @@
 import "server-only";
-import { and, asc, count, desc, eq, avg, inArray } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "./client";
 import { surveys, questions, responses } from "@/db/schema";
 import { surveyId, questionId } from "./ids";
 import { questionTemplates } from "@/lib/survey-templates";
 import { defaultAppearanceFor, type Appearance } from "@/lib/builder";
+import { methodologyForBlock, defaultScaleForBlock, computeScore, formatScore, SCORE_BLOCK_IDS } from "@/lib/scoring";
 import type { SurveyType, SurveyStatus } from "@/lib/mock/surveys";
 
 export type SurveyRow = typeof surveys.$inferSelect;
@@ -20,10 +21,10 @@ export async function listSurveyOptions(projectId: string) {
 }
 
 /**
- * Lista de pesquisas do projeto com métricas derivadas (nº respostas + score médio).
- * Busca os agregados de todas as surveys em 1 query (GROUP BY) em vez de 2 queries por
- * survey — cada query é um round-trip HTTP completo ao Neon, então um projeto com muitas
- * pesquisas tornava essa função (usada em /surveys e no dashboard) visivelmente lenta.
+ * Lista de pesquisas do projeto com métricas derivadas (nº respostas + score na
+ * metodologia correta de cada uma — NPS, CSAT e CES têm fórmulas diferentes, não é
+ * uma média simples). 3 queries totais (surveys, perguntas de nota, respostas com
+ * score) independente do número de pesquisas, em vez de 1 por survey.
  */
 export async function listSurveys(projectId: string) {
   const rows = await db
@@ -34,20 +35,54 @@ export async function listSurveys(projectId: string) {
 
   if (rows.length === 0) return [];
 
-  const stats = await db
-    .select({ surveyId: responses.surveyId, n: count(), avgScore: avg(responses.score) })
-    .from(responses)
-    .where(inArray(responses.surveyId, rows.map((s) => s.id)))
-    .groupBy(responses.surveyId);
+  const surveyIds = rows.map((s) => s.id);
+  const [scoreQuestions, scoreRows, countRows] = await Promise.all([
+    db
+      .select({ surveyId: questions.surveyId, blockId: questions.blockId, config: questions.config, order: questions.order })
+      .from(questions)
+      .where(and(inArray(questions.surveyId, surveyIds), inArray(questions.blockId, SCORE_BLOCK_IDS)))
+      .orderBy(asc(questions.order)),
+    db
+      .select({ surveyId: responses.surveyId, score: responses.score })
+      .from(responses)
+      .where(and(inArray(responses.surveyId, surveyIds), sql`${responses.score} is not null`)),
+    db
+      .select({ surveyId: responses.surveyId, n: count() })
+      .from(responses)
+      .where(inArray(responses.surveyId, surveyIds))
+      .groupBy(responses.surveyId),
+  ]);
 
-  const statsBySurvey = new Map(stats.map((s) => [s.surveyId, s]));
+  // primeira pergunta de nota de cada survey (mesma regra usada na hora de gravar a resposta)
+  const scoreQuestionBySurvey = new Map<string, { blockId: string; config: unknown }>();
+  for (const q of scoreQuestions) {
+    if (!scoreQuestionBySurvey.has(q.surveyId)) scoreQuestionBySurvey.set(q.surveyId, q);
+  }
+
+  const scoresBySurvey = new Map<string, number[]>();
+  for (const r of scoreRows) {
+    if (r.score == null) continue;
+    const arr = scoresBySurvey.get(r.surveyId) ?? [];
+    arr.push(r.score);
+    scoresBySurvey.set(r.surveyId, arr);
+  }
+
+  const countBySurvey = new Map(countRows.map((c) => [c.surveyId, Number(c.n)]));
 
   return rows.map((s) => {
-    const stat = statsBySurvey.get(s.id);
+    const scoreQuestion = scoreQuestionBySurvey.get(s.id);
+    const methodology = methodologyForBlock(scoreQuestion?.blockId);
+    const cfg = (scoreQuestion?.config as { min?: number; max?: number }) ?? {};
+    const defaults = defaultScaleForBlock(scoreQuestion?.blockId);
+    const scale = { min: cfg.min ?? defaults.min, max: cfg.max ?? defaults.max };
+    const result = computeScore(scoresBySurvey.get(s.id) ?? [], methodology, scale);
+
     return {
       ...s,
-      responseCount: Number(stat?.n) || 0,
-      score: stat?.avgScore != null ? Math.round(Number(stat.avgScore) * 10) / 10 : null,
+      responseCount: countBySurvey.get(s.id) ?? 0,
+      score: result.value,
+      scoreLabel: formatScore(result),
+      scoreMethodology: result.label,
     };
   });
 }
@@ -122,7 +157,7 @@ export async function createSurveyFromTemplate(workspaceId: string, projectId: s
 export async function updateSurvey(
   id: string,
   workspaceId: string,
-  patch: Partial<Pick<SurveyRow, "name" | "channel" | "audience" | "segment" | "language" | "trigger" | "triggerEvent" | "triggerEvents" | "audienceMode" | "audienceList" | "frequency" | "delay" | "startsAt" | "endsAt" | "responseLimit">>
+  patch: Partial<Pick<SurveyRow, "name" | "type" | "channel" | "audience" | "segment" | "language" | "trigger" | "triggerEvent" | "triggerEvents" | "audienceMode" | "audienceList" | "frequency" | "delay" | "startsAt" | "endsAt" | "responseLimit">>
 ) {
   await assertOwned(id, workspaceId);
   await db.update(surveys).set({ ...patch, updatedAt: new Date() }).where(eq(surveys.id, id));

@@ -42,16 +42,18 @@ const questionSchema = z.object({
 const saveDraftSchema = z.object({
   id: z.string(),
   name: z.string().min(1),
+  type: z.string().min(1).optional(),
   questions: z.array(questionSchema),
 });
 
 export async function saveDraftAction(input: unknown) {
   const data = saveDraftSchema.parse(input);
   const workspaceId = await getCurrentWorkspaceId();
-  await updateSurvey(data.id, workspaceId, { name: data.name });
+  await updateSurvey(data.id, workspaceId, { name: data.name, ...(data.type ? { type: data.type } : {}) });
   await replaceQuestions(data.id, workspaceId, data.questions);
   revalidatePath(`/surveys/${data.id}/builder`);
   revalidatePath("/surveys");
+  revalidatePath("/dashboard");
   return { ok: true as const, savedAt: Date.now() };
 }
 
