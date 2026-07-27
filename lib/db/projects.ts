@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, count, eq } from "drizzle-orm";
+import { and, asc, count, eq, inArray } from "drizzle-orm";
 import { db } from "./client";
 import { projects, surveys } from "@/db/schema";
 import { projectId as newProjectId } from "./ids";
@@ -17,7 +17,11 @@ const slugify = (s: string) =>
     .replace(/^-|-$/g, "")
     .slice(0, 40);
 
-/** Projetos do workspace (mais antigos primeiro) com nº de pesquisas. */
+/**
+ * Projetos do workspace (mais antigos primeiro) com nº de pesquisas.
+ * Roda no layout compartilhado (app/(app)/layout.tsx), ou seja, em toda navegação —
+ * por isso usa 1 única query agregada (GROUP BY) em vez de 1 query por projeto.
+ */
 export async function listProjects(workspaceId: string) {
   const rows = await db
     .select()
@@ -25,15 +29,16 @@ export async function listProjects(workspaceId: string) {
     .where(eq(projects.workspaceId, workspaceId))
     .orderBy(asc(projects.createdAt));
 
-  return Promise.all(
-    rows.map(async (p) => {
-      const [{ n } = { n: 0 }] = await db
-        .select({ n: count() })
-        .from(surveys)
-        .where(eq(surveys.projectId, p.id));
-      return { ...p, surveyCount: Number(n) || 0 };
-    })
-  );
+  if (rows.length === 0) return [];
+
+  const counts = await db
+    .select({ projectId: surveys.projectId, n: count() })
+    .from(surveys)
+    .where(inArray(surveys.projectId, rows.map((p) => p.id)))
+    .groupBy(surveys.projectId);
+
+  const countByProject = new Map(counts.map((c) => [c.projectId, Number(c.n)]));
+  return rows.map((p) => ({ ...p, surveyCount: countByProject.get(p.id) ?? 0 }));
 }
 
 /** Busca um projeto garantindo que pertence ao workspace (ou null). */

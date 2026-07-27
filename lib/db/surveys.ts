@@ -65,14 +65,18 @@ export async function getSurvey(id: string, scope?: { workspaceId?: string; proj
   return s;
 }
 
+/**
+ * Busca a pesquisa e suas perguntas em paralelo — a query de perguntas só depende do
+ * `id` (já conhecido), não do resultado de getSurvey. Se a checagem de tenant falhar,
+ * o resultado de `qs` é descartado sem custo adicional (já veio junto, em paralelo).
+ * Usado nas páginas mais visitadas ao editar uma pesquisa (builder/appearance/preview).
+ */
 export async function getSurveyWithQuestions(id: string, scope?: { workspaceId?: string; projectId?: string }) {
-  const s = await getSurvey(id, scope);
+  const [s, qs] = await Promise.all([
+    getSurvey(id, scope),
+    db.select().from(questions).where(eq(questions.surveyId, id)).orderBy(asc(questions.order)),
+  ]);
   if (!s) return null;
-  const qs = await db
-    .select()
-    .from(questions)
-    .where(eq(questions.surveyId, id))
-    .orderBy(asc(questions.order));
   return { survey: s, questions: qs };
 }
 

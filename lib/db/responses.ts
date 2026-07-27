@@ -122,14 +122,21 @@ export async function getStats(scope: Scope) {
   };
 }
 
-/** Nuvem de palavras real, extraída de todos os comentários (texto curto/longo) do escopo. */
+/**
+ * Nuvem de palavras real, extraída dos comentários (texto curto/longo) mais recentes do
+ * escopo. Limitado às últimas 2000 respostas: a nuvem não perde utilidade amostrando as
+ * mais recentes, e sem teto essa query cresceria sem limite conforme o workspace acumula
+ * respostas (é a única leitura de responses.ts sem LIMIT).
+ */
 export async function getWordCloud(scope: Scope) {
   const rows = await db
     .select({ value: answers.value })
     .from(answers)
     .innerJoin(responses, eq(answers.responseId, responses.id))
     .innerJoin(surveys, eq(responses.surveyId, surveys.id))
-    .where(scopeWhere(scope));
+    .where(scopeWhere(scope))
+    .orderBy(desc(responses.createdAt))
+    .limit(2000);
 
   const comments = rows.map((r) => extractComment(r.value)).filter(Boolean);
   return buildWordCloud(comments);
@@ -140,19 +147,20 @@ export async function getWordCloud(scope: Scope) {
  * score (nps|rating|stars|csat|ces|scale) das surveys envolvidas. Quando o escopo
  * mistura escalas diferentes (ex: workspace inteiro com NPS 0-10 e CSAT 1-5), usa a
  * maior faixa encontrada, que cobre todas sem perder granularidade.
+ * 1 única query (join direto com surveys.projectId em vez de buscar surveyIds antes).
  */
 async function detectScoreScale(scope: Scope): Promise<{ min: number; max: number }> {
-  const surveyIds = scope.surveyId
-    ? [scope.surveyId]
-    : (await db.select({ id: surveys.id }).from(surveys).where(eq(surveys.projectId, scope.projectId))).map(
-        (s) => s.id
-      );
-  if (surveyIds.length === 0) return { min: 0, max: 10 };
-
   const qs = await db
     .select({ blockId: questions.blockId, config: questions.config })
     .from(questions)
-    .where(and(inArray(questions.surveyId, surveyIds), inArray(questions.blockId, SCORE_BLOCK_IDS)));
+    .innerJoin(surveys, eq(questions.surveyId, surveys.id))
+    .where(
+      and(
+        eq(surveys.projectId, scope.projectId),
+        scope.surveyId ? eq(questions.surveyId, scope.surveyId) : undefined,
+        inArray(questions.blockId, SCORE_BLOCK_IDS)
+      )
+    );
 
   let min = 0;
   let max = 0;
@@ -170,19 +178,24 @@ async function detectScoreScale(scope: Scope): Promise<{ min: number; max: numbe
   return { min, max };
 }
 
-/** Distribuição de notas normalizada em % (para as barras), na escala real da(s) pesquisa(s) do escopo. */
+/**
+ * Distribuição de notas normalizada em % (para as barras), na escala real da(s) pesquisa(s) do escopo.
+ * detectScoreScale e a query de contagem por nota rodam em paralelo — a segunda não
+ * depende do resultado da primeira (só precisa dela depois, para desenhar os buckets).
+ */
 export async function getScoreDistribution(scope: Scope) {
-  const { min, max } = await detectScoreScale(scope);
-
-  const rows = await db
-    .select({
-      bucket: sql<number>`round(${responses.score})`.mapWith(Number).as("bucket"),
-      n: count(),
-    })
-    .from(responses)
-    .innerJoin(surveys, eq(responses.surveyId, surveys.id))
-    .where(and(scopeWhere(scope), sql`${responses.score} is not null`))
-    .groupBy(sql`round(${responses.score})`);
+  const [{ min, max }, rows] = await Promise.all([
+    detectScoreScale(scope),
+    db
+      .select({
+        bucket: sql<number>`round(${responses.score})`.mapWith(Number).as("bucket"),
+        n: count(),
+      })
+      .from(responses)
+      .innerJoin(surveys, eq(responses.surveyId, surveys.id))
+      .where(and(scopeWhere(scope), sql`${responses.score} is not null`))
+      .groupBy(sql`round(${responses.score})`),
+  ]);
 
   const byBucket = new Map(rows.map((r) => [r.bucket, Number(r.n)]));
   const total = rows.reduce((s, r) => s + Number(r.n), 0) || 1;

@@ -36,32 +36,29 @@ export interface WorkspaceUsage {
   limits: { responses: number; activeSurveys: number; members: number };
 }
 
-/** Plano do workspace + uso real (respostas, pesquisas ativas, membros) vs. limites. */
+/**
+ * Plano do workspace + uso real (respostas, pesquisas ativas, membros) vs. limites.
+ * As 4 queries só dependem do workspaceId (nenhuma do resultado de outra), então rodam
+ * em paralelo em vez de sequenciais.
+ */
 export async function getWorkspaceUsage(workspaceId: string): Promise<WorkspaceUsage> {
-  const [ws] = await db
-    .select({ plan: workspaces.plan })
-    .from(workspaces)
-    .where(eq(workspaces.id, workspaceId))
-    .limit(1);
+  const [[ws], [{ nResponses } = { nResponses: 0 }], [{ nActive } = { nActive: 0 }], [{ nMembers } = { nMembers: 0 }]] =
+    await Promise.all([
+      db.select({ plan: workspaces.plan }).from(workspaces).where(eq(workspaces.id, workspaceId)).limit(1),
+      db
+        .select({ nResponses: count() })
+        .from(responses)
+        .innerJoin(surveys, eq(responses.surveyId, surveys.id))
+        .where(eq(surveys.workspaceId, workspaceId)),
+      db
+        .select({ nActive: count() })
+        .from(surveys)
+        .where(and(eq(surveys.workspaceId, workspaceId), eq(surveys.status, "ativa"))),
+      db.select({ nMembers: count() }).from(memberships).where(eq(memberships.workspaceId, workspaceId)),
+    ]);
 
   const plan = (ws?.plan ?? "growth").toLowerCase();
   const limits = PLAN_LIMITS[plan] ?? PLAN_LIMITS.growth;
-
-  const [{ nResponses } = { nResponses: 0 }] = await db
-    .select({ nResponses: count() })
-    .from(responses)
-    .innerJoin(surveys, eq(responses.surveyId, surveys.id))
-    .where(eq(surveys.workspaceId, workspaceId));
-
-  const [{ nActive } = { nActive: 0 }] = await db
-    .select({ nActive: count() })
-    .from(surveys)
-    .where(and(eq(surveys.workspaceId, workspaceId), eq(surveys.status, "ativa")));
-
-  const [{ nMembers } = { nMembers: 0 }] = await db
-    .select({ nMembers: count() })
-    .from(memberships)
-    .where(eq(memberships.workspaceId, workspaceId));
 
   return {
     plan,
