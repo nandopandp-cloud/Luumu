@@ -31,6 +31,14 @@ export interface WorkspaceEvent {
 
 const EVENTS_POLL_MS = 10_000;
 
+// rótulo legível para o nome bruto do evento (prefixos gerados pelo auto-tracking em sdk/luumu.ts)
+function eventLabel(name: string): string {
+  if (name.startsWith("page_view_")) return `Página: /${name.slice("page_view_".length).replace(/_/g, "/")}`;
+  if (name.startsWith("click_")) return `Clique: ${name.slice("click_".length).replace(/_/g, " ")}`;
+  if (name.startsWith("link_")) return `Link: ${name.slice("link_".length).replace(/_/g, " ")}`;
+  return `Manual: ${name.replace(/_/g, " ")}`;
+}
+
 export function SurveySettingsForm({
   initial,
   events: initialEvents = [],
@@ -139,7 +147,7 @@ export function SurveySettingsForm({
                 <option value="">Nenhum — exibir no carregamento</option>
                 {events.map((ev) => (
                   <option key={ev.name} value={ev.name}>
-                    {ev.name} · {ev.count} {ev.count === 1 ? "evento" : "eventos"}
+                    {eventLabel(ev.name)} · {ev.count}×
                   </option>
                 ))}
               </Select>
@@ -174,7 +182,7 @@ export function SurveySettingsForm({
               ) : v.triggerEvent ? (
                 <div className="flex flex-wrap items-center gap-2 text-xs text-fg-soft">
                   <span>Dispara quando o SDK registrar</span>
-                  <Badge tone="brand" dot={false}>{v.triggerEvent}</Badge>
+                  <Badge tone="brand" dot={false}>{eventLabel(v.triggerEvent)}</Badge>
                 </div>
               ) : (
                 <p className="text-xs text-fg-mut">

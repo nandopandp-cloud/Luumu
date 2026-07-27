@@ -49,10 +49,10 @@ export default async function SdkPage() {
   };
 
   const withTrigger = activeSurveys.filter((s) => s.triggerEvent);
-  const firstEvent = events[0]?.name ?? "compra_concluida";
-  const trackSnippet = `// Chame quando o evento acontecer no seu produto.
-// O nome do evento vira um gatilho disponível para as pesquisas.
-Luumu.track("${firstEvent}");`;
+  const trackSnippet = `// Chame no momento exato em que a ação de negócio acontece —
+// algo que um clique sozinho não descreve (ex: fluxo concluído,
+// meta atingida, processamento terminado no backend).
+Luumu.track("treino_concluido");`;
 
   return (
     <div>
@@ -86,20 +86,32 @@ Luumu.track("${firstEvent}");`;
             {sdkKey && <InstallSnippets sdkKey={sdkKey} />}
           </Step>
 
-          <Step n={2} title="Mapeie os eventos do seu produto">
+          <Step n={2} title="Eventos do seu produto">
             <p className="mb-3 max-w-2xl text-sm text-fg-mut">
-              Chame <code className="font-mono text-[12.5px]">Luumu.track(&quot;nome_do_evento&quot;)</code> nos
-              momentos que importam (compra, onboarding, cancelamento…). Cada nome enviado vira um{" "}
+              Assim que o script é instalado, o SDK já captura sozinho <strong>páginas visitadas</strong> e{" "}
+              <strong>cliques em botões e links</strong> — sem escrever nenhuma linha de código. Cada um vira um{" "}
               <strong>gatilho disponível</strong> na criação da pesquisa.
             </p>
-            <CodeBlock code={trackSnippet} lang="js" />
 
-            <div className="mt-4">
+            <div className="mb-4">
               <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-fg-soft">
                 <MousePointerClick className="size-4 text-accent" /> Detecção ao vivo
               </div>
               <EventDetector initial={initialStatus} />
             </div>
+
+            <p className="mb-3 max-w-2xl text-sm text-fg-mut">
+              Para ações de <strong>negócio</strong> que não são um clique — completar um fluxo, atingir uma meta,
+              um processo terminar no backend — chame{" "}
+              <code className="font-mono text-[12.5px]">Luumu.track(&quot;nome_do_evento&quot;)</code> no momento
+              exato em que isso acontece no seu produto.
+            </p>
+            <CodeBlock code={trackSnippet} lang="js" />
+            <p className="mt-3 max-w-2xl text-xs text-fg-mut">
+              Dica: para nomear um clique específico sem escrever JS, adicione{" "}
+              <code className="font-mono text-[12px]">data-luumu-track=&quot;nome&quot;</code> no elemento HTML —
+              ou <code className="font-mono text-[12px]">data-luumu-ignore</code> para excluí-lo do auto-tracking.
+            </p>
           </Step>
 
           <div className="flex gap-4">
@@ -165,11 +177,15 @@ Luumu.track("${firstEvent}");`;
             </div>
             <ul className="mt-2 flex flex-col gap-2.5 text-sm text-fg-mut">
               <li>
+                Páginas visitadas e cliques em botões/links são capturados <strong>automaticamente</strong>, sem
+                código.
+              </li>
+              <li>
                 Pesquisas <strong>sem</strong> gatilho aparecem no carregamento da página (respeitando a frequência).
               </li>
               <li>
-                Pesquisas <strong>com</strong> gatilho por evento só disparam quando você chama{" "}
-                <code className="font-mono text-[12px]">Luumu.track()</code> com o nome correspondente.
+                Pesquisas <strong>com</strong> gatilho por evento disparam quando aquele evento (automático ou via{" "}
+                <code className="font-mono text-[12px]">Luumu.track()</code>) acontece.
               </li>
               <li>Cada usuário vê a mesma pesquisa uma vez (controlado por armazenamento local).</li>
             </ul>
