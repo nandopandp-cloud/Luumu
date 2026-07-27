@@ -1,15 +1,22 @@
 import "server-only";
+import fs from "node:fs";
+import path from "node:path";
 // standalone embute as métricas de fonte (.afm); evita ENOENT em ambiente bundled (Next/Turbopack)
 import PDFDocument from "pdfkit/js/pdfkit.standalone.js";
 import type { ExportRow } from "@/lib/db/responses";
 
 const ROXO = "#6B2BD9";
-const ROXO_ESCURO = "#4B1CAB";
-const VERDE = "#7ED957";
 const TXT = "#1a1a2e";
 const MUT = "#6b7280";
 const LINE = "#e7e5f0";
 const LAVANDA = "#F3EDFF";
+
+// logo oficial (mascote + wordmark), a mesma usada na sidebar do produto.
+// pdfkit.standalone tem seu próprio shim de Buffer (Buffer.isBuffer falha com Buffer real do
+// Node), então a imagem precisa ir como data URI base64 em vez de Buffer/caminho de arquivo.
+const LOGO_DATA_URI = `data:image/png;base64,${fs
+  .readFileSync(path.join(process.cwd(), "public", "mascot", "logo-full.png"))
+  .toString("base64")}`;
 
 export interface PdfSummary {
   total: number;
@@ -35,21 +42,16 @@ export function toPdf(rows: ExportRow[], opts: { title: string; summary: PdfSumm
     const contentW = right - left;
 
     // ---------- Cabeçalho da marca ----------
-    doc.rect(0, 0, pageW, 90).fill(ROXO);
-    // "mascote" simples (círculo roxo escuro + folha verde)
-    doc.circle(left + 18, 45, 16).fill(ROXO_ESCURO);
-    doc.circle(left + 12, 40, 3).fill("#ffffff");
-    doc.circle(left + 22, 40, 3).fill("#ffffff");
-    doc.polygon([left + 26, 30], [left + 40, 22], [left + 32, 36]).fill(VERDE);
-    doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(20).text("Luumu", left + 46, 30);
-    doc.font("Helvetica").fontSize(9).fillColor("#e9dcff").text("Ouça. Entenda. Melhore.", left + 46, 54);
+    doc.rect(0, 0, pageW, 96).fill(LAVANDA);
+    doc.image(LOGO_DATA_URI, left, 16, { height: 64 });
+    doc.font("Helvetica").fontSize(9).fillColor(MUT).text("Ouça. Entenda. Melhore.", left + 96, 40);
     doc
       .font("Helvetica")
       .fontSize(9)
-      .fillColor("#e9dcff")
+      .fillColor(MUT)
       .text(`Gerado em ${fmtDate(new Date())}`, left, 40, { width: contentW, align: "right" });
 
-    doc.y = 110;
+    doc.y = 116;
 
     // ---------- Título do relatório ----------
     doc.fillColor(TXT).font("Helvetica-Bold").fontSize(18).text(opts.title, left, doc.y);
