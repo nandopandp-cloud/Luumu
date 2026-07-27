@@ -63,8 +63,11 @@ export function ResponsesView({
               <div className="flex items-center gap-2">
                 {r.sentiment && <Badge tone={sentimentTone[r.sentiment]}>{r.sentiment}</Badge>}
                 {r.score != null && (
-                  <span className="grid size-9 place-items-center rounded-lg bg-surface-brand text-sm font-bold text-accent">
-                    {r.score}
+                  <span className="flex flex-col items-center">
+                    <span className="grid size-9 place-items-center rounded-lg bg-surface-brand text-sm font-bold text-accent">
+                      {r.score}
+                    </span>
+                    <span className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-fg-mut">Nota</span>
                   </span>
                 )}
               </div>

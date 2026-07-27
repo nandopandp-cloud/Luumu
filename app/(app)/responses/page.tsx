@@ -19,7 +19,7 @@ export default async function ResponsesPage() {
 
   const items: ResponseItem[] = rows.map((r) => ({
     id: r.id,
-    user: r.respondent ?? r.respondentEmail ?? "Anônimo",
+    user: r.respondentEmail ?? r.respondent ?? "Anônimo",
     channel: r.channel,
     when: timeAgo(r.createdAt),
     sentiment: r.sentiment as ResponseItem["sentiment"],

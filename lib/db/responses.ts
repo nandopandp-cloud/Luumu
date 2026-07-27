@@ -206,7 +206,7 @@ export async function listResponsesForExport(scope: Scope): Promise<ExportRow[]>
       return {
         id: r.id,
         surveyName: r.surveyName,
-        respondent: r.respondent ?? r.respondentEmail ?? "Anônimo",
+        respondent: r.respondentEmail ?? r.respondent ?? "Anônimo",
         channel: r.channel,
         sentiment: r.sentiment ?? "—",
         score: r.score,
