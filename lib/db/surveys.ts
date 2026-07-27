@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, count, desc, eq, avg } from "drizzle-orm";
+import { and, asc, count, desc, eq, avg, inArray } from "drizzle-orm";
 import { db } from "./client";
 import { surveys, questions, responses } from "@/db/schema";
 import { surveyId, questionId } from "./ids";
@@ -19,7 +19,12 @@ export async function listSurveyOptions(projectId: string) {
     .orderBy(desc(surveys.updatedAt));
 }
 
-/** Lista de pesquisas do projeto com métricas derivadas (nº respostas + score médio). */
+/**
+ * Lista de pesquisas do projeto com métricas derivadas (nº respostas + score médio).
+ * Busca os agregados de todas as surveys em 1 query (GROUP BY) em vez de 2 queries por
+ * survey — cada query é um round-trip HTTP completo ao Neon, então um projeto com muitas
+ * pesquisas tornava essa função (usada em /surveys e no dashboard) visivelmente lenta.
+ */
 export async function listSurveys(projectId: string) {
   const rows = await db
     .select()
@@ -27,24 +32,24 @@ export async function listSurveys(projectId: string) {
     .where(eq(surveys.projectId, projectId))
     .orderBy(desc(surveys.updatedAt));
 
-  const withStats = await Promise.all(
-    rows.map(async (s) => {
-      const [{ n } = { n: 0 }] = await db
-        .select({ n: count() })
-        .from(responses)
-        .where(eq(responses.surveyId, s.id));
-      const [{ avgScore } = { avgScore: null }] = await db
-        .select({ avgScore: avg(responses.score) })
-        .from(responses)
-        .where(eq(responses.surveyId, s.id));
-      return {
-        ...s,
-        responseCount: Number(n) || 0,
-        score: avgScore != null ? Math.round(Number(avgScore) * 10) / 10 : null,
-      };
-    })
-  );
-  return withStats;
+  if (rows.length === 0) return [];
+
+  const stats = await db
+    .select({ surveyId: responses.surveyId, n: count(), avgScore: avg(responses.score) })
+    .from(responses)
+    .where(inArray(responses.surveyId, rows.map((s) => s.id)))
+    .groupBy(responses.surveyId);
+
+  const statsBySurvey = new Map(stats.map((s) => [s.surveyId, s]));
+
+  return rows.map((s) => {
+    const stat = statsBySurvey.get(s.id);
+    return {
+      ...s,
+      responseCount: Number(stat?.n) || 0,
+      score: stat?.avgScore != null ? Math.round(Number(stat.avgScore) * 10) / 10 : null,
+    };
+  });
 }
 
 /**

@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getSession, type SessionData } from "./session";
@@ -22,12 +23,12 @@ export async function getCurrentWorkspaceId(): Promise<string> {
 
 export type Role = "owner" | "admin" | "editor" | "viewer";
 
-/** Papel do usuário atual no workspace ativo (null se não for membro). */
-export async function getCurrentRole(): Promise<Role | null> {
+/** Papel do usuário atual no workspace ativo (null se não for membro). Memoizada por request. */
+export const getCurrentRole = cache(async (): Promise<Role | null> => {
   const session = await requireUser();
   const m = await getUserWorkspace(session.userId);
   return (m?.role as Role) ?? null;
-}
+});
 
 /** Garante que o usuário atual pode administrar o workspace (owner ou admin). */
 export async function canManageWorkspace(): Promise<boolean> {
@@ -39,8 +40,11 @@ export async function canManageWorkspace(): Promise<boolean> {
  * Projeto ativo do usuário: lê o cookie `luumu_project`, valida que pertence ao
  * workspace da sessão e, se inválido/ausente, cai no primeiro projeto do workspace.
  * Todo workspace tem ao menos um projeto (criado no signup), então isto raramente é null.
+ * Memoizada por request (React.cache): layout + cada page filha chamam isto (direta ou
+ * indiretamente via getCurrentProjectId) na mesma navegação — sem cache, cada chamada
+ * refaz a query de projeto do zero.
  */
-export async function getCurrentProject(): Promise<ProjectRow | null> {
+export const getCurrentProject = cache(async (): Promise<ProjectRow | null> => {
   const session = await requireUser();
   const store = await cookies();
   const cookieId = store.get(PROJECT_COOKIE)?.value;
@@ -50,7 +54,7 @@ export async function getCurrentProject(): Promise<ProjectRow | null> {
     if (p) return p;
   }
   return getFirstProject(session.workspaceId);
-}
+});
 
 /** Atalho para o id do projeto ativo (ou lança se o workspace não tiver projeto). */
 export async function getCurrentProjectId(): Promise<string> {

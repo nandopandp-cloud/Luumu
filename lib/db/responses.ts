@@ -54,17 +54,30 @@ export async function listResponses(scope: Scope) {
     .orderBy(desc(responses.createdAt))
     .limit(50);
 
-  const withComment = await Promise.all(
-    rows.map(async (r) => {
-      const rowAnswers = await db
-        .select({ value: answers.value })
-        .from(answers)
-        .where(eq(answers.responseId, r.id));
-      const comment = rowAnswers.map((a) => extractComment(a.value)).find((c) => c) ?? "";
-      return { ...r, comment };
-    })
-  );
-  return withComment;
+  const commentByResponse = await commentsByResponseId(rows.map((r) => r.id));
+  return rows.map((r) => ({ ...r, comment: commentByResponse.get(r.id) ?? "" }));
+}
+
+/**
+ * Busca o comentário principal (primeira answer com texto) de várias respostas de uma vez,
+ * via um único IN — evita 1 query por resposta (era o maior N+1 do app, cada query é um
+ * round-trip HTTP completo ao Neon, então isso importa muito mais do que pareceria em SQL local).
+ */
+async function commentsByResponseId(responseIds: string[]): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  if (responseIds.length === 0) return map;
+
+  const rows = await db
+    .select({ responseId: answers.responseId, value: answers.value })
+    .from(answers)
+    .where(inArray(answers.responseId, responseIds));
+
+  for (const r of rows) {
+    if (map.has(r.responseId)) continue; // mantém a primeira answer com texto, igual ao comportamento anterior
+    const comment = extractComment(r.value);
+    if (comment) map.set(r.responseId, comment);
+  }
+  return map;
 }
 
 function extractComment(value: unknown): string {
@@ -76,28 +89,27 @@ function extractComment(value: unknown): string {
   return "";
 }
 
-/** Estatísticas agregadas do workspace (ou de uma pesquisa dele). */
+/**
+ * Estatísticas agregadas do workspace (ou de uma pesquisa dele).
+ * As 2 queries (totais e por sentimento) rodam em paralelo — antes eram 3 sequenciais,
+ * cada uma um round-trip HTTP completo ao Neon (driver neon-http não faz pooling).
+ */
 export async function getStats(scope: Scope) {
   const where = scopeWhere(scope);
 
-  const [{ total } = { total: 0 }] = await db
-    .select({ total: count() })
-    .from(responses)
-    .innerJoin(surveys, eq(responses.surveyId, surveys.id))
-    .where(where);
-
-  const [{ avgScore } = { avgScore: null }] = await db
-    .select({ avgScore: avg(responses.score) })
-    .from(responses)
-    .innerJoin(surveys, eq(responses.surveyId, surveys.id))
-    .where(where);
-
-  const sentiments = await db
-    .select({ sentiment: responses.sentiment, n: count() })
-    .from(responses)
-    .innerJoin(surveys, eq(responses.surveyId, surveys.id))
-    .where(where)
-    .groupBy(responses.sentiment);
+  const [[{ total, avgScore } = { total: 0, avgScore: null }], sentiments] = await Promise.all([
+    db
+      .select({ total: count(), avgScore: avg(responses.score) })
+      .from(responses)
+      .innerJoin(surveys, eq(responses.surveyId, surveys.id))
+      .where(where),
+    db
+      .select({ sentiment: responses.sentiment, n: count() })
+      .from(responses)
+      .innerJoin(surveys, eq(responses.surveyId, surveys.id))
+      .where(where)
+      .groupBy(responses.sentiment),
+  ]);
 
   const pos = sentiments.find((s) => s.sentiment === "positivo")?.n ?? 0;
   const totalN = Number(total) || 0;
@@ -267,25 +279,17 @@ export async function listResponsesForExport(scope: Scope): Promise<ExportRow[]>
     .where(scopeWhere(scope))
     .orderBy(desc(responses.createdAt));
 
-  return Promise.all(
-    rows.map(async (r) => {
-      const rowAnswers = await db
-        .select({ value: answers.value })
-        .from(answers)
-        .where(eq(answers.responseId, r.id));
-      const comment = rowAnswers.map((a) => extractComment(a.value)).find((c) => c) ?? "";
-      return {
-        id: r.id,
-        surveyName: r.surveyName,
-        respondent: r.respondentEmail ?? r.respondent ?? "Anônimo",
-        channel: r.channel,
-        sentiment: r.sentiment ?? "—",
-        score: r.score,
-        comment,
-        createdAt: r.createdAt,
-      };
-    })
-  );
+  const commentByResponse = await commentsByResponseId(rows.map((r) => r.id));
+  return rows.map((r) => ({
+    id: r.id,
+    surveyName: r.surveyName,
+    respondent: r.respondentEmail ?? r.respondent ?? "Anônimo",
+    channel: r.channel,
+    sentiment: r.sentiment ?? "—",
+    comment: commentByResponse.get(r.id) ?? "",
+    score: r.score,
+    createdAt: r.createdAt,
+  }));
 }
 
 /** Grava uma resposta com suas answers (a validação de tenant é feita antes, na API). */

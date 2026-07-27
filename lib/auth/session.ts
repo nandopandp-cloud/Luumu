@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { SignJWT, jwtVerify } from "jose";
 
@@ -32,8 +33,12 @@ export async function createSession(data: SessionData) {
   });
 }
 
-/** Lê e valida a sessão do cookie (ou null). */
-export async function getSession(): Promise<SessionData | null> {
+/**
+ * Lê e valida a sessão do cookie (ou null). Memoizada por request (React.cache):
+ * layout e cada page filha chamam isto de novo durante a mesma navegação — sem cache,
+ * isso repete cookies()+jwtVerify (e, em cascata, a query de projeto) a cada chamada.
+ */
+export const getSession = cache(async (): Promise<SessionData | null> => {
   const store = await cookies();
   const token = store.get(COOKIE)?.value;
   if (!token) return null;
@@ -48,7 +53,7 @@ export async function getSession(): Promise<SessionData | null> {
   } catch {
     return null;
   }
-}
+});
 
 export async function destroySession() {
   const store = await cookies();
