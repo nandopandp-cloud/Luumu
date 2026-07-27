@@ -66,6 +66,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     audience?: string | null; // "Todos os usuários" | "Usuários específicos"
     audienceMode?: "email" | "id" | null;
     audienceList?: string[] | null;
+    frequency?: string | null; // "Uma vez por usuário" | "Recorrente (30 dias)" | "Sempre"
     appearance?: Appearance;
   };
   let activeSurveys: ActiveSurvey[] = [];
@@ -78,18 +79,29 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     if (saved) identity = JSON.parse(saved);
   } catch {}
 
-  const seen = (id: string) => {
-    try {
-      return localStorage.getItem(`luumu_seen_${id}`) === "1";
-    } catch {
-      return false;
-    }
-  };
   const markSeen = (id: string) => {
     try {
-      localStorage.setItem(`luumu_seen_${id}`, "1");
+      localStorage.setItem(`luumu_seen_${id}`, String(Date.now()));
     } catch {}
   };
+  // decide se a survey já foi vista "o suficiente" pra este usuário, respeitando a frequência escolhida.
+  // "Sempre" nunca bloqueia; "Recorrente (30 dias)" expira; qualquer outro valor = uma vez só.
+  function blockedByFrequency(s: ActiveSurvey): boolean {
+    if (s.frequency === "Sempre") return false;
+    let lastSeenAt: number | null = null;
+    try {
+      const raw = localStorage.getItem(`luumu_seen_${s.id}`);
+      lastSeenAt = raw ? Number(raw) : null;
+    } catch {
+      lastSeenAt = null;
+    }
+    if (lastSeenAt == null || isNaN(lastSeenAt)) return false;
+    if (s.frequency === "Recorrente (30 dias)") {
+      const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+      return Date.now() - lastSeenAt < THIRTY_DAYS_MS;
+    }
+    return true; // "Uma vez por usuário" (padrão)
+  }
 
   function isVisible(q: Question, answers: Record<string, unknown>): boolean {
     const rule = q.logic?.showIf;
@@ -473,13 +485,13 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     return false;
   }
 
-  // dispara a survey (respeitando "já visto" e público-alvo, salvo force) buscando os detalhes sob demanda
-  async function trigger(surveyId: string, key: string, force = false, audienceOk = true) {
+  // dispara a survey (respeitando frequência e público-alvo, salvo force) buscando os detalhes sob demanda
+  async function trigger(catalogEntry: ActiveSurvey, key: string, force = false, audienceOk = true) {
     if (!force && !audienceOk) return;
-    if (!force && seen(surveyId)) return;
-    const survey = await fetchSurvey(surveyId, key);
+    if (!force && blockedByFrequency(catalogEntry)) return;
+    const survey = await fetchSurvey(catalogEntry.id, key);
     if (!survey) return;
-    if (!force && seen(survey.id)) return;
+    if (!force && blockedByFrequency(catalogEntry)) return;
     const delay = Math.max(0, (survey.appearance.triggerDelay || 0) * 1000);
     setTimeout(() => mount(survey), delay);
   }
@@ -503,7 +515,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     // disparo por gatilho (qualquer evento da lista que case)
     await ensureCatalog(key);
     for (const s of activeSurveys) {
-      if (surveyTriggers(s).indexOf(name) >= 0) trigger(s.id, key, false, inAudience(s));
+      if (surveyTriggers(s).indexOf(name) >= 0) trigger(s, key, false, inAudience(s));
     }
   }
 
@@ -660,10 +672,13 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
       installAutoTracking();
     }
     if (opts.surveyId) {
-      // pedido explícito: ignora catálogo/gatilho
+      // pedido explícito: ignora catálogo/gatilho, mas ainda respeita a frequência configurada
+      await ensureCatalog(key);
+      const catalogEntry = activeSurveys.find((s) => s.id === opts.surveyId) || { id: opts.surveyId };
+      if (!opts.force && blockedByFrequency(catalogEntry)) return;
       const survey = await fetchSurvey(opts.surveyId, key);
       if (!survey) return;
-      if (!opts.force && seen(survey.id)) return;
+      if (!opts.force && blockedByFrequency(catalogEntry)) return;
       const delay = Math.max(0, (survey.appearance.triggerDelay || 0) * 1000);
       setTimeout(() => mount(survey), delay);
       return;
@@ -672,9 +687,12 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     // as que têm gatilho por evento aguardam o evento correspondente (auto ou via track).
     await ensureCatalog(key);
     const target = activeSurveys.find(
-      (s) => surveyTriggers(s).length === 0 && (opts.force || !seen(s.id)) && (opts.force || inAudience(s))
+      (s) =>
+        surveyTriggers(s).length === 0 &&
+        (opts.force || !blockedByFrequency(s)) &&
+        (opts.force || inAudience(s))
     );
-    if (target) trigger(target.id, key, opts.force);
+    if (target) trigger(target, key, opts.force);
   }
 
   const Luumu = {
