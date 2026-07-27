@@ -250,9 +250,15 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     async function submit() {
       const vis = visibleQs();
       let score: number | null = null;
+      let scoreBlockId: string | null = null;
+      let scoreMin: number | null = null;
+      let scoreMax: number | null = null;
       for (const q of vis) {
         if (SCORE_BLOCKS.indexOf(q.blockId) >= 0 && typeof answers[q.uid] === "number") {
           score = answers[q.uid] as number;
+          scoreBlockId = q.blockId;
+          scoreMin = q.config?.min ?? null;
+          scoreMax = q.config?.max ?? null;
           break;
         }
       }
@@ -266,6 +272,9 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
             channel: "SDK",
             answers: vis.map((q) => ({ questionId: q.uid, value: normalize(q, answers[q.uid]) })),
             score,
+            scoreBlockId,
+            scoreMin,
+            scoreMax,
             respondent: identity.id || null,
             respondentEmail: identity.email || null,
           }),

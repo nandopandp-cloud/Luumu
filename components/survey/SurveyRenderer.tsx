@@ -51,6 +51,9 @@ export function SurveyRenderer({
         surveyId,
         answers: visible.map((q) => ({ questionId: q.uid, value: normalize(q, answers[q.uid]) })),
         score,
+        scoreBlockId: scoreQ?.blockId ?? null,
+        scoreMin: scoreQ?.config?.min ?? null,
+        scoreMax: scoreQ?.config?.max ?? null,
       });
       setDone(true);
     } catch {

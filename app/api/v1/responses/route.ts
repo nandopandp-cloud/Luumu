@@ -19,6 +19,9 @@ const schema = z.object({
   channel: z.string().optional(),
   answers: z.array(z.object({ questionId: z.string(), value: z.unknown() })),
   score: z.number().nullable(),
+  scoreBlockId: z.string().nullish(), // tipo de bloco da pergunta de nota (nps|csat|rating|...), p/ sentimento
+  scoreMin: z.number().nullish(),
+  scoreMax: z.number().nullish(),
   respondent: z.string().max(200).nullish(), // id externo (Luumu.identify)
   respondentEmail: z.string().max(200).nullish(), // email (Luumu.identify)
 });
@@ -69,7 +72,11 @@ export async function POST(req: Request) {
     channel: data.channel ?? "SDK",
     answers: data.answers as { questionId: string; value: unknown }[],
     score: data.score,
-    sentiment: deriveSentiment(data.score),
+    sentiment: deriveSentiment(data.score, {
+      blockId: data.scoreBlockId,
+      min: data.scoreMin,
+      max: data.scoreMax,
+    }),
     respondent: data.respondent ?? null,
     respondentEmail: data.respondentEmail ?? null,
   });

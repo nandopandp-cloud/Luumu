@@ -141,6 +141,9 @@ const submitSchema = z.object({
   surveyId: z.string(),
   answers: z.array(z.object({ questionId: z.string(), value: z.unknown() })),
   score: z.number().nullable(),
+  scoreBlockId: z.string().nullish(),
+  scoreMin: z.number().nullish(),
+  scoreMax: z.number().nullish(),
 });
 
 export async function submitResponseAction(input: unknown) {
@@ -154,7 +157,11 @@ export async function submitResponseAction(input: unknown) {
     surveyId: data.surveyId,
     answers: data.answers as { questionId: string; value: unknown }[],
     score: data.score,
-    sentiment: deriveSentiment(data.score),
+    sentiment: deriveSentiment(data.score, {
+      blockId: data.scoreBlockId,
+      min: data.scoreMin,
+      max: data.scoreMax,
+    }),
   });
   await enforceResponseLimit(data.surveyId);
   revalidatePath("/responses");
