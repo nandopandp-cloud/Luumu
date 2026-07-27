@@ -4,17 +4,24 @@ import { cn } from "@/lib/utils";
 export function Field({
   label,
   hint,
+  action,
   children,
   className,
 }: {
   label?: string;
   hint?: string;
+  action?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
 }) {
   return (
     <div className={cn("flex flex-col gap-1.5", className)}>
-      {label && <label className="text-sm font-semibold text-fg-soft">{label}</label>}
+      {(label || action) && (
+        <div className="flex items-center justify-between gap-2">
+          {label && <label className="text-sm font-semibold text-fg-soft">{label}</label>}
+          {action}
+        </div>
+      )}
       {children}
       {hint && <span className="text-xs text-fg-mut">{hint}</span>}
     </div>

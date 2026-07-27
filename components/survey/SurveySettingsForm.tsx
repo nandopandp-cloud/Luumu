@@ -1,19 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { Zap, Loader2, Check } from "lucide-react";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { Zap, Loader2, Check, RefreshCw } from "lucide-react";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { Field, Input, Select } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { useToast } from "@/components/ui/Toast";
 import { saveSettingsAction } from "@/app/(app)/surveys/actions";
-
-const triggers = [
-  "Ao finalizar compra", "Ao criar conta", "Ao concluir onboarding",
-  "Ao cancelar assinatura", "Ao usar determinada feature",
-  "Após X dias de inatividade", "Ao sair da página",
-];
 
 export interface SettingsValues {
   id: string;
@@ -35,9 +29,11 @@ export interface WorkspaceEvent {
   lastSeenAt: Date | string;
 }
 
+const EVENTS_POLL_MS = 10_000;
+
 export function SurveySettingsForm({
   initial,
-  events = [],
+  events: initialEvents = [],
 }: {
   initial: SettingsValues;
   events?: WorkspaceEvent[];
@@ -45,9 +41,29 @@ export function SurveySettingsForm({
   const [v, setV] = useState(initial);
   const [saving, startSaving] = useTransition();
   const [saved, setSaved] = useState(false);
+  const [events, setEvents] = useState(initialEvents);
+  const [refreshing, setRefreshing] = useState(false);
   const toast = useToast();
 
   const set = (patch: Partial<SettingsValues>) => setV((s) => ({ ...s, ...patch }));
+
+  const refreshEvents = useRef(async (silent = false) => {
+    if (!silent) setRefreshing(true);
+    try {
+      const r = await fetch("/api/events/status", { cache: "no-store" });
+      if (r.ok) {
+        const d = await r.json();
+        setEvents((d.events || []) as WorkspaceEvent[]);
+      }
+    } finally {
+      if (!silent) setRefreshing(false);
+    }
+  });
+
+  useEffect(() => {
+    const id = setInterval(() => refreshEvents.current(true), EVENTS_POLL_MS);
+    return () => clearInterval(id);
+  }, []);
 
   function save() {
     startSaving(async () => {
@@ -105,12 +121,20 @@ export function SurveySettingsForm({
             <CardTitle>Trigger & frequência</CardTitle>
           </div>
           <div className="mt-4 flex flex-col gap-4">
-            <Field label="Contexto de disparo">
-              <Select value={v.trigger} onChange={(e) => set({ trigger: e.target.value })}>
-                {triggers.map((t) => <option key={t}>{t}</option>)}
-              </Select>
-            </Field>
-            <Field label="Gatilho por evento (SDK)">
+            <Field
+              label="Gatilho por evento (SDK)"
+              action={
+                <button
+                  type="button"
+                  onClick={() => refreshEvents.current(false)}
+                  disabled={refreshing}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-fg-mut hover:text-accent disabled:opacity-50"
+                >
+                  <RefreshCw className={`size-3 ${refreshing ? "animate-spin" : ""}`} />
+                  Atualizar
+                </button>
+              }
+            >
               <Select value={v.triggerEvent} onChange={(e) => set({ triggerEvent: e.target.value })}>
                 <option value="">Nenhum — exibir no carregamento</option>
                 {events.map((ev) => (
