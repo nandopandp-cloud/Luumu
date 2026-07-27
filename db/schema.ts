@@ -209,8 +209,58 @@ export const answers = pgTable(
   (t) => [index("answers_response_idx").on(t.responseId)]
 );
 
+/**
+ * Agendamento de envio automático de relatórios por e-mail.
+ * O cron diário (/api/cron/reports) processa os que já venceram (nextRunAt <= agora e ativo).
+ */
+export const scheduledReports = pgTable(
+  "scheduled_reports",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+    projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    recipients: jsonb("recipients").notNull().default([]), // string[] de e-mails
+    frequency: text("frequency").notNull().default("weekly"), // daily | weekly | monthly
+    period: text("period").notNull().default("30d"), // janela de dados: 7d|30d|90d|12m|all
+    format: text("format").notNull().default("pdf"), // pdf | xlsx | csv
+    // ids das pesquisas incluídas ([] = todas do projeto)
+    surveyIds: jsonb("survey_ids").notNull().default([]),
+    active: boolean("active").notNull().default(true),
+    lastRunAt: timestamp("last_run_at", { withTimezone: true }),
+    nextRunAt: timestamp("next_run_at", { withTimezone: true }).notNull(),
+    createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("scheduled_reports_project_idx").on(t.projectId), index("scheduled_reports_next_run_idx").on(t.nextRunAt)]
+);
+
+/**
+ * Link público (read-only) de um relatório de pesquisa. O token é secreto e aleatório;
+ * quem tiver o link vê a página /r/[token] sem login. Revogável (active=false).
+ */
+export const publicReports = pgTable(
+  "public_reports",
+  {
+    id: text("id").primaryKey(),
+    token: text("token").notNull().unique(), // parte secreta da URL /r/<token>
+    workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+    projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    // pesquisa exibida; null = visão consolidada do projeto
+    surveyId: text("survey_id").references(() => surveys.id, { onDelete: "cascade" }),
+    period: text("period").notNull().default("all"), // janela de dados exibida
+    active: boolean("active").notNull().default(true),
+    createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    viewCount: integer("view_count").notNull().default(0),
+  },
+  (t) => [index("public_reports_project_idx").on(t.projectId)]
+);
+
 export type Workspace = typeof workspaces.$inferSelect;
 export type Survey = typeof surveys.$inferSelect;
+export type ScheduledReport = typeof scheduledReports.$inferSelect;
+export type PublicReport = typeof publicReports.$inferSelect;
 export type Question = typeof questions.$inferSelect;
 export type Response = typeof responses.$inferSelect;
 export type Answer = typeof answers.$inferSelect;

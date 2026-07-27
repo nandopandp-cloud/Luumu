@@ -288,18 +288,21 @@ export function SurveyBuilder({
           size={Math.max(6, name.length || 14)}
           className="min-w-0 max-w-full truncate rounded-lg bg-transparent font-display text-2xl font-extrabold tracking-tight text-fg outline-none transition hover:bg-bg-sunken focus:bg-bg-sunken focus:px-1.5 focus:py-0.5"
         />
-        <Select
-          value={type}
-          onChange={(e) => setType(e.target.value)}
-          aria-label="Tipo da pesquisa"
-          className="w-auto rounded-full border-0 bg-surface-brand py-1 pl-3 pr-7 text-xs font-semibold text-accent"
-        >
-          {typeOptions.map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </Select>
+        <label className="inline-flex items-center gap-1.5 rounded-full border border-line-strong bg-bg-elev py-1 pl-2.5 pr-1 text-xs font-semibold text-fg-soft transition hover:border-accent">
+          <span className="text-fg-mut">Tipo:</span>
+          <Select
+            value={type}
+            onChange={(e) => setType(e.target.value)}
+            aria-label="Tipo da pesquisa"
+            className="w-auto border-0 bg-transparent px-0 py-0 text-xs font-semibold text-accent focus:ring-0"
+          >
+            {typeOptions.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </Select>
+        </label>
         <Badge tone={statusTone[status as keyof typeof statusTone] ?? "neutral"}>{status}</Badge>
       </div>
 

@@ -44,6 +44,6 @@ export async function proxy(req: NextRequest) {
 }
 
 export const config = {
-  // não intercepta assets, api, sdk.js, s/[id], demo
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|sdk.js|mascot|s/|demo).*)"],
+  // não intercepta assets, api, sdk.js, s/[id] (survey pública), r/[token] (relatório público), demo
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|sdk.js|mascot|s/|r/|demo).*)"],
 };

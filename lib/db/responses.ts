@@ -14,7 +14,7 @@ import {
 
 export type ResponseRow = typeof responses.$inferSelect;
 
-interface Scope {
+export interface Scope {
   projectId: string;
   surveyId?: string; // opcional: restringe a uma pesquisa do projeto
   dateFrom?: Date; // opcional: só respostas a partir desta data (inclusive)
