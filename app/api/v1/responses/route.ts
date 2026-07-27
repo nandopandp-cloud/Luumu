@@ -1,7 +1,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { submitResponse } from "@/lib/db/responses";
-import { getSurvey } from "@/lib/db/surveys";
+import { getSurvey, enforceResponseLimit } from "@/lib/db/surveys";
 import { deriveSentiment } from "@/lib/sentiment";
 import { resolveKey } from "@/lib/api/keys";
 import { checkRateLimit } from "@/lib/api/ratelimit";
@@ -73,6 +73,7 @@ export async function POST(req: Request) {
     respondent: data.respondent ?? null,
     respondentEmail: data.respondentEmail ?? null,
   });
+  await enforceResponseLimit(data.surveyId);
 
   revalidatePath("/responses");
   revalidatePath(`/surveys/${data.surveyId}/responses`);

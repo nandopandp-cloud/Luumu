@@ -12,6 +12,7 @@ import {
   getSurveyWithQuestions,
   saveAppearance,
   deleteSurvey,
+  enforceResponseLimit,
 } from "@/lib/db/surveys";
 import { submitResponse } from "@/lib/db/responses";
 import { deriveSentiment } from "@/lib/sentiment";
@@ -66,6 +67,7 @@ const settingsSchema = z.object({
   frequency: z.string().optional(),
   startsAt: z.string().optional(),
   endsAt: z.string().optional(),
+  responseLimit: z.number().int().positive().nullable().optional(),
 });
 
 export async function saveSettingsAction(input: unknown) {
@@ -154,6 +156,7 @@ export async function submitResponseAction(input: unknown) {
     score: data.score,
     sentiment: deriveSentiment(data.score),
   });
+  await enforceResponseLimit(data.surveyId);
   revalidatePath("/responses");
   revalidatePath(`/surveys/${data.surveyId}/responses`);
   revalidatePath("/dashboard");

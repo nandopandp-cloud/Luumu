@@ -104,7 +104,7 @@ export async function createSurveyFromTemplate(workspaceId: string, projectId: s
 export async function updateSurvey(
   id: string,
   workspaceId: string,
-  patch: Partial<Pick<SurveyRow, "name" | "channel" | "audience" | "segment" | "language" | "trigger" | "triggerEvent" | "triggerEvents" | "audienceMode" | "audienceList" | "frequency" | "delay" | "startsAt" | "endsAt">>
+  patch: Partial<Pick<SurveyRow, "name" | "channel" | "audience" | "segment" | "language" | "trigger" | "triggerEvent" | "triggerEvents" | "audienceMode" | "audienceList" | "frequency" | "delay" | "startsAt" | "endsAt" | "responseLimit">>
 ) {
   await assertOwned(id, workspaceId);
   await db.update(surveys).set({ ...patch, updatedAt: new Date() }).where(eq(surveys.id, id));
@@ -167,6 +167,22 @@ export async function publishSurvey(id: string, workspaceId: string) {
 export async function setSurveyStatus(id: string, workspaceId: string, status: SurveyStatus) {
   await assertOwned(id, workspaceId);
   await db.update(surveys).set({ status, updatedAt: new Date() }).where(eq(surveys.id, id));
+}
+
+/**
+ * Depois de gravar uma resposta, checa se a survey tem um limite configurado e,
+ * se o total de respostas já atingiu o limite, pausa a survey automaticamente
+ * (para de ser servida pelo SDK e pela página pública). Sem escopo de workspace
+ * porque é chamada a partir do caminho público (SDK), não do painel autenticado.
+ */
+export async function enforceResponseLimit(id: string) {
+  const [s] = await db.select().from(surveys).where(eq(surveys.id, id)).limit(1);
+  if (!s || s.responseLimit == null || s.status !== "ativa") return;
+
+  const [{ n } = { n: 0 }] = await db.select({ n: count() }).from(responses).where(eq(responses.surveyId, id));
+  if (n >= s.responseLimit) {
+    await db.update(surveys).set({ status: "pausada", updatedAt: new Date() }).where(eq(surveys.id, id));
+  }
 }
 
 export async function deleteSurvey(id: string, workspaceId: string) {

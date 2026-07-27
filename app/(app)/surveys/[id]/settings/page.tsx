@@ -5,6 +5,7 @@ import { SurveySettingsForm } from "@/components/survey/SurveySettingsForm";
 import { SurveySubnav } from "@/components/survey/SurveySubnav";
 import { getSurvey } from "@/lib/db/surveys";
 import { listEvents } from "@/lib/db/events";
+import { getStats } from "@/lib/db/responses";
 import { getCurrentWorkspaceId } from "@/lib/auth/current";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +20,10 @@ export default async function SurveySettingsPage({
   const survey = await getSurvey(id, { workspaceId });
   if (!survey) notFound();
   // eventos disponíveis como gatilho são os do projeto desta pesquisa
-  const events = await listEvents(survey.projectId);
+  const [events, stats] = await Promise.all([
+    listEvents(survey.projectId),
+    getStats({ projectId: survey.projectId, surveyId: survey.id }),
+  ]);
 
   return (
     <div>
@@ -56,8 +60,10 @@ export default async function SurveySettingsPage({
           frequency: survey.frequency,
           startsAt: survey.startsAt ?? "",
           endsAt: survey.endsAt ?? "",
+          responseLimit: survey.responseLimit ?? null,
         }}
         events={events}
+        currentResponses={stats.total}
       />
     </div>
   );

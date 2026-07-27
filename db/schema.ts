@@ -149,6 +149,8 @@ export const surveys = pgTable(
     delay: text("delay").notNull().default("5s"),
     startsAt: text("starts_at"),
     endsAt: text("ends_at"),
+    // limite opcional de respostas; ao atingir, a survey é pausada automaticamente. null = sem limite
+    responseLimit: integer("response_limit"),
     // Aparência do widget embutido: { format, position, theme, triggerDelay, accent }
     appearance: jsonb("appearance").notNull().default({}),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

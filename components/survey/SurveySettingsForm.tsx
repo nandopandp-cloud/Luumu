@@ -20,6 +20,7 @@ export interface SettingsValues {
   frequency: string;
   startsAt: string;
   endsAt: string;
+  responseLimit: number | null;
 }
 
 export interface WorkspaceEvent {
@@ -239,9 +240,11 @@ function AudienceList({
 export function SurveySettingsForm({
   initial,
   events: initialEvents = [],
+  currentResponses = 0,
 }: {
   initial: SettingsValues;
   events?: WorkspaceEvent[];
+  currentResponses?: number;
 }) {
   const [v, setV] = useState(initial);
   const [saving, startSaving] = useTransition();
@@ -286,6 +289,7 @@ export function SurveySettingsForm({
         frequency: v.frequency,
         startsAt: v.startsAt,
         endsAt: v.endsAt,
+        responseLimit: v.responseLimit,
       });
       setSaved(true);
       toast("success", "Configurações salvas.");
@@ -390,6 +394,28 @@ export function SurveySettingsForm({
                 <Input type="date" value={v.endsAt} onChange={(e) => set({ endsAt: e.target.value })} />
               </Field>
             </div>
+
+            <Field
+              label="Limite de respostas (opcional)"
+              hint={
+                v.responseLimit != null
+                  ? `${currentResponses} de ${v.responseLimit} respostas recebidas até agora.`
+                  : "Ao atingir o total definido, a pesquisa é pausada automaticamente e para de ser exibida."
+              }
+            >
+              <Input
+                type="number"
+                min={1}
+                inputMode="numeric"
+                placeholder="Sem limite"
+                value={v.responseLimit ?? ""}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  const n = raw === "" ? null : Math.max(1, Math.floor(Number(raw)));
+                  set({ responseLimit: raw === "" || isNaN(n as number) ? null : n });
+                }}
+              />
+            </Field>
 
             <div className="rounded-xl bg-bg-sunken p-3">
               {events.length === 0 && v.triggerEvents.length === 0 ? (
