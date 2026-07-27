@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Search, MoreHorizontal, Pause, Play, Square, Eye, Pencil, Type, Trash2, Loader2, AlertTriangle } from "lucide-react";
@@ -35,6 +36,7 @@ export function SurveysTable({ items }: { items: SurveyListItem[] }) {
   const [filter, setFilter] = useState<Filter>("todas");
   const [q, setQ] = useState("");
   const [menuFor, setMenuFor] = useState<string | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
   const [renaming, setRenaming] = useState<SurveyListItem | null>(null);
   const [deleting, setDeleting] = useState<SurveyListItem | null>(null);
   const [, startTransition] = useTransition();
@@ -126,37 +128,58 @@ export function SurveysTable({ items }: { items: SurveyListItem[] }) {
                   <td className="px-3 py-3.5 text-fg-soft">{s.responseCount}</td>
                   <td className="px-3 py-3.5 font-bold text-luumu-roxo">{s.score ?? "—"}</td>
                   <td className="px-6 py-3.5 text-right text-fg-mut">
-                    <div className="relative inline-flex items-center gap-2">
+                    <div className="inline-flex items-center gap-2">
                       <span>{s.updatedAtLabel}</span>
                       <button
-                        onClick={() => setMenuFor(menuFor === s.id ? null : s.id)}
+                        onClick={(e) => {
+                          if (menuFor === s.id) {
+                            setMenuFor(null);
+                            setMenuPos(null);
+                            return;
+                          }
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          setMenuPos({ top: rect.bottom + 6, right: window.innerWidth - rect.right });
+                          setMenuFor(s.id);
+                        }}
                         className="rounded p-1 opacity-0 transition hover:bg-bg-sunken group-hover:opacity-100 aria-expanded:opacity-100"
                         aria-label="Ações"
                         aria-expanded={menuFor === s.id}
                       >
                         <MoreHorizontal className="size-4" />
                       </button>
-                      {menuFor === s.id && (
-                        <>
-                          <div className="fixed inset-0 z-10" onClick={() => setMenuFor(null)} />
-                          <div className="absolute right-0 top-8 z-20 w-44 overflow-hidden rounded-xl border border-line bg-bg-elev py-1 text-left shadow-[var(--shadow-lg)]">
-                            <MenuLink href={`/surveys/${s.id}/builder`} icon={<Pencil className="size-4" />}>Editar</MenuLink>
-                            <MenuBtn onClick={() => { setMenuFor(null); setRenaming(s); }} icon={<Type className="size-4" />}>Renomear</MenuBtn>
-                            <MenuLink href={`/surveys/${s.id}/preview`} icon={<Eye className="size-4" />}>Preview</MenuLink>
-                            {s.status === "ativa" && (
-                              <MenuBtn onClick={() => changeStatus(s.id, "pausada", "Pesquisa pausada.")} icon={<Pause className="size-4" />}>Pausar</MenuBtn>
-                            )}
-                            {s.status === "pausada" && (
-                              <MenuBtn onClick={() => changeStatus(s.id, "ativa", "Pesquisa reativada.")} icon={<Play className="size-4" />}>Reativar</MenuBtn>
-                            )}
-                            {(s.status === "ativa" || s.status === "pausada") && (
-                              <MenuBtn onClick={() => changeStatus(s.id, "encerrada", "Pesquisa encerrada.")} icon={<Square className="size-4" />}>Encerrar</MenuBtn>
-                            )}
-                            <div className="my-1 border-t border-line" />
-                            <MenuBtn onClick={() => { setMenuFor(null); setDeleting(s); }} icon={<Trash2 className="size-4" />} danger>Excluir</MenuBtn>
-                          </div>
-                        </>
-                      )}
+                      {menuFor === s.id &&
+                        menuPos &&
+                        createPortal(
+                          <>
+                            <div
+                              className="fixed inset-0 z-40"
+                              onClick={() => {
+                                setMenuFor(null);
+                                setMenuPos(null);
+                              }}
+                            />
+                            <div
+                              style={{ top: menuPos.top, right: menuPos.right }}
+                              className="fixed z-50 w-44 overflow-hidden rounded-xl border border-line bg-bg-elev py-1 text-left shadow-[var(--shadow-lg)]"
+                            >
+                              <MenuLink href={`/surveys/${s.id}/builder`} icon={<Pencil className="size-4" />}>Editar</MenuLink>
+                              <MenuBtn onClick={() => { setMenuFor(null); setMenuPos(null); setRenaming(s); }} icon={<Type className="size-4" />}>Renomear</MenuBtn>
+                              <MenuLink href={`/surveys/${s.id}/preview`} icon={<Eye className="size-4" />}>Preview</MenuLink>
+                              {s.status === "ativa" && (
+                                <MenuBtn onClick={() => changeStatus(s.id, "pausada", "Pesquisa pausada.")} icon={<Pause className="size-4" />}>Pausar</MenuBtn>
+                              )}
+                              {s.status === "pausada" && (
+                                <MenuBtn onClick={() => changeStatus(s.id, "ativa", "Pesquisa reativada.")} icon={<Play className="size-4" />}>Reativar</MenuBtn>
+                              )}
+                              {(s.status === "ativa" || s.status === "pausada") && (
+                                <MenuBtn onClick={() => changeStatus(s.id, "encerrada", "Pesquisa encerrada.")} icon={<Square className="size-4" />}>Encerrar</MenuBtn>
+                              )}
+                              <div className="my-1 border-t border-line" />
+                              <MenuBtn onClick={() => { setMenuFor(null); setMenuPos(null); setDeleting(s); }} icon={<Trash2 className="size-4" />} danger>Excluir</MenuBtn>
+                            </div>
+                          </>,
+                          document.body
+                        )}
                     </div>
                   </td>
                 </tr>

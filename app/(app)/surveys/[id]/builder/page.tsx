@@ -1,16 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
-import { Badge } from "@/components/ui/Badge";
 import { SurveyBuilder } from "@/components/survey-builder/SurveyBuilder";
 import { SurveySubnav } from "@/components/survey/SurveySubnav";
 import { getSurveyWithQuestions } from "@/lib/db/surveys";
 import { getCurrentWorkspaceId } from "@/lib/auth/current";
 import type { BuilderQuestion } from "@/lib/builder";
-
-const statusTone = {
-  ativa: "success", pausada: "warn", encerrada: "neutral", rascunho: "brand",
-} as const;
 
 export default async function BuilderPage({
   params,
@@ -41,22 +36,12 @@ export default async function BuilderPage({
         <ArrowLeft className="size-4" /> Pesquisas
       </Link>
 
-      <div className="mb-6">
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="font-display text-2xl font-extrabold tracking-tight">{survey.name}</h1>
-          <Badge tone="brand" dot={false}>{survey.type}</Badge>
-          <Badge tone={statusTone[survey.status as keyof typeof statusTone]}>{survey.status}</Badge>
-        </div>
-        <p className="mt-1 text-sm text-fg-mut">
-          Monte sua pesquisa arrastando blocos. Tudo é salvo automaticamente.
-        </p>
-      </div>
-
       <SurveySubnav id={survey.id} />
 
       <SurveyBuilder
         surveyId={survey.id}
         surveyName={survey.name}
+        surveyType={survey.type}
         status={survey.status}
         initialQuestions={initialQuestions}
       />

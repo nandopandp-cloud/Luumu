@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+/* Liga a variante dark: ao toggle manual de tema (data-theme no <html>),
+   em vez do padrão do Tailwind (prefers-color-scheme do sistema operacional). */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
 /* =====================================================================
    LUUMU DESIGN SYSTEM — TOKENS
    Fonte da verdade: LUUMU_BrandBook_Visual_v1.pdf / luumus_ds.html

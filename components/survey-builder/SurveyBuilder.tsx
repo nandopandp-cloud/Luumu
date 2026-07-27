@@ -27,11 +27,16 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/Badge";
 import { useToast } from "@/components/ui/Toast";
 import { builderBlocks } from "@/lib/mock/surveys";
 import { defaultConfig, type BuilderQuestion } from "@/lib/builder";
 import { QuestionSettings } from "./QuestionSettings";
 import { saveDraftAction, publishSurveyAction } from "@/app/(app)/surveys/actions";
+
+const statusTone = {
+  ativa: "success", pausada: "warn", encerrada: "neutral", rascunho: "brand",
+} as const;
 
 const blockIcon: Record<string, React.ReactNode> = {
   rating: <Gauge className="size-4" />, emoji: <Smile className="size-4" />, stars: <Star className="size-4" />,
@@ -149,16 +154,19 @@ function CanvasDropZone({ children, empty }: { children: React.ReactNode; empty:
 export function SurveyBuilder({
   surveyId,
   surveyName,
+  surveyType,
   status,
   initialQuestions,
 }: {
   surveyId: string;
   surveyName: string;
+  surveyType: string;
   status: string;
   initialQuestions: BuilderQuestion[];
 }) {
   const router = useRouter();
   const toast = useToast();
+  const [name, setName] = useState(surveyName);
   const [questions, setQuestions] = useState<BuilderQuestion[]>(initialQuestions);
   const [selectedUid, setSelectedUid] = useState<string | null>(initialQuestions[0]?.uid ?? null);
   const [activeDrag, setActiveDrag] = useState<string | null>(null);
@@ -179,7 +187,7 @@ export function SurveyBuilder({
     try {
       await saveDraftAction({
         id: surveyId,
-        name: surveyName,
+        name,
         questions: questions.map((q) => ({
           uid: q.uid, blockId: q.blockId, title: q.title, required: q.required,
           config: q.config, logic: q.logic,
@@ -202,7 +210,7 @@ export function SurveyBuilder({
     const t = setTimeout(() => save(true), 1200);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [questions]);
+  }, [questions, name]);
 
   async function handlePublish() {
     setPublishing(true);
@@ -263,6 +271,20 @@ export function SurveyBuilder({
 
   return (
     <div>
+      {/* Nome da pesquisa (editável) + status */}
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Nome da pesquisa"
+          aria-label="Nome da pesquisa"
+          size={Math.max(6, name.length || 14)}
+          className="min-w-0 max-w-full truncate rounded-lg bg-transparent font-display text-2xl font-extrabold tracking-tight text-fg outline-none transition hover:bg-bg-sunken focus:bg-bg-sunken focus:px-1.5 focus:py-0.5"
+        />
+        <Badge tone="brand" dot={false}>{surveyType}</Badge>
+        <Badge tone={statusTone[status as keyof typeof statusTone] ?? "neutral"}>{status}</Badge>
+      </div>
+
       {/* Header de ações */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-sm text-fg-mut">
@@ -321,11 +343,11 @@ export function SurveyBuilder({
 
           {/* Canvas */}
           <div>
-            <div className="mb-3 flex items-center justify-between">
-              <div className="font-mono text-[11px] font-semibold uppercase tracking-wide text-fg-mut">
-                {surveyName}
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="truncate font-mono text-[11px] font-semibold uppercase tracking-wide text-fg-mut">
+                {name || "Nome da pesquisa"}
               </div>
-              <span className="text-xs text-fg-mut">Arraste um bloco para adicionar</span>
+              <span className="shrink-0 text-xs text-fg-mut">Arraste um bloco para adicionar</span>
             </div>
             <SortableContext items={questions.map((q) => q.uid)} strategy={verticalListSortingStrategy}>
               <CanvasDropZone empty={questions.length === 0}>
