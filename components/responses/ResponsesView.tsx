@@ -1,7 +1,7 @@
 import { Card, CardHeader, CardTitle, CardSubtitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { topThemes } from "@/lib/mock/responses";
+import type { WordCloudItem } from "@/lib/wordcloud";
 
 const sentimentTone = {
   positivo: "success",
@@ -29,10 +29,12 @@ export function ResponsesView({
   responses,
   distribution,
   total,
+  wordCloud,
 }: {
   responses: ResponseItem[];
   distribution: DistributionBucket[];
   total: number;
+  wordCloud: WordCloudItem[];
 }) {
   if (responses.length === 0) {
     return (
@@ -102,17 +104,34 @@ export function ResponsesView({
         <Card>
           <CardHeader>
             <div>
-              <CardTitle>Principais temas</CardTitle>
-              <CardSubtitle>Extraídos por IA dos comentários</CardSubtitle>
+              <CardTitle>Palavras mais citadas</CardTitle>
+              <CardSubtitle>Extraídas dos comentários reais das respostas</CardSubtitle>
             </div>
           </CardHeader>
-          <div className="flex flex-wrap gap-2">
-            {topThemes.map((t) => (
-              <span key={t} className="rounded-full bg-surface-brand px-3 py-1 text-sm font-semibold text-accent">
-                {t}
-              </span>
-            ))}
-          </div>
+          {wordCloud.length === 0 ? (
+            <p className="text-sm text-fg-mut">
+              Nenhum comentário com texto ainda. As palavras mais citadas aparecem aqui conforme as
+              respostas chegam.
+            </p>
+          ) : (
+            <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1.5">
+              {wordCloud.map((w) => {
+                // tamanho e cor proporcionais ao peso (0-1): mais citada = maior e mais destacada
+                const fontSize = 12 + w.weight * 16; // 12px a 28px
+                const opacity = 0.55 + w.weight * 0.45; // 0.55 a 1.0
+                return (
+                  <span
+                    key={w.text}
+                    title={`${w.count}×`}
+                    className="font-bold leading-none text-accent"
+                    style={{ fontSize, opacity }}
+                  >
+                    {w.text}
+                  </span>
+                );
+              })}
+            </div>
+          )}
         </Card>
       </div>
     </div>

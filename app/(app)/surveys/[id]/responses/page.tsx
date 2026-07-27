@@ -2,9 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { ResponsesView, type ResponseItem } from "@/components/responses/ResponsesView";
+import { ExportMenu } from "@/components/responses/ExportMenu";
 import { SurveySubnav } from "@/components/survey/SurveySubnav";
 import { getSurvey } from "@/lib/db/surveys";
-import { listResponses, getStats, getScoreDistribution } from "@/lib/db/responses";
+import { listResponses, getStats, getScoreDistribution, getWordCloud } from "@/lib/db/responses";
 import { getCurrentWorkspaceId } from "@/lib/auth/current";
 import { timeAgo } from "@/lib/utils";
 
@@ -21,10 +22,11 @@ export default async function SurveyResponsesPage({
   if (!survey) notFound();
 
   const scope = { projectId: survey.projectId, surveyId: id };
-  const [rows, stats, distribution] = await Promise.all([
+  const [rows, stats, distribution, wordCloud] = await Promise.all([
     listResponses(scope),
     getStats(scope),
     getScoreDistribution(scope),
+    getWordCloud(scope),
   ]);
 
   const items: ResponseItem[] = rows.map((r) => ({
@@ -45,16 +47,19 @@ export default async function SurveyResponsesPage({
       >
         <ArrowLeft className="size-4" /> Pesquisas
       </Link>
-      <div className="mb-6">
-        <h1 className="font-display text-2xl font-extrabold tracking-tight">{survey.name}</h1>
-        <p className="mt-1 text-sm text-fg-mut">
-          {stats.total} respostas · nota média {stats.avgScore ?? "—"}
-        </p>
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="font-display text-2xl font-extrabold tracking-tight">{survey.name}</h1>
+          <p className="mt-1 text-sm text-fg-mut">
+            {stats.total} respostas · nota média {stats.avgScore ?? "—"}
+          </p>
+        </div>
+        <ExportMenu surveyId={id} />
       </div>
 
       <SurveySubnav id={id} />
 
-      <ResponsesView responses={items} distribution={distribution} total={stats.total} />
+      <ResponsesView responses={items} distribution={distribution} total={stats.total} wordCloud={wordCloud} />
     </div>
   );
 }

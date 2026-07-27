@@ -1,8 +1,20 @@
 import "server-only";
-import { and, desc, eq, count, avg, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, count, avg, sql, inArray, type SQL } from "drizzle-orm";
 import { db } from "./client";
-import { responses, answers, surveys } from "@/db/schema";
+import { responses, answers, surveys, questions } from "@/db/schema";
 import { responseId, answerId } from "./ids";
+import { buildWordCloud } from "@/lib/wordcloud";
+
+// min/max default por bloco de nota, quando a pergunta não define config.min/max explícito
+const SCORE_RANGE_DEFAULTS: Record<string, { min: number; max: number }> = {
+  nps: { min: 0, max: 10 },
+  rating: { min: 1, max: 5 },
+  stars: { min: 1, max: 5 },
+  csat: { min: 1, max: 5 },
+  ces: { min: 1, max: 7 },
+  scale: { min: 1, max: 5 },
+};
+const SCORE_BLOCK_IDS = Object.keys(SCORE_RANGE_DEFAULTS);
 
 export type ResponseRow = typeof responses.$inferSelect;
 
@@ -94,8 +106,58 @@ export async function getStats(scope: Scope) {
   };
 }
 
-/** Distribuição de notas 1–5 normalizada em % (para as barras). */
+/** Nuvem de palavras real, extraída de todos os comentários (texto curto/longo) do escopo. */
+export async function getWordCloud(scope: Scope) {
+  const rows = await db
+    .select({ value: answers.value })
+    .from(answers)
+    .innerJoin(responses, eq(answers.responseId, responses.id))
+    .innerJoin(surveys, eq(responses.surveyId, surveys.id))
+    .where(scopeWhere(scope));
+
+  const comments = rows.map((r) => extractComment(r.value)).filter(Boolean);
+  return buildWordCloud(comments);
+}
+
+/**
+ * Descobre a escala real de notas do escopo (min/max), olhando as perguntas de
+ * score (nps|rating|stars|csat|ces|scale) das surveys envolvidas. Quando o escopo
+ * mistura escalas diferentes (ex: workspace inteiro com NPS 0-10 e CSAT 1-5), usa a
+ * maior faixa encontrada, que cobre todas sem perder granularidade.
+ */
+async function detectScoreScale(scope: Scope): Promise<{ min: number; max: number }> {
+  const surveyIds = scope.surveyId
+    ? [scope.surveyId]
+    : (await db.select({ id: surveys.id }).from(surveys).where(eq(surveys.projectId, scope.projectId))).map(
+        (s) => s.id
+      );
+  if (surveyIds.length === 0) return { min: 0, max: 10 };
+
+  const qs = await db
+    .select({ blockId: questions.blockId, config: questions.config })
+    .from(questions)
+    .where(and(inArray(questions.surveyId, surveyIds), inArray(questions.blockId, SCORE_BLOCK_IDS)));
+
+  let min = 0;
+  let max = 0;
+  for (const q of qs) {
+    const defaults = SCORE_RANGE_DEFAULTS[q.blockId];
+    const cfg = (q.config as { min?: number; max?: number }) ?? {};
+    const qMin = cfg.min ?? defaults.min;
+    const qMax = cfg.max ?? defaults.max;
+    if (qMax - qMin > max - min) {
+      min = qMin;
+      max = qMax;
+    }
+  }
+  if (max === min) return { min: 0, max: 10 }; // sem pergunta de nota no escopo: assume NPS (mais comum)
+  return { min, max };
+}
+
+/** Distribuição de notas normalizada em % (para as barras), na escala real da(s) pesquisa(s) do escopo. */
 export async function getScoreDistribution(scope: Scope) {
+  const { min, max } = await detectScoreScale(scope);
+
   const rows = await db
     .select({
       bucket: sql<number>`round(${responses.score})`.mapWith(Number).as("bucket"),
@@ -103,20 +165,25 @@ export async function getScoreDistribution(scope: Scope) {
     })
     .from(responses)
     .innerJoin(surveys, eq(responses.surveyId, surveys.id))
-    .where(scopeWhere(scope))
+    .where(and(scopeWhere(scope), sql`${responses.score} is not null`))
     .groupBy(sql`round(${responses.score})`);
 
-  const tones: Record<number, string> = {
-    5: "var(--luumu-verde)", 4: "var(--luumu-verde)", 3: "var(--sec-amarelo)",
-    2: "var(--sec-laranja)", 1: "var(--erro)",
-  };
   const byBucket = new Map(rows.map((r) => [r.bucket, Number(r.n)]));
   const total = rows.reduce((s, r) => s + Number(r.n), 0) || 1;
-  return [5, 4, 3, 2, 1].map((b) => ({
-    label: `${b} ★`,
-    value: Math.round(((byBucket.get(b) ?? 0) / total) * 100),
-    tone: tones[b],
-  }));
+
+  const buckets: number[] = [];
+  for (let b = max; b >= min; b--) buckets.push(b);
+
+  return buckets.map((b) => {
+    const pct = (b - min) / (max - min);
+    const tone =
+      pct >= 0.8 ? "var(--luumu-verde)" : pct >= 0.5 ? "var(--sec-amarelo)" : "var(--erro)";
+    return {
+      label: String(b),
+      value: Math.round(((byBucket.get(b) ?? 0) / total) * 100),
+      tone,
+    };
+  });
 }
 
 /** Distribuição real de respostas por canal, em %, para o donut do dashboard. */

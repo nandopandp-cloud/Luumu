@@ -1,9 +1,8 @@
-import { Download } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { Button } from "@/components/ui/Button";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { ResponsesView, type ResponseItem } from "@/components/responses/ResponsesView";
-import { listResponses, getStats, getScoreDistribution } from "@/lib/db/responses";
+import { ExportMenu } from "@/components/responses/ExportMenu";
+import { listResponses, getStats, getScoreDistribution, getWordCloud } from "@/lib/db/responses";
 import { getCurrentProjectId } from "@/lib/auth/current";
 import { timeAgo } from "@/lib/utils";
 
@@ -11,10 +10,11 @@ export const dynamic = "force-dynamic";
 
 export default async function ResponsesPage() {
   const projectId = await getCurrentProjectId();
-  const [rows, stats, distribution] = await Promise.all([
+  const [rows, stats, distribution, wordCloud] = await Promise.all([
     listResponses({ projectId }),
     getStats({ projectId }),
     getScoreDistribution({ projectId }),
+    getWordCloud({ projectId }),
   ]);
 
   const items: ResponseItem[] = rows.map((r) => ({
@@ -33,11 +33,7 @@ export default async function ResponsesPage() {
         eyebrow="Respostas"
         title="Respostas"
         description="A voz dos seus clientes, agregada de todas as pesquisas, com sentimento e temas."
-        actions={
-          <Button variant="ghost" size="sm">
-            <Download className="size-4" /> Exportar
-          </Button>
-        }
+        actions={<ExportMenu />}
       />
 
       <div className="mb-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -47,7 +43,7 @@ export default async function ResponsesPage() {
         <MetricCard label="Com comentário" value={items.filter((i) => i.comment).length} accent="laranja" />
       </div>
 
-      <ResponsesView responses={items} distribution={distribution} total={stats.total} />
+      <ResponsesView responses={items} distribution={distribution} total={stats.total} wordCloud={wordCloud} />
     </div>
   );
 }

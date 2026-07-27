@@ -85,9 +85,9 @@ export function Sidebar({
         ))}
       </nav>
 
-      <div className="mt-auto px-2 pt-4 font-mono text-[10px] uppercase tracking-wide text-fg-mut">
+      {/* <div className="mt-auto px-2 pt-4 font-mono text-[10px] uppercase tracking-wide text-fg-mut">
         Luumu · v0.1 · protótipo
-      </div>
+      </div> */}
     </aside>
   );
 }
