@@ -36,9 +36,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           <div
             key={t.id}
             className={cn(
-              "pointer-events-auto flex items-center gap-2.5 rounded-xl border px-4 py-3 text-sm font-medium shadow-[var(--shadow-lg)] backdrop-blur",
-              t.kind === "success" && "border-sucesso/30 bg-sucesso/10 text-[#16a34a] dark:text-[#4ade80]",
-              t.kind === "error" && "border-erro/30 bg-erro/10 text-[#dc2626] dark:text-[#f87171]",
+              "pointer-events-auto flex items-center gap-2.5 rounded-xl border px-4 py-3 text-sm font-semibold shadow-[var(--shadow-lg)]",
+              t.kind === "success" && "border-sucesso/40 bg-bg-elev text-[#15803d] dark:bg-[#0f2418] dark:text-[#4ade80]",
+              t.kind === "error" && "border-erro/40 bg-bg-elev text-[#b91c1c] dark:bg-[#2a1414] dark:text-[#f87171]",
               t.kind === "info" && "border-line bg-bg-elev text-fg"
             )}
           >

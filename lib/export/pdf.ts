@@ -11,11 +11,11 @@ const MUT = "#6b7280";
 const LINE = "#e7e5f0";
 const LAVANDA = "#F3EDFF";
 
-// logo oficial (mascote + wordmark), a mesma usada na sidebar do produto.
+// logo oficial na horizontal (mascote + wordmark), a mesma usada na sidebar do produto.
 // pdfkit.standalone tem seu próprio shim de Buffer (Buffer.isBuffer falha com Buffer real do
 // Node), então a imagem precisa ir como data URI base64 em vez de Buffer/caminho de arquivo.
 const LOGO_DATA_URI = `data:image/png;base64,${fs
-  .readFileSync(path.join(process.cwd(), "public", "mascot", "logo-full.png"))
+  .readFileSync(path.join(process.cwd(), "public", "mascot", "logo-horizontal-dark.png"))
   .toString("base64")}`;
 
 export interface PdfSummary {
@@ -42,16 +42,15 @@ export function toPdf(rows: ExportRow[], opts: { title: string; summary: PdfSumm
     const contentW = right - left;
 
     // ---------- Cabeçalho da marca ----------
-    doc.rect(0, 0, pageW, 96).fill(LAVANDA);
-    doc.image(LOGO_DATA_URI, left, 16, { height: 64 });
-    doc.font("Helvetica").fontSize(9).fillColor(MUT).text("Ouça. Entenda. Melhore.", left + 96, 40);
+    doc.rect(0, 0, pageW, 80).fill(LAVANDA);
+    doc.image(LOGO_DATA_URI, left, 22, { height: 36 });
     doc
       .font("Helvetica")
       .fontSize(9)
       .fillColor(MUT)
-      .text(`Gerado em ${fmtDate(new Date())}`, left, 40, { width: contentW, align: "right" });
+      .text(`Gerado em ${fmtDate(new Date())}`, left, 36, { width: contentW, align: "right" });
 
-    doc.y = 116;
+    doc.y = 100;
 
     // ---------- Título do relatório ----------
     doc.fillColor(TXT).font("Helvetica-Bold").fontSize(18).text(opts.title, left, doc.y);
