@@ -6,6 +6,7 @@ import { getSurvey } from "@/lib/db/surveys";
 import { toCsv } from "@/lib/export/csv";
 import { toXlsx } from "@/lib/export/xlsx";
 import { toPdf } from "@/lib/export/pdf";
+import { periodToRange } from "@/lib/period";
 
 export const dynamic = "force-dynamic";
 // pdfkit/exceljs precisam do runtime Node (não Edge)
@@ -30,6 +31,10 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const format = (searchParams.get("format") || "csv").toLowerCase();
   const surveyId = searchParams.get("surveyId") || undefined;
+  const period = searchParams.get("period") || undefined;
+  const from = searchParams.get("from") || undefined;
+  const to = searchParams.get("to") || undefined;
+  const { from: dateFrom, to: dateTo } = periodToRange(period, from, to);
 
   // se filtrou por pesquisa, precisa pertencer ao projeto ativo
   let scopeName = "Todas as pesquisas";
@@ -39,7 +44,7 @@ export async function GET(req: Request) {
     scopeName = survey.name;
   }
 
-  const scope = { projectId: project.id, surveyId };
+  const scope = { projectId: project.id, surveyId, dateFrom, dateTo };
   const rows = await listResponsesForExport(scope);
 
   const dateTag = new Date().toISOString().slice(0, 10);

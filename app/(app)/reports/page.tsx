@@ -1,4 +1,5 @@
 import { PageHeader } from "@/components/ui/PageHeader";
+import { DataFilters } from "@/components/ui/DataFilters";
 import { ExportPanel } from "@/components/reports/ExportPanel";
 import { ScheduleReports, type ScheduledItem } from "@/components/reports/ScheduleReports";
 import { PublicLinks, type PublicLinkItem } from "@/components/reports/PublicLinks";
@@ -6,14 +7,22 @@ import { getCurrentProjectId } from "@/lib/auth/current";
 import { listSurveys } from "@/lib/db/surveys";
 import { getStats } from "@/lib/db/responses";
 import { listScheduledReports, listPublicReports } from "@/lib/db/reports";
+import { periodToRange } from "@/lib/period";
 
 export const dynamic = "force-dynamic";
 
-export default async function ReportsPage() {
+export default async function ReportsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ period?: string; from?: string; to?: string }>;
+}) {
+  const { period, from, to } = await searchParams;
   const projectId = await getCurrentProjectId();
+  const { from: dateFrom, to: dateTo } = periodToRange(period, from, to);
+
   const [surveys, stats, scheduled, publicLinks] = await Promise.all([
     listSurveys(projectId),
-    getStats({ projectId }),
+    getStats({ projectId, dateFrom, dateTo }),
     listScheduledReports(projectId),
     listPublicReports(projectId),
   ]);
@@ -56,9 +65,13 @@ export default async function ReportsPage() {
         description="Exporte, agende e compartilhe seus dados no formato ideal para cada público."
       />
 
+      <div className="mb-4">
+        <DataFilters />
+      </div>
+
       {/* Export manual */}
       <div className="mb-4">
-        <ExportPanel surveys={exportOpts} totalResponses={stats.total} />
+        <ExportPanel surveys={exportOpts} totalResponses={stats.total} period={period} from={from} to={to} />
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

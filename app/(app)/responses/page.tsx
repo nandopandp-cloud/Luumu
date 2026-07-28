@@ -1,7 +1,7 @@
 import { PageHeader } from "@/components/ui/PageHeader";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { DataFilters } from "@/components/ui/DataFilters";
-import { periodToDateFrom } from "@/lib/period";
+import { periodToRange } from "@/lib/period";
 import { ResponsesView, type ResponseItem } from "@/components/responses/ResponsesView";
 import { ExportMenu } from "@/components/responses/ExportMenu";
 import { listResponses, getStats, getScoreDistribution, getWordCloud, getMainScore } from "@/lib/db/responses";
@@ -15,11 +15,12 @@ export const dynamic = "force-dynamic";
 export default async function ResponsesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ surveyId?: string; period?: string }>;
+  searchParams: Promise<{ surveyId?: string; period?: string; from?: string; to?: string }>;
 }) {
-  const { surveyId, period } = await searchParams;
+  const { surveyId, period, from, to } = await searchParams;
   const projectId = await getCurrentProjectId();
-  const scope = { projectId, surveyId: surveyId || undefined, dateFrom: periodToDateFrom(period) };
+  const { from: dateFrom, to: dateTo } = periodToRange(period, from, to);
+  const scope = { projectId, surveyId: surveyId || undefined, dateFrom, dateTo };
 
   const [rows, stats, distribution, wordCloud, surveyOptions, mainScore] = await Promise.all([
     listResponses(scope),

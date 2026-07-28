@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Mascot } from "@/components/ui/Mascot";
 import { DataFilters } from "@/components/ui/DataFilters";
-import { periodToDateFrom } from "@/lib/period";
+import { periodToRange } from "@/lib/period";
 import { AreaTrend, DonutChart } from "@/components/charts/Charts";
 import { listSurveys, listSurveyOptions } from "@/lib/db/surveys";
 import { getStats, getChannelSplit, getScoreTrend, getMainScore } from "@/lib/db/responses";
@@ -28,12 +28,13 @@ const TREND_WEEKS_BY_PERIOD: Record<string, number> = { "7d": 1, "30d": 5, "90d"
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ surveyId?: string; period?: string }>;
+  searchParams: Promise<{ surveyId?: string; period?: string; from?: string; to?: string }>;
 }) {
   const { name } = await requireUser();
-  const { surveyId, period } = await searchParams;
+  const { surveyId, period, from, to } = await searchParams;
   const projectId = await getCurrentProjectId();
-  const scope = { projectId, surveyId: surveyId || undefined, dateFrom: periodToDateFrom(period) };
+  const { from: dateFrom, to: dateTo } = periodToRange(period, from, to);
+  const scope = { projectId, surveyId: surveyId || undefined, dateFrom, dateTo };
   const trendWeeks = period ? (TREND_WEEKS_BY_PERIOD[period] ?? 8) : 8;
 
   const [allSurveys, surveyOptions, stats, channelSplit, csatTrend, mainScore] = await Promise.all([

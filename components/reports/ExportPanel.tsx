@@ -17,7 +17,19 @@ const FORMATS = [
   { id: "csv", label: "CSV", desc: "Dados brutos para planilhas", Icon: Table2 },
 ] as const;
 
-export function ExportPanel({ surveys, totalResponses }: { surveys: SurveyOpt[]; totalResponses: number }) {
+export function ExportPanel({
+  surveys,
+  totalResponses,
+  period,
+  from,
+  to,
+}: {
+  surveys: SurveyOpt[];
+  totalResponses: number;
+  period?: string;
+  from?: string;
+  to?: string;
+}) {
   const [surveyId, setSurveyId] = useState<string>("");
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -30,6 +42,9 @@ export function ExportPanel({ surveys, totalResponses }: { surveys: SurveyOpt[];
     try {
       const qs = new URLSearchParams({ format });
       if (surveyId) qs.set("surveyId", surveyId);
+      if (period) qs.set("period", period);
+      if (from) qs.set("from", from);
+      if (to) qs.set("to", to);
       const res = await fetch(`/api/reports/export?${qs.toString()}`);
       if (!res.ok) throw new Error("Falha ao gerar o arquivo.");
       const blob = await res.blob();
