@@ -13,6 +13,7 @@ import { toXlsx } from "@/lib/export/xlsx";
 import { toPdf } from "@/lib/export/pdf";
 import { sendEmail } from "@/lib/email";
 import { reportEmailHtml } from "@/lib/email-templates";
+import { getAppOrigin } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -84,9 +85,12 @@ export async function GET(req: Request) {
         total: snapshot.total,
         scoreLabel: snapshot.scoreLabel,
         scoreValue: snapshot.scoreValue,
+        scoreFormula: snapshot.scoreFormula,
         positivePct: snapshot.positivePct,
-        publicUrl: null,
+        publicUrl: `${getAppOrigin()}/reports`,
         hasAttachment: true,
+        attachmentFormat: report.format,
+        appOrigin: getAppOrigin(),
       });
 
       const sent = await sendEmail({
