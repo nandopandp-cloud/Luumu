@@ -7,7 +7,6 @@ import {
   BarChart3,
   Sparkles,
   FileText,
-  Plug,
   Code2,
   Settings,
   type LucideIcon,
@@ -56,7 +55,6 @@ export const NAV: NavGroup[] = [
   {
     title: "Configuração",
     items: [
-      { href: "/integrations", label: "Integrações", icon: Plug },
       { href: "/sdk", label: "SDK & Eventos", icon: Code2 },
       { href: "/settings", label: "Configurações", icon: Settings },
     ],
