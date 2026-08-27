@@ -42,7 +42,7 @@ export default function SignupPage() {
         </div>
       </div>
 
-      <BrandPanel mascotName="Comemorando" />
+      <BrandPanel />
     </div>
   );
 }

@@ -31,7 +31,7 @@ export default function LoginPage() {
         </div>
       </div>
 
-      <BrandPanel mascotName="Feliz" />
+      <BrandPanel />
     </div>
   );
 }
