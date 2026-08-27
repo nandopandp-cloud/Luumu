@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
-import { ArrowRight, Loader2, AlertTriangle } from "lucide-react";
+import { ArrowRight, Loader2, AlertTriangle, Mail } from "lucide-react";
 import { Field, Input } from "@/components/ui/Input";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { loginAction, signupAction, type AuthResult } from "./actions";
@@ -33,7 +33,16 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
         </Field>
       )}
       <Field label="E-mail de trabalho">
-        <Input name="email" type="email" placeholder="voce@empresa.com" required />
+        <div className="relative">
+          <Mail className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-fg-mut" />
+          <Input
+            name="email"
+            type="email"
+            placeholder="voce@empresa.com"
+            required
+            className="pl-10"
+          />
+        </div>
       </Field>
       <Field label="Senha">
         <PasswordInput

@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { Check } from "lucide-react";
-import { LuumuLogo, Mascot } from "@/components/ui/Mascot";
+import { LuumuLogo } from "@/components/ui/Mascot";
 import { AuthForm } from "../AuthForm";
+import { BrandPanel } from "../BrandPanel";
 
 const perks = [
   "14 dias grátis, sem cartão",
@@ -12,7 +13,7 @@ const perks = [
 export default function SignupPage() {
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
-      <div className="flex flex-col justify-center px-6 py-12 sm:px-12 lg:px-20">
+      <div className="flex flex-col justify-center bg-bg px-6 py-12 sm:px-12 lg:px-20">
         <div className="mx-auto w-full max-w-sm">
           <Link href="/" className="mb-10 flex items-center gap-2">
             <LuumuLogo size={36} />
@@ -23,6 +24,17 @@ export default function SignupPage() {
 
           <AuthForm mode="signup" />
 
+          <ul className="mt-6 flex flex-col gap-2">
+            {perks.map((p) => (
+              <li key={p} className="flex items-center gap-2 text-sm text-fg-mut">
+                <span className="grid size-4 shrink-0 place-items-center rounded-full bg-luumu-verde/20 text-[#2F8F3F]">
+                  <Check className="size-2.5" />
+                </span>
+                {p}
+              </li>
+            ))}
+          </ul>
+
           <p className="mt-6 text-center text-sm text-fg-mut">
             Já tem conta?{" "}
             <Link href="/login" className="font-semibold text-accent">Entrar</Link>
@@ -30,31 +42,7 @@ export default function SignupPage() {
         </div>
       </div>
 
-      <div className="relative hidden flex-col items-center justify-center overflow-hidden lg:flex [background:var(--luumu-roxo-escuro)]">
-        <div
-          className="absolute inset-0 opacity-50"
-          style={{
-            backgroundImage: "radial-gradient(circle at 1px 1px, rgba(255,255,255,.12) 1px, transparent 0)",
-            backgroundSize: "26px 26px",
-          }}
-        />
-        <div className="relative z-10 max-w-md px-10 text-center text-white">
-          <Mascot name="Comemorando" size={190} float className="mx-auto" />
-          <h2 className="mt-6 font-display text-3xl font-extrabold leading-tight">
-            Mais de 2.500 empresas já ouvem com a Luumu
-          </h2>
-          <ul className="mt-6 flex flex-col items-start gap-2.5 text-left">
-            {perks.map((p) => (
-              <li key={p} className="flex items-center gap-2 text-white/90">
-                <span className="grid size-5 place-items-center rounded-full bg-luumu-verde text-[#0A2E12]">
-                  <Check className="size-3" />
-                </span>
-                {p}
-              </li>
-            ))}
-          </ul>
-        </div>
-      </div>
+      <BrandPanel mascotName="Comemorando" />
     </div>
   );
 }
