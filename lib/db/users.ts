@@ -1,5 +1,5 @@
 import "server-only";
-import { and, count, eq } from "drizzle-orm";
+import { and, count, eq, ne } from "drizzle-orm";
 import { db } from "./client";
 import { users, memberships, workspaces } from "@/db/schema";
 import { newId } from "./ids";
@@ -62,6 +62,28 @@ export async function getMembership(workspaceId: string, userId: string) {
     .where(and(eq(memberships.workspaceId, workspaceId), eq(memberships.userId, userId)))
     .limit(1);
   return m ?? null;
+}
+
+/**
+ * Troca o papel de um membro. O `WHERE` exclui explicitamente quem é owner: mesmo que a
+ * checagem de permissão da action falhe, esta query nunca rebaixa o dono do workspace —
+ * e como não existe caminho que grave "owner" aqui, o workspace mantém exatamente um.
+ */
+export async function updateMemberRole(
+  workspaceId: string,
+  userId: string,
+  role: "admin" | "editor" | "viewer"
+) {
+  await db
+    .update(memberships)
+    .set({ role })
+    .where(
+      and(
+        eq(memberships.workspaceId, workspaceId),
+        eq(memberships.userId, userId),
+        ne(memberships.role, "owner")
+      )
+    );
 }
 
 /**

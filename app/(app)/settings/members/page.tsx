@@ -11,8 +11,8 @@ import { listProjects } from "@/lib/db/projects";
 export const dynamic = "force-dynamic";
 
 const roles = [
-  { role: "Owner", desc: "Acesso total, incluindo billing e exclusão do workspace." },
-  { role: "Admin", desc: "Gerencia membros, projetos e integrações." },
+  { role: "Owner", desc: "Acesso total: billing, exclusão do workspace, papéis e acesso a projetos." },
+  { role: "Admin", desc: "Convida e remove membros, gerencia projetos e integrações." },
   { role: "Editor", desc: "Cria e edita pesquisas, vê todas as respostas." },
   { role: "Viewer", desc: "Apenas visualização de dashboards e respostas." },
 ];
@@ -69,7 +69,8 @@ export default async function MembersPage() {
         <p className="mt-3 text-sm text-fg-mut">
           O papel define <strong>o que</strong> a pessoa pode fazer. O acesso a projetos define{" "}
           <strong>onde</strong> ela pode fazer — um Admin restrito ao projeto X administra
-          apenas o projeto X e não enxerga os demais. Apenas o owner altera esse acesso.
+          apenas o projeto X e não enxerga os demais. <strong>Apenas o owner</strong> altera
+          papéis e acesso a projetos.
         </p>
       </Card>
     </div>

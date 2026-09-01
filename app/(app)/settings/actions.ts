@@ -4,7 +4,13 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireUser, canManageWorkspace, getCurrentRole } from "@/lib/auth/current";
 import { updateWorkspace } from "@/lib/db/workspace";
-import { addMemberToWorkspace, findUserByEmail, getMembership, removeMemberFromWorkspace } from "@/lib/db/users";
+import {
+  addMemberToWorkspace,
+  findUserByEmail,
+  getMembership,
+  removeMemberFromWorkspace,
+  updateMemberRole,
+} from "@/lib/db/users";
 import { setMembershipProjects } from "@/lib/db/member-projects";
 
 export type ActionResult = { ok: boolean; error?: string };
@@ -133,6 +139,53 @@ export async function setMemberProjectsAction(
   }
 
   revalidatePath("/settings/members");
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+const roleSchema = z.object({
+  role: z.enum(["admin", "editor", "viewer"]),
+});
+
+/**
+ * Troca o papel de um membro.
+ *
+ * Só o owner pode: o papel é o que concede poder no workspace, então deixar admins
+ * mexerem nele permitiria um admin promover a si mesmo por tabela ou rebaixar outro
+ * admin — a hierarquia deixaria de valer. É a mesma razão de setMemberProjectsAction
+ * ser exclusiva do owner.
+ *
+ * O papel `owner` não entra: não se promove ninguém a owner nem se rebaixa o owner
+ * atual, então o workspace segue com exatamente um dono.
+ */
+export async function setMemberRoleAction(
+  targetUserId: string,
+  input: unknown
+): Promise<ActionResult> {
+  const { workspaceId, userId } = await requireUser();
+
+  if ((await getCurrentRole()) !== "owner") {
+    return { ok: false, error: "Apenas o owner pode alterar papéis." };
+  }
+
+  const parsed = roleSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Papel inválido." };
+
+  if (targetUserId === userId) {
+    return { ok: false, error: "Você não pode alterar o próprio papel." };
+  }
+
+  const target = await getMembership(workspaceId, targetUserId);
+  if (!target) return { ok: false, error: "Membro não encontrado." };
+  if (target.role === "owner") {
+    return { ok: false, error: "O papel do owner não pode ser alterado." };
+  }
+  if (target.role === parsed.data.role) return { ok: true };
+
+  await updateMemberRole(workspaceId, targetUserId, parsed.data.role);
+
+  revalidatePath("/settings/members");
+  // o papel muda o que a pessoa pode fazer no app inteiro, não só nesta tela
   revalidatePath("/", "layout");
   return { ok: true };
 }
