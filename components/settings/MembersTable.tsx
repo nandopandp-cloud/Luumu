@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { MoreHorizontal, Trash2, Loader2, AlertTriangle, FolderCog, UserCog } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -20,6 +21,7 @@ export interface MemberRow {
   name: string;
   email: string;
   role: string;
+  avatarUrl: string | null;
   /** projetos que o membro enxerga; [] = todos (convenção do backend) */
   projectIds: string[];
 }
@@ -96,9 +98,19 @@ export function MembersTable({
                 <tr key={m.id} className="group border-b border-line last:border-0 hover:bg-bg-sunken/50">
                   <td className="px-6 py-3.5">
                     <div className="flex items-center gap-3">
-                      <span className="grid size-9 place-items-center rounded-full text-sm font-bold text-white [background:var(--grad-marca)]">
-                        {m.name.charAt(0).toUpperCase()}
-                      </span>
+                      {m.avatarUrl ? (
+                        <Image
+                          src={m.avatarUrl}
+                          alt=""
+                          width={36}
+                          height={36}
+                          className="size-9 rounded-full object-cover"
+                        />
+                      ) : (
+                        <span className="grid size-9 place-items-center rounded-full text-sm font-bold text-white [background:var(--grad-marca)]">
+                          {m.name.charAt(0).toUpperCase()}
+                        </span>
+                      )}
                       <div>
                         <div className="font-semibold">
                           {m.name}

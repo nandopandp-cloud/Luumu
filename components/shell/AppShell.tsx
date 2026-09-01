@@ -13,7 +13,7 @@ export function AppShell({
   activeProjectId,
 }: {
   children: React.ReactNode;
-  user: { name: string; email: string };
+  user: { name: string; email: string; avatarUrl: string | null };
   workspace: { name: string; plan: string; logoUrl: string | null };
   projects: { id: string; name: string; logoUrl: string | null }[];
   activeProjectId: string | null;

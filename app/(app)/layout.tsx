@@ -2,13 +2,14 @@ import { AppShell } from "@/components/shell/AppShell";
 import { NoProjectAccess } from "@/components/shell/NoProjectAccess";
 import { ToastProvider } from "@/components/ui/Toast";
 import { requireUser, getCurrentProject, getVisibleProjects } from "@/lib/auth/current";
+import { getUserById } from "@/lib/db/users";
 import { db } from "@/lib/db/client";
 import { workspaces } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await requireUser();
-  const [wsRows, projectList, activeProject] = await Promise.all([
+  const [wsRows, projectList, activeProject, me] = await Promise.all([
     db
       .select({ name: workspaces.name, plan: workspaces.plan, logoUrl: workspaces.logoUrl })
       .from(workspaces)
@@ -16,13 +17,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       .limit(1),
     getVisibleProjects(),
     getCurrentProject(),
+    // a foto vem do banco: o JWT da sessão é emitido no login e não acompanha trocas
+    getUserById(session.userId),
   ]);
   const ws = wsRows[0];
 
   return (
     <ToastProvider>
       <AppShell
-        user={{ name: session.name, email: session.email }}
+        user={{ name: session.name, email: session.email, avatarUrl: me?.avatarUrl ?? null }}
         workspace={{ name: ws?.name ?? "Workspace", plan: ws?.plan ?? "growth", logoUrl: ws?.logoUrl ?? null }}
         projects={projectList.map((p) => ({ id: p.id, name: p.name, logoUrl: p.logoUrl }))}
         activeProjectId={activeProject?.id ?? null}

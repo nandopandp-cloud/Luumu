@@ -1,11 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { Bell, Menu, Search, LogOut, ChevronDown } from "lucide-react";
+import Image from "next/image";
+import Link from "next/link";
+import { Bell, Menu, Search, LogOut, ChevronDown, UserRound } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
 import { logoutAction } from "@/app/(auth)/actions";
 
-export function Topbar({ onMenu, user }: { onMenu: () => void; user: { name: string; email: string } }) {
+export function Topbar({
+  onMenu,
+  user,
+}: {
+  onMenu: () => void;
+  user: { name: string; email: string; avatarUrl: string | null };
+}) {
   const [open, setOpen] = useState(false);
   const firstName = user.name.split(" ")[0];
   const initial = user.name.charAt(0).toUpperCase();
@@ -45,9 +53,19 @@ export function Topbar({ onMenu, user }: { onMenu: () => void; user: { name: str
           onClick={() => setOpen((v) => !v)}
           className="ml-1 flex items-center gap-2 rounded-full border border-line bg-bg-elev py-1 pl-1 pr-3 transition hover:border-line-strong"
         >
-          <span className="grid size-8 place-items-center rounded-full text-sm font-bold text-white [background:var(--grad-marca)]">
-            {initial}
-          </span>
+          {user.avatarUrl ? (
+            <Image
+              src={user.avatarUrl}
+              alt=""
+              width={32}
+              height={32}
+              className="size-8 rounded-full object-cover"
+            />
+          ) : (
+            <span className="grid size-8 place-items-center rounded-full text-sm font-bold text-white [background:var(--grad-marca)]">
+              {initial}
+            </span>
+          )}
           <span className="hidden text-sm font-semibold sm:inline">{firstName}</span>
           <ChevronDown className="size-4 text-fg-mut" />
         </button>
@@ -60,6 +78,13 @@ export function Topbar({ onMenu, user }: { onMenu: () => void; user: { name: str
                 <div className="text-sm font-semibold">{user.name}</div>
                 <div className="truncate text-xs text-fg-mut">{user.email}</div>
               </div>
+              <Link
+                href="/settings/profile"
+                onClick={() => setOpen(false)}
+                className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-sm font-medium text-fg-soft transition hover:bg-bg-sunken"
+              >
+                <UserRound className="size-4" /> Meu perfil
+              </Link>
               <form action={logoutAction}>
                 <button
                   type="submit"

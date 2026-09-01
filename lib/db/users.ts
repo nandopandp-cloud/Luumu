@@ -54,6 +54,23 @@ export async function addMemberToWorkspace(input: {
   return userId;
 }
 
+/** Usuário por id (ou null). */
+export async function getUserById(userId: string) {
+  const [u] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  return u ?? null;
+}
+
+/** Grava o novo hash de senha do usuário. */
+export async function updateUserPassword(userId: string, password: string) {
+  const passwordHash = await hashPassword(password);
+  await db.update(users).set({ passwordHash }).where(eq(users.id, userId));
+}
+
+/** Atualiza a foto de perfil (ou remove, passando null). */
+export async function updateUserAvatar(userId: string, avatarUrl: string | null) {
+  await db.update(users).set({ avatarUrl }).where(eq(users.id, userId));
+}
+
 /** Membership de um usuário específico dentro de um workspace (ou null). */
 export async function getMembership(workspaceId: string, userId: string) {
   const [m] = await db
@@ -113,6 +130,7 @@ export async function listWorkspaceMembers(workspaceId: string) {
       name: users.name,
       email: users.email,
       role: memberships.role,
+      avatarUrl: users.avatarUrl,
       membershipId: memberships.id,
     })
     .from(memberships)

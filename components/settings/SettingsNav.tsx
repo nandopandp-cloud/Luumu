@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 
 const tabs = [
   { href: "/settings", label: "Workspace" },
+  { href: "/settings/profile", label: "Meu perfil" },
   { href: "/settings/members", label: "Membros" },
   { href: "/settings/billing", label: "Plano & Cobrança" },
 ];
