@@ -6,7 +6,7 @@ import { ExportMenu } from "@/components/responses/ExportMenu";
 import { SurveySubnav } from "@/components/survey/SurveySubnav";
 import { getSurvey } from "@/lib/db/surveys";
 import { listResponses, getStats, getScoreDistribution, getWordCloud, getMainScore } from "@/lib/db/responses";
-import { getCurrentWorkspaceId } from "@/lib/auth/current";
+import { getCurrentProjectId } from "@/lib/auth/current";
 import { timeAgo } from "@/lib/utils";
 import { formatScore } from "@/lib/scoring";
 
@@ -18,8 +18,10 @@ export default async function SurveyResponsesPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const workspaceId = await getCurrentWorkspaceId();
-  const survey = await getSurvey(id, { workspaceId });
+  // escopo por projeto ativo (e não só por workspace): impede abrir por URL direta
+  // uma pesquisa de projeto que o membro não tem permissão de ver
+  const projectId = await getCurrentProjectId();
+  const survey = await getSurvey(id, { projectId });
   if (!survey) notFound();
 
   const scope = { projectId: survey.projectId, surveyId: id };

@@ -63,6 +63,31 @@ export const projects = pgTable(
   (t) => [index("projects_ws_idx").on(t.workspaceId)]
 );
 
+/**
+ * Escopo de projetos de um membro. Regra (importante): a AUSÊNCIA de linhas para uma
+ * membership significa "acesso a todos os projetos do workspace" — é o padrão de todo
+ * membro novo e o comportamento histórico. Havendo ao menos uma linha, o membro passa a
+ * enxergar SOMENTE os projetos listados aqui. O owner ignora esta tabela: vê sempre tudo.
+ */
+export const membershipProjects = pgTable(
+  "membership_projects",
+  {
+    id: text("id").primaryKey(),
+    membershipId: text("membership_id")
+      .notNull()
+      .references(() => memberships.id, { onDelete: "cascade" }),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("membership_projects_uidx").on(t.membershipId, t.projectId),
+    index("membership_projects_membership_idx").on(t.membershipId),
+    index("membership_projects_project_idx").on(t.projectId),
+  ]
+);
+
 export const apiKeys = pgTable(
   "api_keys",
   {
@@ -266,6 +291,7 @@ export type Response = typeof responses.$inferSelect;
 export type Answer = typeof answers.$inferSelect;
 export type User = typeof users.$inferSelect;
 export type Membership = typeof memberships.$inferSelect;
+export type MembershipProject = typeof membershipProjects.$inferSelect;
 export type ApiKey = typeof apiKeys.$inferSelect;
 export type Event = typeof events.$inferSelect;
 export type Project = typeof projects.$inferSelect;

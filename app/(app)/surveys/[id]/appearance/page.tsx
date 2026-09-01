@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/Badge";
 import { SurveySubnav } from "@/components/survey/SurveySubnav";
 import { AppearanceEditor } from "@/components/survey/AppearanceEditor";
 import { getSurveyWithQuestions } from "@/lib/db/surveys";
-import { getCurrentWorkspaceId } from "@/lib/auth/current";
+import { getCurrentProjectId } from "@/lib/auth/current";
 import { normalizeAppearance, type BuilderQuestion } from "@/lib/builder";
 
 export const dynamic = "force-dynamic";
@@ -20,8 +20,10 @@ export default async function AppearancePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const workspaceId = await getCurrentWorkspaceId();
-  const data = await getSurveyWithQuestions(id, { workspaceId });
+  // escopo por projeto ativo (e não só por workspace): impede abrir por URL direta
+  // uma pesquisa de projeto que o membro não tem permissão de ver
+  const projectId = await getCurrentProjectId();
+  const data = await getSurveyWithQuestions(id, { projectId });
   if (!data) notFound();
   const { survey, questions } = data;
 

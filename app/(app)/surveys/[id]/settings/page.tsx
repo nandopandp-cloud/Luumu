@@ -6,7 +6,7 @@ import { SurveySubnav } from "@/components/survey/SurveySubnav";
 import { getSurvey } from "@/lib/db/surveys";
 import { listEvents } from "@/lib/db/events";
 import { getStats } from "@/lib/db/responses";
-import { getCurrentWorkspaceId } from "@/lib/auth/current";
+import { getCurrentProjectId } from "@/lib/auth/current";
 
 export const dynamic = "force-dynamic";
 
@@ -16,8 +16,10 @@ export default async function SurveySettingsPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const workspaceId = await getCurrentWorkspaceId();
-  const survey = await getSurvey(id, { workspaceId });
+  // escopo por projeto ativo (e não só por workspace): impede abrir por URL direta
+  // uma pesquisa de projeto que o membro não tem permissão de ver
+  const projectId = await getCurrentProjectId();
+  const survey = await getSurvey(id, { projectId });
   if (!survey) notFound();
   // eventos disponíveis como gatilho são os do projeto desta pesquisa
   const [events, stats] = await Promise.all([

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { put } from "@vercel/blob";
 import { getSession } from "@/lib/auth/session";
-import { canManageWorkspace } from "@/lib/auth/current";
+import { canManageWorkspace, canAccessProject } from "@/lib/auth/current";
 import { getProject, updateProjectLogo } from "@/lib/db/projects";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +24,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { id: projectId } = await params;
   const project = await getProject(projectId, session.workspaceId);
   if (!project) return NextResponse.json({ error: "Projeto não encontrado." }, { status: 404 });
+  // admin com escopo restrito não edita projeto fora do seu escopo
+  if (!(await canAccessProject(projectId))) {
+    return NextResponse.json({ error: "Sem acesso a este projeto." }, { status: 403 });
+  }
 
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
     return NextResponse.json(

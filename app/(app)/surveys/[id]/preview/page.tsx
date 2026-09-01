@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/Badge";
 import { LuumuLogo } from "@/components/ui/Mascot";
 import { SurveyRenderer } from "@/components/survey/SurveyRenderer";
 import { getSurveyWithQuestions } from "@/lib/db/surveys";
-import { getCurrentWorkspaceId } from "@/lib/auth/current";
+import { getCurrentProjectId } from "@/lib/auth/current";
 import type { BuilderQuestion } from "@/lib/builder";
 
 export default async function PreviewPage({
@@ -15,8 +15,10 @@ export default async function PreviewPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const workspaceId = await getCurrentWorkspaceId();
-  const data = await getSurveyWithQuestions(id, { workspaceId });
+  // escopo por projeto ativo (e não só por workspace): impede abrir por URL direta
+  // uma pesquisa de projeto que o membro não tem permissão de ver
+  const projectId = await getCurrentProjectId();
+  const data = await getSurveyWithQuestions(id, { projectId });
   if (!data) notFound();
   const { survey, questions } = data;
 

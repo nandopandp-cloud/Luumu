@@ -92,7 +92,10 @@ export async function listSurveys(projectId: string) {
  * a survey não pertença a ele). O painel passa workspaceId; a API pública passa
  * projectId (resolvido da SDK key).
  */
-export async function getSurvey(id: string, scope?: { workspaceId?: string; projectId?: string }) {
+/** Escopo de tenant de uma pesquisa: workspace e/ou projeto. */
+export type SurveyScope = { workspaceId?: string; projectId?: string };
+
+export async function getSurvey(id: string, scope?: SurveyScope) {
   const [s] = await db.select().from(surveys).where(eq(surveys.id, id)).limit(1);
   if (!s) return null;
   if (scope?.workspaceId && s.workspaceId !== scope.workspaceId) return null;
@@ -106,7 +109,7 @@ export async function getSurvey(id: string, scope?: { workspaceId?: string; proj
  * o resultado de `qs` é descartado sem custo adicional (já veio junto, em paralelo).
  * Usado nas páginas mais visitadas ao editar uma pesquisa (builder/appearance/preview).
  */
-export async function getSurveyWithQuestions(id: string, scope?: { workspaceId?: string; projectId?: string }) {
+export async function getSurveyWithQuestions(id: string, scope?: SurveyScope) {
   const [s, qs] = await Promise.all([
     getSurvey(id, scope),
     db.select().from(questions).where(eq(questions.surveyId, id)).orderBy(asc(questions.order)),
@@ -115,11 +118,21 @@ export async function getSurveyWithQuestions(id: string, scope?: { workspaceId?:
   return { survey: s, questions: qs };
 }
 
-/** Garante que a pesquisa pertence ao workspace; lança se não. */
-async function assertOwned(id: string, workspaceId: string) {
-  const s = await getSurvey(id, { workspaceId });
+/**
+ * Garante que a pesquisa está dentro do escopo de quem chama; lança se não.
+ * As chamadas autenticadas passam `{ projectId }` (o projeto ativo, já filtrado pelo
+ * escopo do membro), e não apenas o workspace — assim um membro restrito ao projeto A
+ * não altera por id direto uma pesquisa do projeto B, que é do mesmo workspace.
+ */
+async function assertOwned(id: string, scope: SurveyScope) {
+  // um escopo vazio faria getSurvey aceitar qualquer pesquisa do banco; recusamos em vez
+  // de degradar silenciosamente para "sem verificação de tenant"
+  if (!scope.workspaceId && !scope.projectId) {
+    throw new Error("Escopo obrigatório para alterar uma pesquisa.");
+  }
+  const s = await getSurvey(id, scope);
   if (!s) {
-    throw new Error("Pesquisa não encontrada neste workspace.");
+    throw new Error("Pesquisa não encontrada neste escopo.");
   }
   return s;
 }
@@ -156,10 +169,10 @@ export async function createSurveyFromTemplate(workspaceId: string, projectId: s
 
 export async function updateSurvey(
   id: string,
-  workspaceId: string,
+  scope: SurveyScope,
   patch: Partial<Pick<SurveyRow, "name" | "type" | "channel" | "audience" | "segment" | "language" | "trigger" | "triggerEvent" | "triggerEvents" | "audienceMode" | "audienceList" | "frequency" | "delay" | "startsAt" | "endsAt" | "responseLimit">>
 ) {
-  await assertOwned(id, workspaceId);
+  await assertOwned(id, scope);
   await db.update(surveys).set({ ...patch, updatedAt: new Date() }).where(eq(surveys.id, id));
 }
 
@@ -173,10 +186,10 @@ export async function updateSurvey(
  */
 export async function replaceQuestions(
   id: string,
-  workspaceId: string,
+  scope: SurveyScope,
   qs: { uid?: string; blockId: string; title: string; required: boolean; config?: unknown; logic?: unknown }[]
 ) {
-  await assertOwned(id, workspaceId);
+  await assertOwned(id, scope);
   await db.delete(questions).where(eq(questions.surveyId, id));
   if (qs.length) {
     const realIds = qs.map(() => questionId());
@@ -209,16 +222,16 @@ export async function replaceQuestions(
   await db.update(surveys).set({ updatedAt: new Date() }).where(eq(surveys.id, id));
 }
 
-export async function publishSurvey(id: string, workspaceId: string) {
-  await assertOwned(id, workspaceId);
+export async function publishSurvey(id: string, scope: SurveyScope) {
+  await assertOwned(id, scope);
   await db
     .update(surveys)
     .set({ status: "ativa", publishedAt: new Date(), updatedAt: new Date() })
     .where(eq(surveys.id, id));
 }
 
-export async function setSurveyStatus(id: string, workspaceId: string, status: SurveyStatus) {
-  await assertOwned(id, workspaceId);
+export async function setSurveyStatus(id: string, scope: SurveyScope, status: SurveyStatus) {
+  await assertOwned(id, scope);
   await db.update(surveys).set({ status, updatedAt: new Date() }).where(eq(surveys.id, id));
 }
 
@@ -238,14 +251,14 @@ export async function enforceResponseLimit(id: string) {
   }
 }
 
-export async function deleteSurvey(id: string, workspaceId: string) {
-  await assertOwned(id, workspaceId);
+export async function deleteSurvey(id: string, scope: SurveyScope) {
+  await assertOwned(id, scope);
   await db.delete(surveys).where(eq(surveys.id, id));
 }
 
 /** Salva a aparência do widget embutido. */
-export async function saveAppearance(id: string, workspaceId: string, appearance: Appearance) {
-  await assertOwned(id, workspaceId);
+export async function saveAppearance(id: string, scope: SurveyScope, appearance: Appearance) {
+  await assertOwned(id, scope);
   await db.update(surveys).set({ appearance, updatedAt: new Date() }).where(eq(surveys.id, id));
 }
 

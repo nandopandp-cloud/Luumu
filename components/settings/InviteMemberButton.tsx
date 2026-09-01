@@ -8,6 +8,7 @@ import { Field, Input, Select } from "@/components/ui/Input";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { useToast } from "@/components/ui/Toast";
 import { inviteMemberAction } from "@/app/(app)/settings/actions";
+import { ProjectScopePicker, type ProjectOption } from "./ProjectScopePicker";
 
 function randomPassword() {
   // senha temporária legível (o admin repassa ao novo membro)
@@ -17,7 +18,15 @@ function randomPassword() {
   return s;
 }
 
-export function InviteMemberButton({ canManage }: { canManage: boolean }) {
+export function InviteMemberButton({
+  canManage,
+  isOwner,
+  projects,
+}: {
+  canManage: boolean;
+  isOwner: boolean;
+  projects: ProjectOption[];
+}) {
   const [open, setOpen] = useState(false);
 
   if (!canManage) {
@@ -33,16 +42,28 @@ export function InviteMemberButton({ canManage }: { canManage: boolean }) {
       <Button size="sm" onClick={() => setOpen(true)}>
         <UserPlus className="size-4" /> Convidar membro
       </Button>
-      {open && <InviteDialog onClose={() => setOpen(false)} />}
+      {open && (
+        <InviteDialog onClose={() => setOpen(false)} isOwner={isOwner} projects={projects} />
+      )}
     </>
   );
 }
 
-function InviteDialog({ onClose }: { onClose: () => void }) {
+function InviteDialog({
+  onClose,
+  isOwner,
+  projects,
+}: {
+  onClose: () => void;
+  isOwner: boolean;
+  projects: ProjectOption[];
+}) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState(randomPassword());
   const [role, setRole] = useState<"admin" | "editor" | "viewer">("editor");
+  // [] = acesso a todos os projetos (convenção do backend)
+  const [projectIds, setProjectIds] = useState<string[]>([]);
   const [saving, start] = useTransition();
   const [copied, setCopied] = useState(false);
   const router = useRouter();
@@ -52,7 +73,7 @@ function InviteDialog({ onClose }: { onClose: () => void }) {
 
   function submit() {
     start(async () => {
-      const res = await inviteMemberAction({ name, email, password, role });
+      const res = await inviteMemberAction({ name, email, password, role, projectIds });
       if (res.ok) {
         toast("success", "Membro adicionado.");
         onClose();
@@ -66,7 +87,7 @@ function InviteDialog({ onClose }: { onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-md rounded-2xl border border-line bg-bg-elev p-6 shadow-[var(--shadow-lg)]">
+      <div className="relative z-10 max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-line bg-bg-elev p-6 shadow-[var(--shadow-lg)]">
         <h3 className="font-display text-lg font-bold">Convidar membro</h3>
         <p className="mt-1 text-sm text-fg-mut">
           Crie o acesso com uma senha temporária e repasse ao novo membro. Ele poderá trocá-la depois.
@@ -105,6 +126,15 @@ function InviteDialog({ onClose }: { onClose: () => void }) {
               <option value="viewer">Viewer</option>
             </Select>
           </Field>
+          {isOwner && (
+            <Field label="Acesso a projetos">
+              <ProjectScopePicker
+                projects={projects}
+                selected={projectIds}
+                onChange={setProjectIds}
+              />
+            </Field>
+          )}
         </div>
 
         <div className="mt-5 flex justify-end gap-2">

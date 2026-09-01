@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requireUser, canManageWorkspace, getCurrentRole } from "@/lib/auth/current";
 import { updateWorkspace } from "@/lib/db/workspace";
 import { addMemberToWorkspace, findUserByEmail, getMembership, removeMemberFromWorkspace } from "@/lib/db/users";
+import { setMembershipProjects } from "@/lib/db/member-projects";
 
 export type ActionResult = { ok: boolean; error?: string };
 
@@ -54,6 +55,8 @@ const memberSchema = z.object({
   email: z.string().trim().email("E-mail inválido."),
   password: z.string().min(6, "A senha temporária precisa ter ao menos 6 caracteres."),
   role: z.enum(["admin", "editor", "viewer"]),
+  // projetos visíveis ao membro; [] = todos os projetos do workspace
+  projectIds: z.array(z.string()).default([]),
 });
 
 /** Convite simples: cria um membro no workspace com senha temporária. Só owner/admin. */
@@ -69,8 +72,13 @@ export async function inviteMemberAction(input: unknown): Promise<ActionResult> 
   const existing = await findUserByEmail(parsed.data.email);
   if (existing) return { ok: false, error: "Já existe uma conta com este e-mail." };
 
+  // escopo de projetos é prerrogativa do owner (ver setMemberProjectsAction); no convite
+  // feito por um admin o campo é ignorado e o membro nasce com acesso a todos os projetos
+  const isOwner = (await getCurrentRole()) === "owner";
+  const projectIds = isOwner ? parsed.data.projectIds : [];
+
   try {
-    await addMemberToWorkspace({ workspaceId, ...parsed.data });
+    await addMemberToWorkspace({ workspaceId, ...parsed.data, projectIds });
   } catch (err) {
     if (typeof err === "object" && err !== null && "code" in err && (err as { code: unknown }).code === "23505") {
       return { ok: false, error: "Já existe uma conta com este e-mail." };
@@ -79,6 +87,53 @@ export async function inviteMemberAction(input: unknown): Promise<ActionResult> 
   }
 
   revalidatePath("/settings/members");
+  return { ok: true };
+}
+
+const scopeSchema = z.object({
+  projectIds: z.array(z.string()),
+});
+
+/**
+ * Define quais projetos um membro enxerga. Lista vazia = acesso a todos os projetos
+ * (inclusive os criados depois), que é o padrão de quem nunca teve escopo definido.
+ *
+ * Só o owner pode mexer nisto. Um admin não pode, porque o escopo é justamente o que o
+ * limita: se admins editassem escopos, um admin restrito ao projeto X ampliaria o próprio
+ * acesso (ou o de um colega) para o workspace inteiro, e a restrição não valeria nada.
+ */
+export async function setMemberProjectsAction(
+  targetUserId: string,
+  input: unknown
+): Promise<ActionResult> {
+  const { workspaceId, userId } = await requireUser();
+
+  if ((await getCurrentRole()) !== "owner") {
+    return { ok: false, error: "Apenas o owner pode definir o acesso a projetos." };
+  }
+
+  const parsed = scopeSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Seleção de projetos inválida." };
+
+  if (targetUserId === userId) {
+    return { ok: false, error: "O owner tem acesso a todos os projetos." };
+  }
+
+  const target = await getMembership(workspaceId, targetUserId);
+  if (!target) return { ok: false, error: "Membro não encontrado." };
+  if (target.role === "owner") {
+    return { ok: false, error: "O owner tem acesso a todos os projetos." };
+  }
+
+  // setMembershipProjects descarta ids fora do workspace; se sobrar nada de uma seleção
+  // não-vazia, os ids eram inválidos — salvar viraria "acesso a tudo", o oposto do pedido.
+  const saved = await setMembershipProjects(target.id, workspaceId, parsed.data.projectIds);
+  if (parsed.data.projectIds.length > 0 && saved.length === 0) {
+    return { ok: false, error: "Nenhum dos projetos selecionados pertence a este workspace." };
+  }
+
+  revalidatePath("/settings/members");
+  revalidatePath("/", "layout");
   return { ok: true };
 }
 

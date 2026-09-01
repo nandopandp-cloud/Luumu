@@ -3,9 +3,8 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { SettingsNav } from "@/components/settings/SettingsNav";
 import { WorkspaceForm } from "@/components/settings/WorkspaceForm";
 import { ProjectsCard } from "@/components/settings/ProjectsCard";
-import { requireUser, canManageWorkspace, getCurrentProject } from "@/lib/auth/current";
+import { requireUser, canManageWorkspace, getCurrentProject, getVisibleProjects } from "@/lib/auth/current";
 import { getWorkspace } from "@/lib/db/workspace";
-import { listProjects } from "@/lib/db/projects";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +13,7 @@ export default async function SettingsPage() {
   const [ws, canManage, projectList, activeProject] = await Promise.all([
     getWorkspace(workspaceId),
     canManageWorkspace(),
-    listProjects(workspaceId),
+    getVisibleProjects(),
     getCurrentProject(),
   ]);
   if (!ws) notFound();

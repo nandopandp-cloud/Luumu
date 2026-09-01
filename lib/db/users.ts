@@ -5,6 +5,7 @@ import { users, memberships, workspaces } from "@/db/schema";
 import { newId } from "./ids";
 import { hashPassword } from "@/lib/auth/password";
 import { createProject } from "./projects";
+import { getScopesByMembership, setMembershipProjects } from "./member-projects";
 
 export async function findUserByEmail(email: string) {
   const [u] = await db.select().from(users).where(eq(users.email, email.toLowerCase())).limit(1);
@@ -31,18 +32,25 @@ export async function addMemberToWorkspace(input: {
   email: string;
   password: string;
   role: "admin" | "editor" | "viewer";
+  /** projetos que o membro poderá ver; vazio/omisso = todos os projetos do workspace */
+  projectIds?: string[];
 }) {
   const email = input.email.toLowerCase();
   const userId = newId("usr");
+  const membershipId = newId("mem");
   const passwordHash = await hashPassword(input.password);
 
   await db.insert(users).values({ id: userId, email, name: input.name, passwordHash });
   await db.insert(memberships).values({
-    id: newId("mem"),
+    id: membershipId,
     userId,
     workspaceId: input.workspaceId,
     role: input.role,
   });
+
+  if (input.projectIds && input.projectIds.length > 0) {
+    await setMembershipProjects(membershipId, input.workspaceId, input.projectIds);
+  }
   return userId;
 }
 
@@ -83,10 +91,28 @@ export async function listWorkspaceMembers(workspaceId: string) {
       name: users.name,
       email: users.email,
       role: memberships.role,
+      membershipId: memberships.id,
     })
     .from(memberships)
     .innerJoin(users, eq(memberships.userId, users.id))
     .where(eq(memberships.workspaceId, workspaceId));
+}
+
+/**
+ * Membros do workspace já com o escopo de projetos de cada um.
+ * `projectIds: []` = acesso a todos os projetos (sem restrição) — a mesma convenção da
+ * tabela membership_projects. O owner é sempre irrestrito.
+ */
+export async function listWorkspaceMembersWithScope(workspaceId: string) {
+  const [members, scopes] = await Promise.all([
+    listWorkspaceMembers(workspaceId),
+    getScopesByMembership(workspaceId),
+  ]);
+
+  return members.map((m) => ({
+    ...m,
+    projectIds: m.role === "owner" ? [] : scopes.get(m.membershipId) ?? [],
+  }));
 }
 
 /**

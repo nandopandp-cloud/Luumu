@@ -4,7 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { SurveyBuilder } from "@/components/survey-builder/SurveyBuilder";
 import { SurveySubnav } from "@/components/survey/SurveySubnav";
 import { getSurveyWithQuestions } from "@/lib/db/surveys";
-import { getCurrentWorkspaceId } from "@/lib/auth/current";
+import { getCurrentProjectId } from "@/lib/auth/current";
 import type { BuilderQuestion } from "@/lib/builder";
 
 export default async function BuilderPage({
@@ -13,8 +13,10 @@ export default async function BuilderPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const workspaceId = await getCurrentWorkspaceId();
-  const data = await getSurveyWithQuestions(id, { workspaceId });
+  // escopo por projeto ativo (e não só por workspace): impede abrir por URL direta
+  // uma pesquisa de projeto que o membro não tem permissão de ver
+  const projectId = await getCurrentProjectId();
+  const data = await getSurveyWithQuestions(id, { projectId });
   if (!data) notFound();
   const { survey, questions } = data;
 

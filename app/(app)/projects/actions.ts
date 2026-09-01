@@ -3,7 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { z } from "zod";
-import { requireUser, canManageWorkspace, PROJECT_COOKIE_NAME } from "@/lib/auth/current";
+import {
+  requireUser,
+  canManageWorkspace,
+  canAccessProject,
+  PROJECT_COOKIE_NAME,
+} from "@/lib/auth/current";
 import {
   createProject,
   renameProject,
@@ -14,11 +19,18 @@ import {
 
 export type ProjectResult = { ok: boolean; error?: string };
 
-/** Define o projeto ativo (grava no cookie). Valida que pertence ao workspace. */
+/**
+ * Define o projeto ativo (grava no cookie). Valida que o projeto pertence ao workspace e
+ * que está no escopo do membro — a action é um endpoint POST alcançável diretamente, então
+ * a checagem não pode depender do switcher só mostrar as opções permitidas.
+ */
 export async function switchProjectAction(projectId: string): Promise<ProjectResult> {
   const { workspaceId } = await requireUser();
   const project = await getProject(projectId, workspaceId);
   if (!project) return { ok: false, error: "Projeto não encontrado." };
+  if (!(await canAccessProject(projectId))) {
+    return { ok: false, error: "Você não tem acesso a este projeto." };
+  }
 
   const store = await cookies();
   store.set(PROJECT_COOKIE_NAME, projectId, {
@@ -61,6 +73,9 @@ export async function renameProjectAction(projectId: string, input: unknown): Pr
 
   const project = await getProject(projectId, workspaceId);
   if (!project) return { ok: false, error: "Projeto não encontrado." };
+  if (!(await canAccessProject(projectId))) {
+    return { ok: false, error: "Você não tem acesso a este projeto." };
+  }
 
   await renameProject(projectId, workspaceId, parsed.data.name);
   revalidatePath("/settings");
@@ -78,6 +93,9 @@ export async function deleteProjectAction(projectId: string): Promise<ProjectRes
   }
   const project = await getProject(projectId, workspaceId);
   if (!project) return { ok: false, error: "Projeto não encontrado." };
+  if (!(await canAccessProject(projectId))) {
+    return { ok: false, error: "Você não tem acesso a este projeto." };
+  }
 
   if ((await countProjects(workspaceId)) <= 1) {
     return { ok: false, error: "O workspace precisa de ao menos um projeto." };
