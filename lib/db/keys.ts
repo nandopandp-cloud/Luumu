@@ -3,6 +3,7 @@ import { and, desc, eq, isNull } from "drizzle-orm";
 import { customAlphabet } from "nanoid";
 import { createHash } from "crypto";
 import { db } from "./client";
+import { invalidateKeyCache } from "@/lib/api/keys";
 import { apiKeys } from "@/db/schema";
 import { newId } from "./ids";
 
@@ -60,6 +61,8 @@ export async function revokeApiKey(projectId: string, id: string) {
     .update(apiKeys)
     .set({ revokedAt: new Date() })
     .where(and(eq(apiKeys.id, id), eq(apiKeys.projectId, projectId)));
+  // resolveKey mantém as keys em cache; sem isto a key revogada seguiria aceita até o TTL
+  invalidateKeyCache();
 }
 
 export async function setKeyDomains(projectId: string, id: string, domains: string[]) {
@@ -67,4 +70,6 @@ export async function setKeyDomains(projectId: string, id: string, domains: stri
     .update(apiKeys)
     .set({ domains })
     .where(and(eq(apiKeys.id, id), eq(apiKeys.projectId, projectId)));
+  // a lista de domínios é checada no CORS a partir do cache: invalida para valer na hora
+  invalidateKeyCache();
 }

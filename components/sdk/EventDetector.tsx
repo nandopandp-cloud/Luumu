@@ -5,7 +5,6 @@ import { Loader2, CheckCircle2, Radio } from "lucide-react";
 
 interface EventRow {
   name: string;
-  count: number;
   lastSeenAt: string;
 }
 interface Status {
@@ -37,7 +36,7 @@ function timeAgo(iso: string): string {
  * Faz polling em /api/events/status enquanto a aba está visível.
  * initial vem do server (SSR) para não piscar "aguardando" quando já há eventos.
  */
-export function EventDetector({ initial }: { initial: Status }) {
+export function EventDetector({ initial, projectId }: { initial: Status; projectId?: string }) {
   const [status, setStatus] = useState<Status>(initial);
   const [justArrived, setJustArrived] = useState(false);
   const prevTotal = useRef(initial.total);
@@ -47,7 +46,8 @@ export function EventDetector({ initial }: { initial: Status }) {
     async function poll() {
       if (document.hidden) return;
       try {
-        const r = await fetch("/api/events/status", { cache: "no-store" });
+        const qs = projectId ? `?projectId=${encodeURIComponent(projectId)}` : "";
+        const r = await fetch(`/api/events/status${qs}`, { cache: "no-store" });
         if (!r.ok || !alive) return;
         const data: Status = await r.json();
         if (data.total > prevTotal.current) {
@@ -60,13 +60,43 @@ export function EventDetector({ initial }: { initial: Status }) {
         /* silencioso: rede intermitente não deve quebrar o onboarding */
       }
     }
-    const id = setInterval(poll, 4000);
-    poll();
+    /*
+      O polling existe para o onboarding: mostrar "SDK conectado" assim que os primeiros
+      eventos chegam. A 4s fixos, uma aba aberta gerava ~900 requisições/hora — cada uma com
+      várias queries — mesmo num projeto já conectado, onde não há nada a descobrir.
+
+      Agora o intervalo acompanha a necessidade: rápido enquanto se espera o primeiro evento
+      (é quando o feedback importa), lento depois de conectado, e parado quando a aba está em
+      segundo plano — retomando na hora em que ela volta ao foco.
+    */
+    const FAST_MS = 5000;
+    const SLOW_MS = 60000;
+    let timer: ReturnType<typeof setTimeout>;
+
+    const delay = () => (prevTotal.current > 0 ? SLOW_MS : FAST_MS);
+    const schedule = () => {
+      clearTimeout(timer);
+      timer = setTimeout(tick, delay());
+    };
+    async function tick() {
+      if (!alive) return;
+      if (!document.hidden) await poll();
+      schedule();
+    }
+
+    const onVisible = () => {
+      if (!document.hidden) void tick();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
+    void poll();
+    schedule();
     return () => {
       alive = false;
-      clearInterval(id);
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisible);
     };
-  }, []);
+  }, [projectId]);
 
   if (!status.connected) {
     return (
@@ -94,8 +124,12 @@ export function EventDetector({ initial }: { initial: Status }) {
         ) : (
           <CheckCircle2 className="size-5 text-sucesso" />
         )}
+        {/*
+          Conta eventos DISTINTOS detectados, não ocorrências: o catálogo existe para escolher
+          gatilhos, e contar cada disparo custaria uma escrita no banco por clique rastreado.
+        */}
         <span className="text-sm font-semibold text-fg">
-          SDK conectado: {status.total} {status.total === 1 ? "evento recebido" : "eventos recebidos"}
+          SDK conectado: {status.total} {status.total === 1 ? "evento detectado" : "eventos detectados"}
         </span>
       </div>
       <ul className="flex flex-col gap-2">
@@ -112,7 +146,6 @@ export function EventDetector({ initial }: { initial: Status }) {
                 </code>
               </div>
               <div className="flex shrink-0 items-center gap-2 font-mono text-xs text-fg-mut">
-                <span>{e.count}×</span>
                 <span>{timeAgo(e.lastSeenAt)}</span>
               </div>
             </li>

@@ -40,10 +40,9 @@ export default async function SdkPage() {
 
   const initialStatus = {
     connected: events.length > 0,
-    total: events.reduce((s, e) => s + e.count, 0),
+    total: events.length, // eventos distintos detectados
     events: events.map((e) => ({
       name: e.name,
-      count: e.count,
       lastSeenAt: e.lastSeenAt instanceof Date ? e.lastSeenAt.toISOString() : String(e.lastSeenAt),
     })),
   };
@@ -151,7 +150,7 @@ async function handleLoginSuccess(user) {
               <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-fg-soft">
                 <MousePointerClick className="size-4 text-accent" /> Detecção ao vivo
               </div>
-              <EventDetector initial={initialStatus} />
+              <EventDetector initial={initialStatus} projectId={projectId} />
             </div>
 
             {/* Bloco 1: identify, necessário para segmentação por usuário */}

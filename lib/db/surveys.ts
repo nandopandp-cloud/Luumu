@@ -270,3 +270,28 @@ export async function listActiveSurveys(projectId: string) {
     .where(and(eq(surveys.projectId, projectId), eq(surveys.status, "ativa")))
     .orderBy(desc(surveys.publishedAt));
 }
+
+/**
+ * Versão enxuta para /api/v1/config — a rota que TODO visitante dos sites dos clientes chama.
+ * Seleciona só as 13 colunas que o SDK usa, em vez de `select()` (linha inteira, incluindo
+ * campos que o widget nunca lê). Menos bytes por linha, no endpoint de maior volume.
+ */
+export async function listActiveSurveysForSdk(projectId: string) {
+  return db
+    .select({
+      id: surveys.id,
+      name: surveys.name,
+      type: surveys.type,
+      appearance: surveys.appearance,
+      trigger: surveys.trigger,
+      triggerEvent: surveys.triggerEvent,
+      triggerEvents: surveys.triggerEvents,
+      audience: surveys.audience,
+      audienceMode: surveys.audienceMode,
+      audienceList: surveys.audienceList,
+      frequency: surveys.frequency,
+    })
+    .from(surveys)
+    .where(and(eq(surveys.projectId, projectId), eq(surveys.status, "ativa")))
+    .orderBy(desc(surveys.publishedAt));
+}

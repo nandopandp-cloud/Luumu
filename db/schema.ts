@@ -110,6 +110,12 @@ export const apiKeys = pgTable(
   ]
 );
 
+/**
+ * [EM DESUSO] O rate limit passou a ser contado em memória (lib/api/ratelimit.ts) — no banco
+ * era uma escrita por requisição do SDK, e sem rotina de limpeza a tabela só crescia.
+ * Mantida no schema para não exigir migração destrutiva; pode ser removida (DROP TABLE) num
+ * momento planejado. As linhas antigas podem ser apagadas com segurança a qualquer momento.
+ */
 export const rateLimits = pgTable(
   "rate_limits",
   {

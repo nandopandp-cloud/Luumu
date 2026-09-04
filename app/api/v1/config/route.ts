@@ -1,4 +1,4 @@
-import { listActiveSurveys } from "@/lib/db/surveys";
+import { listActiveSurveysForSdk } from "@/lib/db/surveys";
 import { normalizeAppearance } from "@/lib/builder";
 import { resolveKey } from "@/lib/api/keys";
 import { allowedOrigin, jsonCors, preflight } from "@/lib/api/cors";
@@ -26,7 +26,7 @@ export async function GET(req: Request) {
     return jsonCors({ error: "Origem não autorizada." }, { status: 403, origin: null });
   }
 
-  const active = await listActiveSurveys(resolved.projectId);
+  const active = await listActiveSurveysForSdk(resolved.projectId);
   return jsonCors(
     {
       surveys: active.map((s) => ({

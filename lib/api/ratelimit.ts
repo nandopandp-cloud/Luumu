@@ -1,31 +1,49 @@
 import "server-only";
-import { sql } from "drizzle-orm";
-import { db } from "@/lib/db/client";
-import { rateLimits } from "@/db/schema";
 
 /**
- * Rate limit por janela fixa de 1 minuto, contando por bucket (ex.: ip+key).
- * Usa UPSERT atômico no Postgres; reinicia a contagem quando a janela expira.
+ * Rate limit por janela fixa, contado em memória (por instância).
+ *
+ * Antes cada chamada era um UPSERT + RETURNING no Postgres — ou seja, uma escrita no banco
+ * por requisição do SDK, justamente o tráfego mais volumoso da plataforma. E como a tabela
+ * `rate_limits` nunca era limpa em produção, cada minuto deixava linhas novas para sempre.
+ *
+ * A troca é deliberada: um limite em memória vale por instância, então com N lambdas ativas
+ * o teto efetivo é N× o configurado. Para o que este limite existe — conter abuso e loop de
+ * SDK, não cobrar por uso — isso é suficiente, e custa zero de banco. Se algum dia for
+ * preciso um limite global exato, o lugar certo é um store dedicado (Redis/Upstash), não o
+ * Postgres transacional.
+ */
+
+interface Bucket {
+  count: number;
+  resetAt: number;
+}
+
+const buckets = new Map<string, Bucket>();
+let lastSweep = 0;
+
+/** Remove janelas expiradas para o Map não crescer indefinidamente. */
+function sweep(now: number) {
+  if (now - lastSweep < 60_000) return;
+  lastSweep = now;
+  for (const [k, b] of buckets) {
+    if (b.resetAt <= now) buckets.delete(k);
+  }
+}
+
+/**
  * Retorna true se DENTRO do limite, false se excedeu.
+ * Mantém a assinatura anterior — os chamadores não mudam.
  */
 export async function checkRateLimit(key: string, limit = 60, windowSec = 60): Promise<boolean> {
-  const now = new Date();
-  const windowId = Math.floor(now.getTime() / (windowSec * 1000));
-  const bucket = `${key}:${windowId}`;
+  const now = Date.now();
+  sweep(now);
 
-  try {
-    const rows = await db
-      .insert(rateLimits)
-      .values({ bucket, count: 1, windowStart: now })
-      .onConflictDoUpdate({
-        target: rateLimits.bucket,
-        set: { count: sql`${rateLimits.count} + 1` },
-      })
-      .returning({ count: rateLimits.count });
-    const count = rows[0]?.count ?? 1;
-    return count <= limit;
-  } catch {
-    // em caso de falha do store, não bloqueia (fail-open)
+  const b = buckets.get(key);
+  if (!b || b.resetAt <= now) {
+    buckets.set(key, { count: 1, resetAt: now + windowSec * 1000 });
     return true;
   }
+  b.count += 1;
+  return b.count <= limit;
 }
