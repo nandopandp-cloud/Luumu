@@ -1,11 +1,19 @@
 /**
  * Limpa o catálogo de eventos, que cresceu sem limite antes da normalização de rotas/rótulos
- * no SDK: cada id em URL ("/quiz/<uuid>/result") e cada rótulo com número ("unidade 6…")
- * virava um evento distinto.
+ * no SDK: cada id em URL ("/quiz/<uuid>/result") virava um evento distinto.
  *
- * O que faz: reagrupa os eventos existentes pelo padrão da rota/rótulo, mantém um registro
- * por padrão (o mais recente) e apaga o resto. Eventos usados como gatilho de alguma survey
- * são SEMPRE preservados, para não quebrar pesquisas no ar.
+ * PRINCÍPIO: o catálogo deve ter UM registro por rota/ação existente no produto. O objetivo é
+ * remover as variações da MESMA rota, nunca rotas diferentes. Por isso a regra é conservadora
+ * — só agrupa o que é comprovadamente a mesma tela com um identificador no meio:
+ *
+ *   REMOVE (mesma rota, ids diferentes)      /quiz/<uuid>/result, /quiz/<outro-uuid>/result
+ *   MANTÉM (rotas diferentes de verdade)     /enem/2024 e /enem/2025, /trilha/1 e /trilha/2
+ *
+ * Números "crus" (2024, 1, 2) NÃO são tratados como id: podem ser ano, série ou nível — telas
+ * legítimas do produto. Só viram id os formatos que não têm como ser rota escrita à mão:
+ * uuid, hash hexadecimal longo e id com prefixo (usr_ab12cd34).
+ *
+ * Eventos usados como gatilho de alguma survey são SEMPRE preservados.
  *
  *   npx tsx --tsconfig scripts/tsconfig.scripts.json scripts/prune-events.ts          # simula
  *   npx tsx --tsconfig scripts/tsconfig.scripts.json scripts/prune-events.ts --apply  # aplica
@@ -17,14 +25,18 @@ import { events, surveys } from "../db/schema";
 
 const APPLY = process.argv.includes("--apply");
 
-/** Mesma ideia do routePattern/labelPattern do SDK, aplicada a nomes já gravados. */
+/**
+ * Só substitui trechos que são inequivocamente identificadores gerados por máquina.
+ * Um evento sem nenhum identificador assim é único por definição e nunca entra em grupo.
+ */
 function pattern(name: string): string {
   return name
-    .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, "id")
-    .replace(/[0-9a-f]{16,}/gi, "id")
-    .replace(/\d+/g, "n")
-    .replace(/_{2,}/g, "_")
-    .slice(0, 64);
+    .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, ":id") // uuid
+    .replace(/\b[0-9a-f]{16,}\b/gi, ":id") // hash hex longo
+    // id com prefixo (usr_ab12cd34): exige dígito E letra na parte aleatória, senão
+    // "link_biblioteca" e "page_view_biblioteca" seriam confundidos com identificadores
+    .replace(/\b[a-z]{2,5}_(?=[A-Za-z0-9]*\d)(?=[A-Za-z0-9]*[a-zA-Z])[A-Za-z0-9]{8,}\b/g, ":id")
+    .replace(/\b\d{6,}\b/g, ":id"); // sequência longa de dígitos (timestamp, id numérico)
 }
 
 async function main() {
@@ -33,7 +45,6 @@ async function main() {
     .from(events);
   console.log(`eventos no catálogo: ${all.length}`);
 
-  // nomes em uso como gatilho: nunca remover
   const rows = await db.select({ te: surveys.triggerEvent, tes: surveys.triggerEvents }).from(surveys);
   const inUse = new Set<string>();
   for (const r of rows) {
@@ -42,29 +53,37 @@ async function main() {
   }
   console.log(`nomes usados como gatilho (preservados): ${inUse.size}`);
 
-  // agrupa por (projeto, padrão) e mantém o mais recente de cada grupo
+  // agrupa só o que tem identificador de máquina; o resto é único e fica intocado
+  const groups = new Map<string, { id: string; name: string; t: number }[]>();
   const keep = new Set<string>();
-  const best = new Map<string, { id: string; t: number }>();
+
   for (const e of all) {
-    if (inUse.has(e.name)) {
-      keep.add(e.id);
+    const p = pattern(e.name);
+    if (inUse.has(e.name) || p === e.name) {
+      keep.add(e.id); // gatilho em uso, ou nome sem id → rota única, preserva
       continue;
     }
-    const k = `${e.projectId}::${pattern(e.name)}`;
+    const k = `${e.projectId}::${p}`;
     const t = e.lastSeenAt ? new Date(e.lastSeenAt as unknown as string).getTime() : 0;
-    const cur = best.get(k);
-    if (!cur || t > cur.t) best.set(k, { id: e.id, t });
+    (groups.get(k) ?? groups.set(k, []).get(k)!).push({ id: e.id, name: e.name, t });
   }
-  for (const b of best.values()) keep.add(b.id);
 
-  const toDelete = all.filter((e) => !keep.has(e.id)).map((e) => e.id);
-  console.log(`manter: ${keep.size}   apagar: ${toDelete.length}`);
+  const toDelete: string[] = [];
+  for (const [k, list] of groups) {
+    list.sort((a, b) => b.t - a.t);
+    keep.add(list[0].id); // mantém um representante da rota
+    for (const dup of list.slice(1)) toDelete.push(dup.id);
+    if (list.length > 1) {
+      console.log(`  ${k.split("::")[1]}  →  1 mantido, ${list.length - 1} duplicados`);
+    }
+  }
+
+  console.log(`\nmanter: ${keep.size}   apagar (duplicados da mesma rota): ${toDelete.length}`);
 
   if (!APPLY) {
-    console.log("\n(simulação — nada foi alterado; rode com --apply para executar)");
+    console.log("(simulação — nada foi alterado; rode com --apply para executar)");
     return;
   }
-  // apaga em lotes: um IN gigante estoura o limite de parâmetros do Postgres
   const BATCH = 500;
   for (let i = 0; i < toDelete.length; i += BATCH) {
     await db.delete(events).where(inArray(events.id, toDelete.slice(i, i + BATCH)));
