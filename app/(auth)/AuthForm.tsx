@@ -21,12 +21,14 @@ function SubmitButton({ label }: { label: string }) {
   );
 }
 
-export function AuthForm({ mode }: { mode: "login" | "signup" }) {
+export function AuthForm({ mode, next }: { mode: "login" | "signup"; next?: string }) {
   const action = mode === "login" ? loginAction : signupAction;
   const [state, formAction] = useActionState<AuthResult, FormData>(action, {});
 
   return (
     <form action={formAction} className="mt-8 flex flex-col gap-4">
+      {/* destino pretendido antes do login; a action revalida antes de redirecionar */}
+      {next ? <input type="hidden" name="next" value={next} /> : null}
       {mode === "signup" && (
         <Field label="Nome">
           <Input name="name" placeholder="Seu nome" required />

@@ -3,7 +3,12 @@ import { LuumuLogo } from "@/components/ui/Mascot";
 import { AuthForm } from "../AuthForm";
 import { BrandPanel } from "../BrandPanel";
 
-export default function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>;
+}) {
+  const { next } = await searchParams;
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
       {/* Formulário */}
@@ -20,7 +25,7 @@ export default function LoginPage() {
             Entre para ouvir, entender e melhorar.
           </p>
 
-          <AuthForm mode="login" />
+          <AuthForm mode="login" next={next} />
 
           <p className="mt-6 text-center text-sm text-fg-mut">
             Não tem conta?{" "}

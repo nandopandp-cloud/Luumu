@@ -1,5 +1,5 @@
 import "server-only";
-import { and, count, eq, ne } from "drizzle-orm";
+import { and, asc, count, eq, ne } from "drizzle-orm";
 import { db } from "./client";
 import { users, memberships, workspaces } from "@/db/schema";
 import { newId } from "./ids";
@@ -12,12 +12,20 @@ export async function findUserByEmail(email: string) {
   return u ?? null;
 }
 
-/** Workspace principal do usuário (o primeiro membership). */
+/**
+ * Workspace principal do usuário (o membership mais antigo).
+ *
+ * O `orderBy` é obrigatório, não cosmético: com `limit(1)` sem ordenação o Postgres pode
+ * devolver qualquer uma das linhas, e quem participa de mais de um workspace acabava com o
+ * JWT emitido para um workspace e as queries de página resolvendo outro — login "funciona"
+ * e a plataforma abre vazia ou quebrada. Ordenar fixa o mesmo workspace em toda chamada.
+ */
 export async function getUserWorkspace(userId: string) {
   const [m] = await db
     .select({ workspaceId: memberships.workspaceId, role: memberships.role })
     .from(memberships)
     .where(eq(memberships.userId, userId))
+    .orderBy(asc(memberships.createdAt), asc(memberships.id))
     .limit(1);
   return m ?? null;
 }
