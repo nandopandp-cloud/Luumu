@@ -31,12 +31,32 @@ const APPLY = process.argv.includes("--apply");
  */
 function pattern(name: string): string {
   return name
-    .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, ":id") // uuid
+    // UUID, inclusive TRUNCADO: o slug do SDK corta o nome em 64 caracteres, então a maioria
+    // dos registros guarda só um pedaço do uuid ("01a04a41-6a1a-73c1-88f2-9e3a1b"). Casar
+    // apenas o uuid completo deixaria cada pedaço como um grupo só seu — que foi o que a
+    // primeira simulação mostrou. Basta o prefixo canônico 8-4-4 para identificar o padrão.
+    .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}[0-9a-f-]*/gi, ":id")
     .replace(/\b[0-9a-f]{16,}\b/gi, ":id") // hash hex longo
     // id com prefixo (usr_ab12cd34): exige dígito E letra na parte aleatória, senão
     // "link_biblioteca" e "page_view_biblioteca" seriam confundidos com identificadores
     .replace(/\b[a-z]{2,5}_(?=[A-Za-z0-9]*\d)(?=[A-Za-z0-9]*[a-zA-Z])[A-Za-z0-9]{8,}\b/g, ":id")
     .replace(/\b\d{6,}\b/g, ":id"); // sequência longa de dígitos (timestamp, id numérico)
+}
+
+/**
+ * Segunda passada, só para RÓTULOS de clique/link: o nome vem do texto do elemento, então
+ * um mesmo botão gera um evento por item da lista —
+ *   click_corrida_matinalstrava_5_rpdomingo_26_de
+ *   click_corrida_da_tardestravasabado_11_de_julh
+ * são a mesma ação sobre conteúdos diferentes. Aqui os números viram :n, porque em rótulo
+ * um número é dado do item (distância, data, posição), não parte do nome da ação.
+ *
+ * Isto NÃO se aplica a page_view: lá o número costuma ser a própria rota (/enem/2024), e
+ * generalizá-lo apagaria telas distintas do produto.
+ */
+function labelPattern(name: string): string {
+  if (!/^(click|link|form_submit)_/.test(name)) return name;
+  return name.replace(/\d+/g, ":n");
 }
 
 async function main() {
@@ -58,9 +78,9 @@ async function main() {
   const keep = new Set<string>();
 
   for (const e of all) {
-    const p = pattern(e.name);
+    const p = labelPattern(pattern(e.name));
     if (inUse.has(e.name) || p === e.name) {
-      keep.add(e.id); // gatilho em uso, ou nome sem id → rota única, preserva
+      keep.add(e.id); // gatilho em uso, ou nome sem id/número → ação única, preserva
       continue;
     }
     const k = `${e.projectId}::${p}`;
