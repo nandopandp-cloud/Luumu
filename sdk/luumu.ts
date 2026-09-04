@@ -587,13 +587,26 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     return null;
   }
 
+  /**
+   * Generaliza o rótulo de um elemento para o TIPO de ação, não a instância clicada.
+   * "unidade 6 - introdução a biologia" e "unidade 7 - citologia" são o mesmo botão da
+   * interface; mantê-los separados encheria o catálogo com um evento por item de lista.
+   */
+  function labelPattern(label: string): string {
+    return label
+      .replace(/\d+/g, ":n") // "unidade 6" -> "unidade :n"
+      .replace(/\s{2,}/g, " ")
+      .trim()
+      .slice(0, 48); // rótulos longos são texto de conteúdo, não nome de ação
+  }
+
   function autoEventName(node: Element): string | null {
     const explicit = node.getAttribute("data-luumu-track");
     if (explicit) return `click_${slug(explicit)}`;
     const tag = node.tagName.toLowerCase();
     const label = textLabel(node) || node.getAttribute("name") || node.id || tag;
     const kind = tag === "a" ? "link" : "click";
-    return `${kind}_${slug(label)}`;
+    return `${kind}_${slug(labelPattern(label))}`;
   }
 
   function autoTrack(name: string) {
@@ -605,9 +618,28 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     track(name);
   }
 
+  /**
+   * Reduz um path à ROTA que ele representa: "/quiz/01a06e5c-.../result" e
+   * "/quiz/9f2b.../result" são a mesma tela do produto, não dois eventos.
+   *
+   * Sem isto cada id na URL virava um evento "inédito" para sempre — o catálogo, que deveria
+   * listar as telas do produto, crescia sem limite (e cada nome novo é uma escrita no banco).
+   * A query string sai fora pelo mesmo motivo (?page=2, ?tab=..., utm_*).
+   */
+  function routePattern(pathname: string): string {
+    const parts = pathname.split("/").filter(Boolean).map((seg) => {
+      if (/^\d+$/.test(seg)) return ":id"; // 2, 37
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(seg)) return ":id"; // uuid
+      if (/^[0-9a-f]{16,}$/i.test(seg)) return ":id"; // hash hex
+      if (/^[a-z]{2,5}_[A-Za-z0-9]{8,}$/.test(seg)) return ":id"; // ids tipo usr_ab12cd34
+      if (seg.length > 24 && /\d/.test(seg)) return ":id"; // slug longo com número
+      return seg;
+    });
+    return parts.length ? parts.join("/") : "home";
+  }
+
   function trackPageView() {
-    const path = location.pathname + location.search;
-    autoTrack(`page_view_${slug(path || "home")}`);
+    autoTrack(`page_view_${slug(routePattern(location.pathname))}`);
   }
 
   // --- Eventos padrão semânticos (reconhecidos em qualquer produto) ---

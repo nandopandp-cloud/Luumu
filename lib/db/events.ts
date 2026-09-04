@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, count, desc, eq } from "drizzle-orm";
 import { db } from "./client";
 import { events } from "@/db/schema";
 import { eventId } from "./ids";
@@ -22,31 +22,63 @@ export function normalizeEventName(raw: string): string {
 }
 
 /**
- * Registra a ocorrência de um evento do projeto (chamado pela ingestão do SDK).
- * UPSERT atômico: cria na primeira vez, incrementa count e atualiza last_seen_at depois.
- * A unicidade é por (projeto, nome), o mesmo evento pode existir em projetos diferentes.
+ * Registra um evento INÉDITO do projeto (chamado pela ingestão do SDK).
+ *
+ * O catálogo responde a uma única pergunta: "que eventos existem neste produto?" — é a lista
+ * que o cliente usa para escolher gatilhos de pesquisa. A primeira vez que alguém entra em
+ * /biblioteca, a rota vira um evento conhecido; as visitas seguintes não acrescentam nada.
+ * Por isso repetição não é gravada: nem em memória (caso comum), nem no banco.
+ *
+ * `onConflictDoNothing` é o que fecha a conta: quando o cache está frio (lambda nova), o
+ * INSERT de um evento já catalogado é descartado pelo índice (project_id, name) sem escrever
+ * nada — antes, esse mesmo caso virava UPDATE de count/last_seen_at, ou seja, escrita a cada
+ * ocorrência. O nome é devolvido de todo jeito, porque quem chama usa isso para casar gatilhos.
  */
 export async function recordEvent(workspaceId: string, projectId: string, rawName: string) {
   const name = normalizeEventName(rawName);
   if (!name) return null;
 
-  // O catálogo existe para o cliente ESCOLHER gatilhos de pesquisa: o que importa é que o
-  // evento exista no projeto, não quantas vezes ocorreu. Depois que (projeto, evento) já foi
-  // visto, todo novo INSERT viraria um UPSERT que não muda nada de decisivo — era 1 escrita
-  // por clique rastreado em todos os sites dos clientes. Com o par em memória, o caso comum
-  // ("evento já conhecido") não vai ao banco.
   if (isKnownEvent(projectId, name)) return name;
+
+  /*
+    Teto de eventos distintos por projeto. O SDK já normaliza rotas e rótulos, mas ele roda
+    no navegador do cliente: uma versão antiga, um `luumu.track()` com id concatenado ou uma
+    página adulterada ainda podem inventar nomes novos indefinidamente. Sem teto, cada nome
+    inédito é uma linha nova e uma escrita — foi assim que o catálogo chegou a 200 mil.
+    Ao atingir o limite, o evento continua valendo como gatilho (o nome é devolvido), só não
+    entra no catálogo.
+  */
+  if (await isCatalogFull(projectId)) return name;
 
   await db
     .insert(events)
     .values({ id: eventId(), workspaceId, projectId, name, count: 1 })
-    .onConflictDoUpdate({
-      target: [events.projectId, events.name],
-      set: { count: sql`${events.count} + 1`, lastSeenAt: new Date() },
-    });
+    .onConflictDoNothing({ target: [events.projectId, events.name] });
 
   markKnownEvent(projectId, name);
   return name;
+}
+
+/** Limite de eventos distintos por projeto: o catálogo é uma lista para escolher gatilhos. */
+const MAX_EVENTS_PER_PROJECT = 300;
+const catalogCount = new Map<string, { n: number; checkedAt: number }>();
+const COUNT_TTL_MS = 10 * 60 * 1000;
+
+async function isCatalogFull(projectId: string): Promise<boolean> {
+  const cached = catalogCount.get(projectId);
+  const now = Date.now();
+  if (cached && now - cached.checkedAt < COUNT_TTL_MS) {
+    if (cached.n >= MAX_EVENTS_PER_PROJECT) return true;
+    cached.n += 1; // otimista: contamos a inserção que está prestes a acontecer
+    return false;
+  }
+  const [row] = await db
+    .select({ n: count() })
+    .from(events)
+    .where(eq(events.projectId, projectId));
+  const n = Number(row?.n ?? 0);
+  catalogCount.set(projectId, { n: n + 1, checkedAt: now });
+  return n >= MAX_EVENTS_PER_PROJECT;
 }
 
 /**
