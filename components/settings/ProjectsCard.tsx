@@ -2,9 +2,9 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
 import { FolderKanban, Plus, MoreHorizontal, Type, Trash2, Loader2, AlertTriangle, Upload } from "lucide-react";
 import { Card, CardTitle, CardSubtitle } from "@/components/ui/Card";
+import { LogoImage } from "@/components/ui/LogoImage";
 import { Button } from "@/components/ui/Button";
 import { Field, Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
@@ -121,7 +121,7 @@ export function ProjectsCard({
                 className="group relative size-9 shrink-0 overflow-hidden rounded-lg disabled:cursor-default"
               >
                 {p.logoUrl ? (
-                  <Image src={p.logoUrl} alt="" width={36} height={36} className="size-9 object-cover" />
+                  <LogoImage src={p.logoUrl} alt="" width={36} height={36} className="size-9 object-cover" />
                 ) : (
                   <span className="grid size-9 place-items-center bg-surface-brand text-sm font-bold text-accent">
                     {p.name.charAt(0).toUpperCase()}

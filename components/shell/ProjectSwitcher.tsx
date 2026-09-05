@@ -2,8 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
 import { Check, ChevronsUpDown, FolderKanban, Loader2, Plus } from "lucide-react";
+import { LogoImage } from "@/components/ui/LogoImage";
 import { switchProjectAction } from "@/app/(app)/projects/actions";
 
 interface ProjectOpt {
@@ -15,7 +15,7 @@ interface ProjectOpt {
 function ProjectAvatar({ project, size = 32 }: { project: ProjectOpt | undefined; size?: number }) {
   if (project?.logoUrl) {
     return (
-      <Image
+      <LogoImage
         src={project.logoUrl}
         alt=""
         width={size}

@@ -2,9 +2,9 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
 import { Loader2, Check, Upload } from "lucide-react";
 import { Card, CardTitle, CardSubtitle } from "@/components/ui/Card";
+import { LogoImage } from "@/components/ui/LogoImage";
 import { Field, Input, Select } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
@@ -101,7 +101,7 @@ export function WorkspaceForm({
           <div className="mt-4 flex flex-col gap-4">
             <div className="flex items-center gap-4">
               {v.logoUrl ? (
-                <Image
+                <LogoImage
                   src={v.logoUrl}
                   alt="Logo do workspace"
                   width={64}
