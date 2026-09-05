@@ -8,6 +8,7 @@ import { Card, CardTitle, CardSubtitle } from "@/components/ui/Card";
 import { Field, Input, Select } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
+import { ImageCropper, useImageCropper } from "@/components/ui/ImageCropper";
 import { saveWorkspaceAction } from "@/app/(app)/settings/actions";
 
 export interface WorkspaceValues {
@@ -41,6 +42,7 @@ export function WorkspaceForm({
   const fileRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const toast = useToast();
+  const cropper = useImageCropper();
 
   const dirty = JSON.stringify(v) !== JSON.stringify(initial);
   const set = (patch: Partial<WorkspaceValues>) => setV((s) => ({ ...s, ...patch }));
@@ -60,12 +62,23 @@ export function WorkspaceForm({
   }
 
   async function onLogoPick(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const picked = e.target.files?.[0];
+    if (fileRef.current) fileRef.current.value = "";
+    if (!picked) return;
+
+    // SVG é vetorial: recortar em canvas rasterizaria a logo à toa. Sobe direto, como antes.
+    let toUpload: File = picked;
+    if (picked.type !== "image/svg+xml") {
+      const result = await cropper.open(picked);
+      if (!result) return; // cancelado no editor
+      toUpload = new File([result.blob], "logo.png", { type: "image/png" });
+      URL.revokeObjectURL(result.previewUrl);
+    }
+
     setUploading(true);
     try {
       const fd = new FormData();
-      fd.append("file", file);
+      fd.append("file", toUpload);
       const res = await fetch("/api/settings/logo", { method: "POST", body: fd });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Falha no upload.");
@@ -76,7 +89,6 @@ export function WorkspaceForm({
       toast("error", err instanceof Error ? err.message : "Falha no upload.");
     } finally {
       setUploading(false);
-      if (fileRef.current) fileRef.current.value = "";
     }
   }
 
@@ -155,6 +167,15 @@ export function WorkspaceForm({
         <p className="mt-4 text-right text-sm text-fg-mut">
           Apenas administradores podem editar o workspace.
         </p>
+      )}
+
+      {cropper.file && (
+        <ImageCropper
+          file={cropper.file}
+          shape="square"
+          title="Ajustar logo do workspace"
+          onDone={cropper.close}
+        />
       )}
     </>
   );

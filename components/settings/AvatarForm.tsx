@@ -7,9 +7,10 @@ import { Loader2, Trash2, Upload } from "lucide-react";
 import { Card, CardTitle, CardSubtitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
+import { ImageCropper, useImageCropper } from "@/components/ui/ImageCropper";
 import { removeAvatarAction } from "@/app/(app)/settings/profile/actions";
 
-/** Foto de perfil do próprio usuário: envio, troca e remoção. */
+/** Foto de perfil do próprio usuário: envio (com recorte), troca e remoção. */
 export function AvatarForm({
   name,
   email,
@@ -25,16 +26,23 @@ export function AvatarForm({
   const fileRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const toast = useToast();
+  const cropper = useImageCropper();
 
   const busy = uploading || removing;
 
   async function onPick(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
+    // limpa já aqui: se o usuário cancelar o recorte, o input ainda aceita reescolher o mesmo arquivo
+    if (fileRef.current) fileRef.current.value = "";
     if (!file) return;
+
+    const result = await cropper.open(file);
+    if (!result) return; // cancelado no editor
+
     setUploading(true);
     try {
       const fd = new FormData();
-      fd.append("file", file);
+      fd.append("file", new File([result.blob], "avatar.png", { type: "image/png" }));
       const res = await fetch("/api/settings/avatar", { method: "POST", body: fd });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Falha no upload.");
@@ -45,8 +53,7 @@ export function AvatarForm({
       toast("error", err instanceof Error ? err.message : "Falha no upload.");
     } finally {
       setUploading(false);
-      // limpa o input para permitir reenviar o mesmo arquivo depois de um erro
-      if (fileRef.current) fileRef.current.value = "";
+      URL.revokeObjectURL(result.previewUrl);
     }
   }
 
@@ -111,6 +118,15 @@ export function AvatarForm({
         <div className="text-sm font-semibold">{name}</div>
         <div className="text-sm text-fg-mut">{email}</div>
       </div>
+
+      {cropper.file && (
+        <ImageCropper
+          file={cropper.file}
+          shape="circle"
+          title="Ajustar foto de perfil"
+          onDone={cropper.close}
+        />
+      )}
     </Card>
   );
 }
