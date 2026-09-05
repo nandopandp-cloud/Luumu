@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Field, Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
 import { useToast } from "@/components/ui/Toast";
+import { ImageCropper, useImageCropper } from "@/components/ui/ImageCropper";
 import { createProjectAction, renameProjectAction, deleteProjectAction } from "@/app/(app)/projects/actions";
 
 export interface ProjectItem {
@@ -36,16 +37,28 @@ export function ProjectsCard({
   const [, start] = useTransition();
   const router = useRouter();
   const toast = useToast();
+  const cropper = useImageCropper();
 
   const isLast = projects.length <= 1;
 
   async function onLogoPick(projectId: string, e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const picked = e.target.files?.[0];
+    e.target.value = "";
+    if (!picked) return;
+
+    // SVG é vetorial: recortar em canvas rasterizaria a logo à toa. Sobe direto, como antes.
+    let toUpload: File = picked;
+    if (picked.type !== "image/svg+xml") {
+      const result = await cropper.open(picked);
+      if (!result) return; // cancelado no editor
+      toUpload = new File([result.blob], "logo.png", { type: "image/png" });
+      URL.revokeObjectURL(result.previewUrl);
+    }
+
     setUploadingId(projectId);
     try {
       const fd = new FormData();
-      fd.append("file", file);
+      fd.append("file", toUpload);
       const res = await fetch(`/api/projects/${projectId}/logo`, { method: "POST", body: fd });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Falha no upload.");
@@ -55,7 +68,6 @@ export function ProjectsCard({
       toast("error", err instanceof Error ? err.message : "Falha no upload.");
     } finally {
       setUploadingId(null);
-      e.target.value = "";
     }
   }
 
@@ -240,6 +252,15 @@ export function ProjectsCard({
             </div>
           </div>
         </div>
+      )}
+
+      {cropper.file && (
+        <ImageCropper
+          file={cropper.file}
+          shape="square"
+          title="Ajustar logo do projeto"
+          onDone={cropper.close}
+        />
       )}
     </Card>
   );
