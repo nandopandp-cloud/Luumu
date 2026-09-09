@@ -46,6 +46,7 @@ export async function createScheduledReport(input: {
   period: string;
   format: string;
   surveyIds: string[];
+  surveyTypes?: string[];
   createdBy: string;
 }): Promise<string> {
   const id = scheduledReportId();
@@ -59,6 +60,7 @@ export async function createScheduledReport(input: {
     period: input.period,
     format: input.format,
     surveyIds: input.surveyIds,
+    surveyTypes: input.surveyTypes ?? [],
     active: true,
     nextRunAt: computeNextRun(input.frequency),
     createdBy: input.createdBy,

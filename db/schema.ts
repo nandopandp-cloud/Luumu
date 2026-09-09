@@ -258,6 +258,14 @@ export const scheduledReports = pgTable(
     format: text("format").notNull().default("pdf"), // pdf | xlsx | csv
     // ids das pesquisas incluídas ([] = todas do projeto)
     surveyIds: jsonb("survey_ids").notNull().default([]),
+    /**
+     * Tipos de pesquisa acompanhados (ex.: ["CSAT","SUS"]). Quando preenchido, o envio
+     * deixa de ser preso a `surveyIds` fixos: a cada ciclo o cron busca, para cada tipo,
+     * a campanha cuja vigência terminou mais recentemente. Assim campanhas que se sucedem
+     * (01–05, depois 05–10) são relatadas sozinhas, sem reconfigurar o agendamento.
+     * [] = comportamento antigo (usa surveyIds).
+     */
+    surveyTypes: jsonb("survey_types").notNull().default([]),
     active: boolean("active").notNull().default(true),
     lastRunAt: timestamp("last_run_at", { withTimezone: true }),
     nextRunAt: timestamp("next_run_at", { withTimezone: true }).notNull(),

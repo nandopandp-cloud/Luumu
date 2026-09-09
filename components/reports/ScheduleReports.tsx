@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Calendar, Plus, Trash2, Pause, Play, Mail, Loader2, X } from "lucide-react";
+import { Calendar, Plus, Trash2, Pause, Play, Mail, Loader2, X, Repeat } from "lucide-react";
 import { Card, CardTitle, CardSubtitle } from "@/components/ui/Card";
 import { Field, Input, Select } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
@@ -27,6 +27,7 @@ export interface ScheduledItem {
   period: string;
   format: string;
   surveyIds: string[];
+  surveyTypes: string[];
   active: boolean;
   nextRunAt: string; // ISO
   lastRunAt: string | null;
@@ -37,9 +38,11 @@ const FMT_LABEL: Record<string, string> = { pdf: "PDF", xlsx: "Excel", csv: "CSV
 
 export function ScheduleReports({
   surveys,
+  surveyTypes,
   initial,
 }: {
   surveys: SurveyOpt[];
+  surveyTypes: string[];
   initial: ScheduledItem[];
 }) {
   const [items, setItems] = useState(initial);
@@ -62,6 +65,7 @@ export function ScheduleReports({
         {creating && (
           <ScheduleForm
             surveys={surveys}
+            surveyTypes={surveyTypes}
             onCancel={() => setCreating(false)}
             onCreated={() => {
               setCreating(false);
@@ -94,10 +98,12 @@ export function ScheduleReports({
 
 function ScheduleForm({
   surveys,
+  surveyTypes,
   onCancel,
   onCreated,
 }: {
   surveys: SurveyOpt[];
+  surveyTypes: string[];
   onCancel: () => void;
   onCreated: () => void;
 }) {
@@ -108,6 +114,9 @@ function ScheduleForm({
   const [period, setPeriod] = useState("30d");
   const [format, setFormat] = useState("pdf");
   const [surveyIds, setSurveyIds] = useState<string[]>([]);
+  // "campanha": acompanha tipos e resolve sozinho a última encerrada de cada um
+  const [mode, setMode] = useState<"fixed" | "types">("fixed");
+  const [types, setTypes] = useState<string[]>([]);
   const [emailInput, setEmailInput] = useState("");
   const [recipients, setRecipients] = useState<string[]>([]);
 
@@ -126,13 +135,30 @@ function ScheduleForm({
     setSurveyIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }
 
+  function toggleType(t: string) {
+    setTypes((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
+  }
+
   function submit() {
     if (recipients.length === 0) {
       toast("error", "Adicione ao menos um e-mail.");
       return;
     }
+    if (mode === "types" && types.length === 0) {
+      toast("error", "Selecione ao menos um tipo de pesquisa.");
+      return;
+    }
     start(async () => {
-      const res = await createScheduleAction({ name: name || "Relatório", recipients, frequency, period, format, surveyIds });
+      const res = await createScheduleAction({
+        name: name || "Relatório",
+        recipients,
+        frequency,
+        period,
+        format,
+        // os modos são exclusivos: por tipo o cron resolve os ids a cada ciclo
+        surveyIds: mode === "types" ? [] : surveyIds,
+        surveyTypes: mode === "types" ? types : [],
+      });
       if (res.ok) {
         toast("success", "Envio agendado.");
         onCreated();
@@ -205,31 +231,95 @@ function ScheduleForm({
         )}
       </div>
 
-      {/* Seleção de pesquisas */}
+      {/* O que enviar: pesquisas fixas ou tipos que se renovam a cada campanha */}
       <div className="mt-4">
-        <label className="mb-1.5 block text-sm font-semibold text-fg-soft">
-          Pesquisas incluídas <span className="font-normal text-fg-mut">(nenhuma = todas)</span>
-        </label>
-        {surveys.length === 0 ? (
-          <p className="text-xs text-fg-mut">Nenhuma pesquisa com respostas ainda.</p>
+        <label className="mb-1.5 block text-sm font-semibold text-fg-soft">O que enviar</label>
+        <div className="mb-3 flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            onClick={() => setMode("fixed")}
+            className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+              mode === "fixed" ? "border-accent bg-surface-brand text-accent" : "border-line text-fg-mut hover:border-accent"
+            }`}
+          >
+            Pesquisas específicas
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("types")}
+            className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold transition ${
+              mode === "types" ? "border-accent bg-surface-brand text-accent" : "border-line text-fg-mut hover:border-accent"
+            }`}
+          >
+            <Repeat className="size-3" /> Sempre a campanha mais recente
+          </button>
+        </div>
+
+        {mode === "fixed" ? (
+          <>
+            <p className="mb-2 text-xs text-fg-mut">
+              Pesquisas incluídas (nenhuma = todas). O envio fica preso a estas pesquisas.
+            </p>
+            {surveys.length === 0 ? (
+              <p className="text-xs text-fg-mut">Nenhuma pesquisa com respostas ainda.</p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {surveys.map((s) => {
+                  const on = surveyIds.includes(s.id);
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => toggleSurvey(s.id)}
+                      className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                        on ? "border-accent bg-surface-brand text-accent" : "border-line text-fg-mut hover:border-accent"
+                      }`}
+                    >
+                      {s.name}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </>
         ) : (
-          <div className="flex flex-wrap gap-1.5">
-            {surveys.map((s) => {
-              const on = surveyIds.includes(s.id);
-              return (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => toggleSurvey(s.id)}
-                  className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
-                    on ? "border-accent bg-surface-brand text-accent" : "border-line text-fg-mut hover:border-accent"
-                  }`}
-                >
-                  {s.name}
-                </button>
-              );
-            })}
-          </div>
+          <>
+            <p className="mb-2 text-xs text-fg-mut">
+              Escolha os tipos acompanhados. A cada envio o relatório traz a última campanha
+              encerrada de cada tipo, cobrindo exatamente o período de vigência dela — sem
+              precisar reconfigurar quando uma campanha sucede a outra.
+            </p>
+            {surveyTypes.length === 0 ? (
+              <p className="text-xs text-fg-mut">
+                Nenhuma pesquisa com vigência definida ainda. Defina início e fim em uma pesquisa
+                para acompanhá-la por tipo.
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {surveyTypes.map((t) => {
+                  const on = types.includes(t);
+                  return (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => toggleType(t)}
+                      className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                        on ? "border-accent bg-surface-brand text-accent" : "border-line text-fg-mut hover:border-accent"
+                      }`}
+                    >
+                      {t}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {types.length > 0 && (
+              <p className="mt-2 text-xs text-fg-mut">
+                O campo &ldquo;Período dos dados&rdquo; não se aplica neste modo: cada anexo cobre a
+                vigência da campanha.
+              </p>
+            )}
+          </>
         )}
       </div>
 
@@ -259,7 +349,9 @@ function ScheduleRow({
   const [busy, start] = useTransition();
 
   const scopeLabel =
-    item.surveyIds.length === 0
+    item.surveyTypes.length > 0
+      ? `Última campanha: ${item.surveyTypes.join(", ")}`
+      : item.surveyIds.length === 0
       ? "Todas as pesquisas"
       : item.surveyIds
           .map((id) => surveys.find((s) => s.id === id)?.name ?? "?")

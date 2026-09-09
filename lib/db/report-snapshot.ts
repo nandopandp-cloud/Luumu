@@ -31,11 +31,19 @@ export async function buildReportSnapshot(opts: {
   surveyId?: string | null;
   surveyName?: string | null;
   period: string;
+  /** Recorte explícito; quando informado, prevalece sobre `period` (usado pelos envios por tipo,
+   *  em que a janela é a vigência da campanha e não "últimos N dias"). */
+  dateFrom?: Date;
+  dateTo?: Date;
+  /** Rótulo do período já formatado; sem ele o rótulo vem de PERIOD_OPTIONS. */
+  periodLabel?: string;
 }): Promise<ReportSnapshot> {
+  const explicitRange = opts.dateFrom !== undefined || opts.dateTo !== undefined;
   const scope: Scope = {
     projectId: opts.projectId,
     surveyId: opts.surveyId || undefined,
-    dateFrom: periodToDateFrom(opts.period),
+    dateFrom: explicitRange ? opts.dateFrom : periodToDateFrom(opts.period),
+    dateTo: opts.dateTo,
   };
 
   const [stats, mainScore, distribution, wordCloud] = await Promise.all([
@@ -45,7 +53,8 @@ export async function buildReportSnapshot(opts: {
     getWordCloud(scope),
   ]);
 
-  const periodLabel = PERIOD_OPTIONS.find((p) => p.value === opts.period)?.label ?? "Todo o período";
+  const periodLabel =
+    opts.periodLabel ?? PERIOD_OPTIONS.find((p) => p.value === opts.period)?.label ?? "Todo o período";
 
   return {
     scopeName: opts.surveyName || (opts.surveyId ? "Pesquisa" : "Todas as pesquisas"),

@@ -21,6 +21,8 @@ const scheduleSchema = z.object({
   period: z.enum(["7d", "30d", "90d", "12m", "all"]),
   format: z.enum(["pdf", "xlsx", "csv"]),
   surveyIds: z.array(z.string()),
+  // tipos acompanhados: o envio resolve sozinho a última campanha encerrada de cada um
+  surveyTypes: z.array(z.string()).default([]),
 });
 
 export async function createScheduleAction(input: unknown) {

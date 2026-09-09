@@ -28,7 +28,7 @@ const fmtDate = (d: Date) =>
   d.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
 /** Gera um PDF profissional (Luumu) com sumário + tabela de respostas. */
-export function toPdf(rows: ExportRow[], opts: { title: string; summary: PdfSummary }): Promise<Buffer> {
+export function toPdf(rows: ExportRow[], opts: { title: string; subtitle?: string; summary: PdfSummary }): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: "A4", margin: 40, bufferPages: true });
     const chunks: Buffer[] = [];
@@ -54,6 +54,11 @@ export function toPdf(rows: ExportRow[], opts: { title: string; summary: PdfSumm
 
     // ---------- Título do relatório ----------
     doc.fillColor(TXT).font("Helvetica-Bold").fontSize(18).text(opts.title, left, doc.y);
+    // período coberto (a vigência da campanha, nos envios por tipo)
+    if (opts.subtitle) {
+      doc.moveDown(0.25);
+      doc.font("Helvetica").fontSize(10).fillColor(MUT).text(opts.subtitle, left, doc.y);
+    }
     doc.moveDown(0.4);
 
     // ---------- Cartões de resumo ----------

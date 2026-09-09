@@ -35,6 +35,12 @@ export default async function ReportsPage({
   // agendamento/links: todas as pesquisas (você pode agendar antes de ter resposta)
   const surveyOpts = surveys.map((s) => ({ id: s.id, name: s.name }));
 
+  // tipos acompanháveis: só os que existem no projeto e têm alguma campanha com data de fim
+  // (sem vigência não há ciclo a fechar, então não há "última campanha encerrada" a resolver)
+  const surveyTypeOpts = Array.from(
+    new Set(surveys.filter((s) => s.endsAt).map((s) => s.type))
+  ).sort();
+
   const scheduledItems: ScheduledItem[] = scheduled.map((s) => ({
     id: s.id,
     name: s.name,
@@ -43,6 +49,7 @@ export default async function ReportsPage({
     period: s.period,
     format: s.format,
     surveyIds: (s.surveyIds as string[]) ?? [],
+    surveyTypes: (s.surveyTypes as string[]) ?? [],
     active: s.active,
     nextRunAt: s.nextRunAt.toISOString(),
     lastRunAt: s.lastRunAt ? s.lastRunAt.toISOString() : null,
@@ -75,7 +82,7 @@ export default async function ReportsPage({
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <ScheduleReports surveys={surveyOpts} initial={scheduledItems} />
+        <ScheduleReports surveys={surveyOpts} surveyTypes={surveyTypeOpts} initial={scheduledItems} />
         <PublicLinks surveys={surveyOpts} initial={linkItems} />
       </div>
     </div>

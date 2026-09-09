@@ -359,6 +359,40 @@ function withinScheduleSql(ref: string) {
   );
 }
 
+/**
+ * Última campanha ENCERRADA de cada tipo pedido, para os envios agendados por tipo.
+ *
+ * "Encerrada" aqui é pela vigência, não pelo status: a campanha cujo `ends_at` já passou
+ * e é o mais recente do tipo. É o que faz o relatório seguir sozinho quando uma campanha
+ * sucede a outra (01–05, depois 05–10): no dia 06 resolve a de 01–05; no dia 11, a de
+ * 05–10 — mesmo que uma nova já esteja rodando, porque o relatório é do ciclo fechado.
+ *
+ * Campanhas sem `ends_at` são ignoradas: sem data de fim não há ciclo a fechar, e incluí-las
+ * faria o envio repetir a mesma pesquisa aberta indefinidamente.
+ *
+ * Uma query só para todos os tipos (DISTINCT ON), em vez de uma por tipo.
+ */
+export async function findLatestEndedSurveyByType(
+  projectId: string,
+  types: string[],
+  ref: string = today()
+): Promise<SurveyRow[]> {
+  if (types.length === 0) return [];
+  return db
+    .selectDistinctOn([surveys.type])
+    .from(surveys)
+    .where(
+      and(
+        eq(surveys.projectId, projectId),
+        inArray(surveys.type, types),
+        sql`${surveys.endsAt} is not null and ${surveys.endsAt} <> '' and ${surveys.endsAt} < ${ref}`
+      )
+    )
+    // DISTINCT ON exige que o ORDER BY comece pela expressão distinta; o ends_at desc
+    // dentro de cada tipo é o que elege a campanha encerrada mais recentemente
+    .orderBy(surveys.type, desc(surveys.endsAt));
+}
+
 /** Pesquisas ativas e dentro da vigência de um projeto (para a API pública do SDK). */
 export async function listActiveSurveys(projectId: string) {
   return db
