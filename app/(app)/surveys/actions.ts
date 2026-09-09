@@ -12,11 +12,13 @@ import {
   getSurveyWithQuestions,
   saveAppearance,
   deleteSurvey,
+  duplicateSurvey,
   enforceResponseLimit,
 } from "@/lib/db/surveys";
 import { submitResponse } from "@/lib/db/responses";
 import { deriveSentiment } from "@/lib/sentiment";
 import { normalizeAppearance } from "@/lib/builder";
+import { isWithinSchedule, normalizeDate } from "@/lib/schedule";
 import { getCurrentWorkspaceId, getCurrentProjectId } from "@/lib/auth/current";
 import { getSurvey } from "@/lib/db/surveys";
 import type { SurveyType, SurveyStatus } from "@/lib/mock/surveys";
@@ -75,6 +77,11 @@ const settingsSchema = z.object({
 
 export async function saveSettingsAction(input: unknown) {
   const { id, triggerEvents, ...rest } = settingsSchema.parse(input);
+  const from = normalizeDate(rest.startsAt);
+  const to = normalizeDate(rest.endsAt);
+  if (from && to && from > to) {
+    return { ok: false as const, error: "A data de fim não pode ser anterior à de início." };
+  }
   const projectId = await getCurrentProjectId();
   // mantém o campo legado triggerEvent em sincronia (primeiro da lista, ou null)
   const patch = {
@@ -96,6 +103,12 @@ export async function publishSurveyAction(id: string) {
   if (!data.survey.name.trim()) return { ok: false as const, error: "Dê um nome à pesquisa antes de publicar." };
   if (data.questions.length === 0)
     return { ok: false as const, error: "Adicione ao menos uma pergunta antes de publicar." };
+  // publicar uma pesquisa já expirada geraria uma "ativa" que ninguém jamais veria
+  if (data.survey.endsAt && !isWithinSchedule(null, data.survey.endsAt))
+    return {
+      ok: false as const,
+      error: "A vigência desta pesquisa já terminou. Ajuste a data de fim em Configurações antes de publicar.",
+    };
 
   await publishSurvey(id, { projectId });
   revalidatePath(`/surveys/${id}/builder`);
@@ -130,6 +143,39 @@ export async function renameSurveyAction(input: unknown) {
   return { ok: true as const };
 }
 
+/* ---------- Duplicar (herda configurações + vigência da nova) ---------- */
+const duplicateSchema = z
+  .object({
+    id: z.string(),
+    name: z.string().trim().max(120, "Nome muito longo.").optional(),
+    startsAt: z.string().optional(),
+    endsAt: z.string().optional(),
+  })
+  .refine(
+    (d) => {
+      const from = normalizeDate(d.startsAt);
+      const to = normalizeDate(d.endsAt);
+      return !from || !to || from <= to;
+    },
+    { message: "A data de fim não pode ser anterior à de início." }
+  );
+
+export async function duplicateSurveyAction(input: unknown) {
+  const parsed = duplicateSchema.safeParse(input);
+  if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0].message };
+
+  const projectId = await getCurrentProjectId();
+  const newId = await duplicateSurvey(parsed.data.id, { projectId }, {
+    name: parsed.data.name,
+    startsAt: normalizeDate(parsed.data.startsAt),
+    endsAt: normalizeDate(parsed.data.endsAt),
+  });
+
+  revalidatePath("/surveys");
+  revalidatePath("/dashboard");
+  return { ok: true as const, id: newId };
+}
+
 /* ---------- Excluir ---------- */
 export async function deleteSurveyAction(id: string) {
   const projectId = await getCurrentProjectId();
@@ -151,9 +197,10 @@ const submitSchema = z.object({
 
 export async function submitResponseAction(input: unknown) {
   const data = submitSchema.parse(input);
-  // caminho público (preview/link direto): só grava se a pesquisa existir e estiver ativa
+  // caminho público (preview/link direto): só grava se a pesquisa existir, estiver ativa
+  // e dentro da vigência — senão bastaria manter a página aberta para responder depois do fim
   const survey = await getSurvey(data.surveyId);
-  if (!survey || survey.status !== "ativa") {
+  if (!survey || survey.status !== "ativa" || !isWithinSchedule(survey.startsAt, survey.endsAt)) {
     return { ok: false as const, error: "Pesquisa indisponível." };
   }
   await submitResponse({

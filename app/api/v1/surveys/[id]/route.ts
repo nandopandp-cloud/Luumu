@@ -1,5 +1,6 @@
 import { getSurveyWithQuestions } from "@/lib/db/surveys";
 import { normalizeAppearance, type BuilderQuestion } from "@/lib/builder";
+import { isWithinSchedule } from "@/lib/schedule";
 import { resolveKey } from "@/lib/api/keys";
 import { allowedOrigin, jsonCors, preflight } from "@/lib/api/cors";
 
@@ -11,7 +12,8 @@ export function OPTIONS(req: Request) {
 
 /**
  * GET /api/v1/surveys/[id]?key=pk_...
- * Retorna a pesquisa (se pertencer ao workspace da key e estiver ativa) com perguntas e aparência.
+ * Retorna a pesquisa (se pertencer ao workspace da key, estiver ativa e dentro da vigência)
+ * com perguntas e aparência.
  */
 export async function GET(
   req: Request,
@@ -34,6 +36,10 @@ export async function GET(
   if (!data) return jsonCors({ error: "Pesquisa não encontrada." }, { status: 404, origin: allowOrigin });
   if (data.survey.status !== "ativa") {
     return jsonCors({ error: "Pesquisa não está ativa." }, { status: 403, origin: allowOrigin });
+  }
+  // /config já filtra por vigência, mas esta rota também é chamada por id direto (ex.: Luumu.show)
+  if (!isWithinSchedule(data.survey.startsAt, data.survey.endsAt)) {
+    return jsonCors({ error: "Pesquisa fora do período de vigência." }, { status: 403, origin: allowOrigin });
   }
 
   const questions: BuilderQuestion[] = data.questions.map((q) => ({

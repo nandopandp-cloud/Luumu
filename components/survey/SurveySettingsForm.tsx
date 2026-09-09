@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { useToast } from "@/components/ui/Toast";
 import { saveSettingsAction } from "@/app/(app)/surveys/actions";
+import { scheduleLabel, scheduleState } from "@/lib/schedule";
 
 export interface SettingsValues {
   id: string;
@@ -241,10 +242,13 @@ export function SurveySettingsForm({
   initial,
   events: initialEvents = [],
   currentResponses = 0,
+  currentDate,
 }: {
   initial: SettingsValues;
   events?: WorkspaceEvent[];
   currentResponses?: number;
+  /** "hoje" no fuso do workspace, para situar a vigência sem depender do relógio do navegador */
+  currentDate: string;
 }) {
   const [v, setV] = useState(initial);
   const [saving, startSaving] = useTransition();
@@ -275,9 +279,16 @@ export function SurveySettingsForm({
 
   const specific = v.audience === "Usuários específicos";
 
+  const invalidRange = Boolean(v.startsAt && v.endsAt && v.startsAt > v.endsAt);
+  const period = scheduleState(v.startsAt || null, v.endsAt || null, currentDate);
+
   function save() {
+    if (invalidRange) {
+      toast("error", "A data de fim não pode ser anterior à de início.");
+      return;
+    }
     startSaving(async () => {
-      await saveSettingsAction({
+      const res = await saveSettingsAction({
         id: v.id,
         channel: v.channel,
         audience: v.audience,
@@ -291,6 +302,10 @@ export function SurveySettingsForm({
         endsAt: v.endsAt,
         responseLimit: v.responseLimit,
       });
+      if (!res.ok) {
+        toast("error", res.error ?? "Não foi possível salvar.");
+        return;
+      }
       setSaved(true);
       toast("success", "Configurações salvas.");
       setTimeout(() => setSaved(false), 1800);
@@ -386,13 +401,31 @@ export function SurveySettingsForm({
               </Select>
             </Field>
 
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Início">
-                <Input type="date" value={v.startsAt} onChange={(e) => set({ startsAt: e.target.value })} />
-              </Field>
-              <Field label="Fim">
-                <Input type="date" value={v.endsAt} onChange={(e) => set({ endsAt: e.target.value })} />
-              </Field>
+            <div>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Início da vigência">
+                  <Input type="date" value={v.startsAt} onChange={(e) => set({ startsAt: e.target.value })} />
+                </Field>
+                <Field label="Fim da vigência">
+                  <Input
+                    type="date"
+                    value={v.endsAt}
+                    min={v.startsAt || undefined}
+                    onChange={(e) => set({ endsAt: e.target.value })}
+                  />
+                </Field>
+              </div>
+              <p className={`mt-1.5 text-xs ${invalidRange ? "text-erro" : "text-fg-mut"}`}>
+                {invalidRange ? (
+                  "A data de fim não pode ser anterior à de início."
+                ) : (
+                  <>
+                    {scheduleLabel(v.startsAt, v.endsAt)}
+                    {period === "agendada" && " · ainda não começou"}
+                    {period === "expirada" && " · período encerrado, a pesquisa não é mais exibida"}
+                  </>
+                )}
+              </p>
             </div>
 
             <Field

@@ -6,6 +6,7 @@ import { surveyId, questionId } from "./ids";
 import { questionTemplates } from "@/lib/survey-templates";
 import { defaultAppearanceFor, type Appearance } from "@/lib/builder";
 import { methodologyForBlock, defaultScaleForBlock, computeScore, formatScore, SCORE_BLOCK_IDS } from "@/lib/scoring";
+import { today } from "@/lib/schedule";
 import type { SurveyType, SurveyStatus } from "@/lib/mock/surveys";
 
 export type SurveyRow = typeof surveys.$inferSelect;
@@ -167,6 +168,82 @@ export async function createSurveyFromTemplate(workspaceId: string, projectId: s
   return id;
 }
 
+/**
+ * Duplica uma pesquisa: copia todas as configurações (público, gatilhos, frequência,
+ * aparência, limite de respostas) e as perguntas, com a vigência informada no diálogo.
+ *
+ * A cópia nasce sempre como rascunho e SEM respostas — respostas pertencem à pesquisa
+ * original e copiá-las falsearia o score da nova. `publishedAt` também não é copiado.
+ * As perguntas ganham ids novos, e as referências condicionais (`logic.showIf.questionUid`)
+ * são remapeadas para os ids novos — senão a lógica da cópia continuaria apontando para
+ * perguntas da pesquisa original.
+ */
+export async function duplicateSurvey(
+  id: string,
+  scope: SurveyScope,
+  schedule: { name?: string; startsAt: string | null; endsAt: string | null }
+) {
+  const source = await assertOwned(id, scope);
+  const sourceQuestions = await db
+    .select()
+    .from(questions)
+    .where(eq(questions.surveyId, id))
+    .orderBy(asc(questions.order));
+
+  const newId = surveyId();
+  await db.insert(surveys).values({
+    id: newId,
+    workspaceId: source.workspaceId,
+    projectId: source.projectId,
+    name: schedule.name?.trim() || `${source.name} (cópia)`,
+    type: source.type,
+    status: "rascunho",
+    channel: source.channel,
+    audience: source.audience,
+    segment: source.segment,
+    language: source.language,
+    trigger: source.trigger,
+    triggerEvent: source.triggerEvent,
+    triggerEvents: source.triggerEvents as object,
+    audienceMode: source.audienceMode,
+    audienceList: source.audienceList as object,
+    frequency: source.frequency,
+    delay: source.delay,
+    startsAt: schedule.startsAt,
+    endsAt: schedule.endsAt,
+    responseLimit: source.responseLimit,
+    appearance: source.appearance as object,
+  });
+
+  if (sourceQuestions.length) {
+    const newIds = sourceQuestions.map(() => questionId());
+    const oldToNew = new Map(sourceQuestions.map((q, i) => [q.id, newIds[i]]));
+
+    await db.insert(questions).values(
+      sourceQuestions.map((q, i) => {
+        const logic = (q.logic as { showIf?: { questionUid?: string } }) ?? {};
+        const showIf = logic.showIf;
+        const remappedLogic =
+          showIf?.questionUid && oldToNew.has(showIf.questionUid)
+            ? { ...logic, showIf: { ...showIf, questionUid: oldToNew.get(showIf.questionUid) } }
+            : logic;
+        return {
+          id: newIds[i],
+          surveyId: newId,
+          order: q.order,
+          blockId: q.blockId,
+          title: q.title,
+          required: q.required,
+          config: (q.config as object) ?? {},
+          logic: remappedLogic as object,
+        };
+      })
+    );
+  }
+
+  return newId;
+}
+
 export async function updateSurvey(
   id: string,
   scope: SurveyScope,
@@ -237,9 +314,13 @@ export async function setSurveyStatus(id: string, scope: SurveyScope, status: Su
 
 /**
  * Depois de gravar uma resposta, checa se a survey tem um limite configurado e,
- * se o total de respostas já atingiu o limite, pausa a survey automaticamente
+ * se o total de respostas já atingiu o limite, tira a survey do ar automaticamente
  * (para de ser servida pelo SDK e pela página pública). Sem escopo de workspace
  * porque é chamada a partir do caminho público (SDK), não do painel autenticado.
+ *
+ * Se a pesquisa tem vigência definida, bater o limite dentro do período a ENCERRA:
+ * a meta daquele período foi cumprida e não faz sentido ela voltar sozinha antes do
+ * fim. Sem vigência, ela apenas PAUSA — o cliente pode aumentar o limite e reativar.
  */
 export async function enforceResponseLimit(id: string) {
   const [s] = await db.select().from(surveys).where(eq(surveys.id, id)).limit(1);
@@ -247,7 +328,11 @@ export async function enforceResponseLimit(id: string) {
 
   const [{ n } = { n: 0 }] = await db.select({ n: count() }).from(responses).where(eq(responses.surveyId, id));
   if (n >= s.responseLimit) {
-    await db.update(surveys).set({ status: "pausada", updatedAt: new Date() }).where(eq(surveys.id, id));
+    const scheduled = Boolean(s.startsAt || s.endsAt);
+    await db
+      .update(surveys)
+      .set({ status: scheduled ? "encerrada" : "pausada", updatedAt: new Date() })
+      .where(eq(surveys.id, id));
   }
 }
 
@@ -262,12 +347,24 @@ export async function saveAppearance(id: string, scope: SurveyScope, appearance:
   await db.update(surveys).set({ appearance, updatedAt: new Date() }).where(eq(surveys.id, id));
 }
 
-/** Pesquisas ativas de um projeto (para a API pública do SDK). */
+/**
+ * Condição SQL de vigência: `starts_at`/`ends_at` são datas civis "YYYY-MM-DD" e a
+ * janela é inclusiva nas duas pontas. Datas nulas significam "sem limite daquele lado".
+ * A comparação é textual contra o hoje civil do fuso do workspace (ver lib/schedule.ts).
+ */
+function withinScheduleSql(ref: string) {
+  return and(
+    sql`(${surveys.startsAt} is null or ${surveys.startsAt} = '' or ${surveys.startsAt} <= ${ref})`,
+    sql`(${surveys.endsAt} is null or ${surveys.endsAt} = '' or ${surveys.endsAt} >= ${ref})`
+  );
+}
+
+/** Pesquisas ativas e dentro da vigência de um projeto (para a API pública do SDK). */
 export async function listActiveSurveys(projectId: string) {
   return db
     .select()
     .from(surveys)
-    .where(and(eq(surveys.projectId, projectId), eq(surveys.status, "ativa")))
+    .where(and(eq(surveys.projectId, projectId), eq(surveys.status, "ativa"), withinScheduleSql(today())))
     .orderBy(desc(surveys.publishedAt));
 }
 
@@ -292,6 +389,6 @@ export async function listActiveSurveysForSdk(projectId: string) {
       frequency: surveys.frequency,
     })
     .from(surveys)
-    .where(and(eq(surveys.projectId, projectId), eq(surveys.status, "ativa")))
+    .where(and(eq(surveys.projectId, projectId), eq(surveys.status, "ativa"), withinScheduleSql(today())))
     .orderBy(desc(surveys.publishedAt));
 }

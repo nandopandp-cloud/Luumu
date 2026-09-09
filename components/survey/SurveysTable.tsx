@@ -4,15 +4,16 @@ import { useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Search, MoreHorizontal, Pause, Play, Square, Eye, Pencil, Type, Trash2, Loader2, AlertTriangle } from "lucide-react";
+import { Search, MoreHorizontal, Pause, Play, Square, Eye, Pencil, Type, Trash2, Loader2, AlertTriangle, Copy, CalendarRange } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
+import { Field, Input } from "@/components/ui/Input";
 import { SegmentedControl } from "@/components/ui/Tabs";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils";
-import { setStatusAction, renameSurveyAction, deleteSurveyAction } from "@/app/(app)/surveys/actions";
+import { setStatusAction, renameSurveyAction, deleteSurveyAction, duplicateSurveyAction } from "@/app/(app)/surveys/actions";
+import { addDays, scheduleLabel } from "@/lib/schedule";
 import type { SurveyStatus } from "@/lib/mock/surveys";
 
 export interface SurveyListItem {
@@ -32,13 +33,14 @@ const statusTone: Record<SurveyStatus, "success" | "warn" | "neutral" | "brand">
 
 type Filter = "todas" | SurveyStatus;
 
-export function SurveysTable({ items }: { items: SurveyListItem[] }) {
+export function SurveysTable({ items, currentDate }: { items: SurveyListItem[]; currentDate: string }) {
   const [filter, setFilter] = useState<Filter>("todas");
   const [q, setQ] = useState("");
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
   const [renaming, setRenaming] = useState<SurveyListItem | null>(null);
   const [deleting, setDeleting] = useState<SurveyListItem | null>(null);
+  const [duplicating, setDuplicating] = useState<SurveyListItem | null>(null);
   const [, startTransition] = useTransition();
   const router = useRouter();
   const toast = useToast();
@@ -67,6 +69,22 @@ export function SurveysTable({ items }: { items: SurveyListItem[] }) {
         router.refresh();
       } else {
         toast("error", res.error ?? "Não foi possível renomear.");
+      }
+    });
+  }
+
+  function doDuplicate(values: { name: string; startsAt: string; endsAt: string }) {
+    if (!duplicating) return;
+    const target = duplicating;
+    startTransition(async () => {
+      const res = await duplicateSurveyAction({ id: target.id, ...values });
+      if (res.ok) {
+        setDuplicating(null);
+        toast("success", "Pesquisa duplicada. Abrindo a cópia…");
+        // a cópia nasce como rascunho: leva direto ao builder dela para revisar e publicar
+        router.push(`/surveys/${res.id}/builder`);
+      } else {
+        toast("error", res.error ?? "Não foi possível duplicar.");
       }
     });
   }
@@ -164,6 +182,7 @@ export function SurveysTable({ items }: { items: SurveyListItem[] }) {
                             >
                               <MenuLink href={`/surveys/${s.id}/builder`} icon={<Pencil className="size-4" />}>Editar</MenuLink>
                               <MenuBtn onClick={() => { setMenuFor(null); setMenuPos(null); setRenaming(s); }} icon={<Type className="size-4" />}>Renomear</MenuBtn>
+                              <MenuBtn onClick={() => { setMenuFor(null); setMenuPos(null); setDuplicating(s); }} icon={<Copy className="size-4" />}>Duplicar</MenuBtn>
                               <MenuLink href={`/surveys/${s.id}/preview`} icon={<Eye className="size-4" />}>Preview</MenuLink>
                               {s.status === "ativa" && (
                                 <MenuBtn onClick={() => changeStatus(s.id, "pausada", "Pesquisa pausada.")} icon={<Pause className="size-4" />}>Pausar</MenuBtn>
@@ -197,6 +216,15 @@ export function SurveysTable({ items }: { items: SurveyListItem[] }) {
           initial={renaming.name}
           onCancel={() => setRenaming(null)}
           onConfirm={doRename}
+        />
+      )}
+
+      {duplicating && (
+        <DuplicateDialog
+          survey={duplicating}
+          currentDate={currentDate}
+          onCancel={() => setDuplicating(null)}
+          onConfirm={doDuplicate}
         />
       )}
 
@@ -243,6 +271,86 @@ function RenameDialog({ initial, onCancel, onConfirm }: { initial: string; onCan
         <Button variant="ghost" size="sm" onClick={onCancel}>Cancelar</Button>
         <Button size="sm" disabled={!valid || saving} onClick={() => start(() => onConfirm(name.trim()))}>
           {saving ? <Loader2 className="size-4 animate-spin" /> : null} Salvar
+        </Button>
+      </div>
+    </Backdrop>
+  );
+}
+
+/**
+ * Diálogo de duplicar. A vigência da nova pesquisa é a primeira coisa que aparece —
+ * é a decisão que muda entre uma rodada e outra (a cópia herda todo o resto da original).
+ * Já vem pré-preenchida com um período de 30 dias a partir de hoje, que é o caso comum.
+ */
+function DuplicateDialog({
+  survey,
+  currentDate,
+  onCancel,
+  onConfirm,
+}: {
+  survey: SurveyListItem;
+  currentDate: string;
+  onCancel: () => void;
+  onConfirm: (values: { name: string; startsAt: string; endsAt: string }) => void;
+}) {
+  const [name, setName] = useState(`${survey.name} (cópia)`);
+  const [startsAt, setStartsAt] = useState(currentDate);
+  const [endsAt, setEndsAt] = useState(() => addDays(currentDate, 30));
+  const [saving, start] = useTransition();
+
+  const invalidRange = Boolean(startsAt && endsAt && startsAt > endsAt);
+  const valid = name.trim().length > 0 && !invalidRange;
+
+  return (
+    <Backdrop onClose={onCancel}>
+      <div className="flex items-start gap-3">
+        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-surface-brand text-accent">
+          <Copy className="size-5" />
+        </span>
+        <div>
+          <h3 className="font-display text-lg font-bold">Duplicar pesquisa</h3>
+          <p className="mt-1 text-sm text-fg-soft">
+            A cópia herda as perguntas, a aparência, o público, os gatilhos, a frequência e o
+            limite de respostas de <strong>{survey.name}</strong>. As respostas não são copiadas.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-5 rounded-xl border border-line bg-bg-sunken p-4">
+        <div className="flex items-center gap-2 text-sm font-semibold text-fg-soft">
+          <CalendarRange className="size-4 text-accent" /> Vigência da nova pesquisa
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-3">
+          <Field label="Início">
+            <Input type="date" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} />
+          </Field>
+          <Field label="Fim">
+            <Input type="date" value={endsAt} min={startsAt || undefined} onChange={(e) => setEndsAt(e.target.value)} />
+          </Field>
+        </div>
+        <p className={cn("mt-2.5 text-xs", invalidRange ? "text-erro" : "text-fg-mut")}>
+          {invalidRange
+            ? "A data de fim não pode ser anterior à de início."
+            : `Vigência: ${scheduleLabel(startsAt, endsAt)}. Fora desse período a pesquisa não é exibida.`}
+        </p>
+      </div>
+
+      <Field label="Nome da cópia" className="mt-4">
+        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome da pesquisa" />
+      </Field>
+
+      <p className="mt-3 text-xs text-fg-mut">
+        A cópia é criada como rascunho para você revisar antes de publicar.
+      </p>
+
+      <div className="mt-5 flex justify-end gap-2">
+        <Button variant="ghost" size="sm" onClick={onCancel}>Cancelar</Button>
+        <Button
+          size="sm"
+          disabled={!valid || saving}
+          onClick={() => start(() => onConfirm({ name: name.trim(), startsAt, endsAt }))}
+        >
+          {saving ? <Loader2 className="size-4 animate-spin" /> : <Copy className="size-4" />} Duplicar
         </Button>
       </div>
     </Backdrop>

@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { LuumuLogo, Mascot } from "@/components/ui/Mascot";
 import { SurveyRenderer } from "@/components/survey/SurveyRenderer";
 import { getSurveyWithQuestions } from "@/lib/db/surveys";
+import { formatDate, scheduleState } from "@/lib/schedule";
 import type { BuilderQuestion } from "@/lib/builder";
 
 export async function generateMetadata({
@@ -28,17 +29,23 @@ export default async function PublicSurveyPage({
   // Só pesquisas publicadas e ativas respondem
   if (survey.status !== "ativa") {
     return (
-      <Shell>
-        <div className="flex flex-col items-center py-8 text-center">
-          <Mascot name="Pensativo" size={130} float />
-          <h1 className="mt-5 font-display text-2xl font-extrabold">Pesquisa indisponível</h1>
-          <p className="mt-1.5 max-w-sm text-fg-mut">
-            {survey.status === "encerrada"
-              ? "Esta pesquisa foi encerrada. Obrigado pelo interesse!"
-              : "Esta pesquisa ainda não está ativa."}
-          </p>
-        </div>
-      </Shell>
+      <Unavailable>
+        {survey.status === "encerrada"
+          ? "Esta pesquisa foi encerrada. Obrigado pelo interesse!"
+          : "Esta pesquisa ainda não está ativa."}
+      </Unavailable>
+    );
+  }
+
+  // ...e só dentro da vigência: fora dela a pesquisa existe, mas não recebe respostas
+  const period = scheduleState(survey.startsAt, survey.endsAt);
+  if (period !== "vigente") {
+    return (
+      <Unavailable>
+        {period === "agendada"
+          ? `Esta pesquisa começa em ${formatDate(survey.startsAt)}. Volte a partir dessa data!`
+          : `O período desta pesquisa terminou em ${formatDate(survey.endsAt)}. Obrigado pelo interesse!`}
+      </Unavailable>
     );
   }
 
@@ -56,6 +63,19 @@ export default async function PublicSurveyPage({
       <h1 className="mb-1 font-display text-2xl font-extrabold tracking-tight">{survey.name}</h1>
       <p className="mb-8 text-sm text-fg-mut">Sua opinião ajuda a melhorar. Leva menos de 1 minuto.</p>
       <SurveyRenderer surveyId={id} surveyName={survey.name} questions={rendered} />
+    </Shell>
+  );
+}
+
+/** Tela de "não dá para responder agora" — status inativo ou fora da vigência. */
+function Unavailable({ children }: { children: React.ReactNode }) {
+  return (
+    <Shell>
+      <div className="flex flex-col items-center py-8 text-center">
+        <Mascot name="Pensativo" size={130} float />
+        <h1 className="mt-5 font-display text-2xl font-extrabold">Pesquisa indisponível</h1>
+        <p className="mt-1.5 max-w-sm text-fg-mut">{children}</p>
+      </div>
     </Shell>
   );
 }
