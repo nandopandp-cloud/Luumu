@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Calendar, Plus, Trash2, Pause, Play, Mail, Loader2, X, Repeat } from "lucide-react";
+import { Calendar, Plus, Trash2, Pause, Play, Mail, Loader2, X, Repeat, Pencil } from "lucide-react";
 import { Card, CardTitle, CardSubtitle } from "@/components/ui/Card";
 import { Field, Input, Select } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
@@ -10,6 +10,7 @@ import { useToast } from "@/components/ui/Toast";
 import { PERIOD_OPTIONS } from "@/lib/period";
 import {
   createScheduleAction,
+  updateScheduleAction,
   toggleScheduleAction,
   deleteScheduleAction,
 } from "@/app/(app)/reports/actions";
@@ -67,7 +68,7 @@ export function ScheduleReports({
             surveys={surveys}
             surveyTypes={surveyTypes}
             onCancel={() => setCreating(false)}
-            onCreated={() => {
+            onSaved={() => {
               setCreating(false);
               // recarrega a lista via server (revalidatePath já disparou); força refresh leve
               location.reload();
@@ -86,6 +87,7 @@ export function ScheduleReports({
               key={s.id}
               item={s}
               surveys={surveys}
+              surveyTypes={surveyTypes}
               onChange={(next) => setItems((prev) => prev.map((p) => (p.id === s.id ? next : p)))}
               onRemove={() => setItems((prev) => prev.filter((p) => p.id !== s.id))}
             />
@@ -96,29 +98,39 @@ export function ScheduleReports({
   );
 }
 
+/**
+ * Formulário compartilhado por criar e editar: `item` ausente = criação. Um só componente
+ * para os dois fluxos, senão as opções novas (modo por tipo) precisariam ser mantidas em
+ * dois lugares e acabariam divergindo.
+ */
 function ScheduleForm({
   surveys,
   surveyTypes,
+  item,
   onCancel,
-  onCreated,
+  onSaved,
 }: {
   surveys: SurveyOpt[];
   surveyTypes: string[];
+  item?: ScheduledItem;
   onCancel: () => void;
-  onCreated: () => void;
+  onSaved: () => void;
 }) {
+  const editing = item !== undefined;
   const toast = useToast();
   const [saving, start] = useTransition();
-  const [name, setName] = useState("");
-  const [frequency, setFrequency] = useState("weekly");
-  const [period, setPeriod] = useState("30d");
-  const [format, setFormat] = useState("pdf");
-  const [surveyIds, setSurveyIds] = useState<string[]>([]);
+  const [name, setName] = useState(item?.name ?? "");
+  const [frequency, setFrequency] = useState(item?.frequency ?? "weekly");
+  const [period, setPeriod] = useState(item?.period ?? "30d");
+  const [format, setFormat] = useState(item?.format ?? "pdf");
+  const [surveyIds, setSurveyIds] = useState<string[]>(item?.surveyIds ?? []);
   // "campanha": acompanha tipos e resolve sozinho a última encerrada de cada um
-  const [mode, setMode] = useState<"fixed" | "types">("fixed");
-  const [types, setTypes] = useState<string[]>([]);
+  const [mode, setMode] = useState<"fixed" | "types">(
+    (item?.surveyTypes.length ?? 0) > 0 ? "types" : "fixed"
+  );
+  const [types, setTypes] = useState<string[]>(item?.surveyTypes ?? []);
   const [emailInput, setEmailInput] = useState("");
-  const [recipients, setRecipients] = useState<string[]>([]);
+  const [recipients, setRecipients] = useState<string[]>(item?.recipients ?? []);
 
   function addEmail() {
     const e = emailInput.trim().toLowerCase();
@@ -139,6 +151,10 @@ function ScheduleForm({
     setTypes((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
   }
 
+  // inclui tipos já selecionados que saíram da lista de disponíveis (ex.: nenhuma campanha
+  // daquele tipo tem vigência hoje) — senão editar o envio descartaria o tipo em silêncio
+  const typeOptions = Array.from(new Set([...surveyTypes, ...types])).sort();
+
   function submit() {
     if (recipients.length === 0) {
       toast("error", "Adicione ao menos um e-mail.");
@@ -148,22 +164,25 @@ function ScheduleForm({
       toast("error", "Selecione ao menos um tipo de pesquisa.");
       return;
     }
+    const payload = {
+      name: name || "Relatório",
+      recipients,
+      frequency,
+      period,
+      format,
+      // os modos são exclusivos: por tipo o cron resolve os ids a cada ciclo
+      surveyIds: mode === "types" ? [] : surveyIds,
+      surveyTypes: mode === "types" ? types : [],
+    };
     start(async () => {
-      const res = await createScheduleAction({
-        name: name || "Relatório",
-        recipients,
-        frequency,
-        period,
-        format,
-        // os modos são exclusivos: por tipo o cron resolve os ids a cada ciclo
-        surveyIds: mode === "types" ? [] : surveyIds,
-        surveyTypes: mode === "types" ? types : [],
-      });
+      const res = editing
+        ? await updateScheduleAction({ ...payload, id: item.id })
+        : await createScheduleAction(payload);
       if (res.ok) {
-        toast("success", "Envio agendado.");
-        onCreated();
+        toast("success", editing ? "Envio atualizado." : "Envio agendado.");
+        onSaved();
       } else {
-        toast("error", res.error ?? "Não foi possível agendar.");
+        toast("error", res.error ?? "Não foi possível salvar.");
       }
     });
   }
@@ -289,14 +308,14 @@ function ScheduleForm({
               encerrada de cada tipo, cobrindo exatamente o período de vigência dela — sem
               precisar reconfigurar quando uma campanha sucede a outra.
             </p>
-            {surveyTypes.length === 0 ? (
+            {typeOptions.length === 0 ? (
               <p className="text-xs text-fg-mut">
                 Nenhuma pesquisa com vigência definida ainda. Defina início e fim em uma pesquisa
                 para acompanhá-la por tipo.
               </p>
             ) : (
               <div className="flex flex-wrap gap-1.5">
-                {surveyTypes.map((t) => {
+                {typeOptions.map((t) => {
                   const on = types.includes(t);
                   return (
                     <button
@@ -326,7 +345,7 @@ function ScheduleForm({
       <div className="mt-5 flex items-center gap-2">
         <Button size="sm" onClick={submit} disabled={saving}>
           {saving ? <Loader2 className="size-4 animate-spin" /> : <Calendar className="size-4" />}
-          Agendar envio
+          {editing ? "Salvar alterações" : "Agendar envio"}
         </Button>
         <Button variant="ghost" size="sm" onClick={onCancel}>Cancelar</Button>
       </div>
@@ -337,16 +356,40 @@ function ScheduleForm({
 function ScheduleRow({
   item,
   surveys,
+  surveyTypes,
   onChange,
   onRemove,
 }: {
   item: ScheduledItem;
   surveys: SurveyOpt[];
+  surveyTypes: string[];
   onChange: (next: ScheduledItem) => void;
   onRemove: () => void;
 }) {
   const toast = useToast();
   const [busy, start] = useTransition();
+  const [editing, setEditing] = useState(false);
+
+  // em edição, a linha dá lugar ao mesmo formulário da criação, já preenchido
+  if (editing) {
+    return (
+      <div className="border-t border-line">
+        <div className="px-6 pt-4 text-xs font-semibold uppercase tracking-wide text-fg-mut">
+          Editando envio
+        </div>
+        <ScheduleForm
+          surveys={surveys}
+          surveyTypes={surveyTypes}
+          item={item}
+          onCancel={() => setEditing(false)}
+          onSaved={() => {
+            setEditing(false);
+            location.reload();
+          }}
+        />
+      </div>
+    );
+  }
 
   const scopeLabel =
     item.surveyTypes.length > 0
@@ -376,6 +419,14 @@ function ScheduleRow({
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-1">
+        <button
+          title="Editar"
+          onClick={() => setEditing(true)}
+          disabled={busy}
+          className="rounded-lg p-2 text-fg-mut hover:bg-bg-sunken hover:text-accent"
+        >
+          <Pencil className="size-4" />
+        </button>
         <button
           title={item.active ? "Pausar" : "Reativar"}
           onClick={() =>

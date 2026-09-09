@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
   createScheduledReport,
+  updateScheduledReport,
+  getScheduledReport,
   setScheduledReportActive,
   deleteScheduledReport,
   createPublicReport,
@@ -38,6 +40,25 @@ export async function createScheduleAction(input: unknown) {
     createdBy: session.userId,
     ...parsed.data,
   });
+  revalidatePath("/reports");
+  return { ok: true as const };
+}
+
+/** Edita um agendamento existente (mesmos campos da criação). */
+const updateScheduleSchema = scheduleSchema.extend({ id: z.string() });
+
+export async function updateScheduleAction(input: unknown) {
+  const parsed = updateScheduleSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+  const projectId = await getCurrentProjectId();
+  const { id, ...patch } = parsed.data;
+  // escopo por projeto: impede editar por id um agendamento de outro projeto do workspace
+  const current = await getScheduledReport(id, projectId);
+  if (!current) return { ok: false as const, error: "Envio não encontrado." };
+
+  await updateScheduledReport(id, projectId, patch, current.frequency);
   revalidatePath("/reports");
   return { ok: true as const };
 }

@@ -68,6 +68,45 @@ export async function createScheduledReport(input: {
   return id;
 }
 
+/**
+ * Edita um agendamento existente. A frequência entra no cálculo do próximo envio:
+ * mudá-la sem reagendar deixaria o envio preso ao ritmo antigo até o próximo disparo,
+ * então recalculamos `nextRunAt` quando ela muda.
+ */
+export async function updateScheduledReport(
+  id: string,
+  projectId: string,
+  patch: {
+    name: string;
+    recipients: string[];
+    frequency: Frequency;
+    period: string;
+    format: string;
+    surveyIds: string[];
+    surveyTypes: string[];
+  },
+  currentFrequency?: string
+) {
+  const reschedule = currentFrequency !== undefined && currentFrequency !== patch.frequency;
+  await db
+    .update(scheduledReports)
+    .set({
+      ...patch,
+      ...(reschedule ? { nextRunAt: computeNextRun(patch.frequency) } : {}),
+    })
+    .where(and(eq(scheduledReports.id, id), eq(scheduledReports.projectId, projectId)));
+}
+
+/** Busca um agendamento dentro do projeto (null se não pertencer a ele). */
+export async function getScheduledReport(id: string, projectId: string): Promise<ScheduledReportRow | null> {
+  const [row] = await db
+    .select()
+    .from(scheduledReports)
+    .where(and(eq(scheduledReports.id, id), eq(scheduledReports.projectId, projectId)))
+    .limit(1);
+  return row ?? null;
+}
+
 export async function setScheduledReportActive(id: string, projectId: string, active: boolean) {
   await db
     .update(scheduledReports)
