@@ -6,6 +6,24 @@ import { allowedOrigin, jsonCors, preflight } from "@/lib/api/cors";
 
 export const dynamic = "force-dynamic";
 
+/*
+  Cache de borda do conteúdo da pesquisa (perguntas + aparência).
+
+  É o que o widget baixa toda vez que uma pesquisa vai aparecer para alguém: numa pesquisa
+  que dispara bem, isso é uma invocação por exibição, todas devolvendo exatamente o mesmo
+  JSON. Perguntas e aparência mudam quando alguém edita no painel, não a cada exibição.
+
+  A janela é mais curta que a de /config porque esta resposta também carrega estado
+  (status e vigência): 30s é o atraso máximo para uma pesquisa pausada parar de ser servida
+  pela borda. Quem responde depois disso ainda é barrado na gravação — POST /responses
+  revalida status e vigência no banco, sem cache, então uma pesquisa encerrada não recebe
+  resposta mesmo que o widget tenha sido montado com um JSON de alguns segundos atrás.
+
+  Só o caminho de sucesso é cacheado: as respostas de erro (401/403/404) continuam
+  dinâmicas, para uma key revogada ou pesquisa despublicada não ficarem presas na borda.
+*/
+const SURVEY_CACHE = "public, s-maxage=30, stale-while-revalidate=120";
+
 export function OPTIONS(req: Request) {
   return preflight(req.headers.get("origin"));
 }
@@ -59,6 +77,6 @@ export async function GET(
       appearance: normalizeAppearance(data.survey.appearance),
       questions,
     },
-    { origin: allowOrigin }
+    { origin: allowOrigin, cache: SURVEY_CACHE }
   );
 }

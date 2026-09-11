@@ -530,22 +530,119 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     setTimeout(() => mount(survey), delay);
   }
 
+  /* ---------- Ingestão de eventos: catálogo, dedupe persistente e batch ----------
+   *
+   * O servidor mantém um CATÁLOGO de nomes distintos ("que eventos existem neste produto?"),
+   * não um contador de ocorrências: reenviar um nome já catalogado não muda nada no banco.
+   *
+   * Antes cada evento virava um POST próprio, e o dedupe vivia num Set em memória — que
+   * morre a cada navegação. Num site multipágina isso significava recatalogar "page_view_home",
+   * "click_entrar" etc. a cada página, para sempre. Duas mudanças cortam isso:
+   *
+   *  1. o conjunto de nomes já enviados passa a viver no localStorage, então sobrevive à
+   *     navegação: um nome conhecido nunca mais gera request;
+   *  2. o que sobra (nomes realmente inéditos) é acumulado num buffer e enviado em UMA
+   *     request com vários nomes.
+   *
+   * Nada de amostragem: todo nome inédito continua sendo enviado. O que desaparece é só a
+   * repetição, que o servidor já descartava com onConflictDoNothing.
+   */
+  const SENT_KEY = "luumu_sent_events";
+  let sentNames: Record<string, 1> = {};
+  try {
+    const raw = localStorage.getItem(SENT_KEY);
+    if (raw) sentNames = JSON.parse(raw) || {};
+  } catch {}
+
+  // teto defensivo: se o produto do cliente gerar nomes demais, o dedupe reinicia em vez de
+  // crescer sem limite no localStorage (o servidor também tem seu próprio teto de catálogo).
+  const SENT_MAX = 500;
+
+  function rememberSent(names: string[]) {
+    let changed = false;
+    for (const n of names) {
+      if (!sentNames[n]) {
+        sentNames[n] = 1;
+        changed = true;
+      }
+    }
+    if (!changed) return;
+    try {
+      if (Object.keys(sentNames).length > SENT_MAX) sentNames = {};
+      localStorage.setItem(SENT_KEY, JSON.stringify(sentNames));
+    } catch {}
+  }
+
+  // buffer de nomes inéditos aguardando envio
+  let pending: string[] = [];
+  let flushTimer: ReturnType<typeof setTimeout> | null = null;
+  const FLUSH_MS = 2000; // janela de agrupamento
+  const FLUSH_MAX = 20; // envia na hora ao acumular este tanto
+
+  /**
+   * Envia o buffer. `beacon` é usado quando a página está sendo descarregada: fetch normal
+   * é cancelado nesse momento, sendBeacon não — é isso que evita perder o último evento.
+   */
+  function flush(beacon = false) {
+    if (flushTimer) {
+      clearTimeout(flushTimer);
+      flushTimer = null;
+    }
+    const key = activeKey || keyFromAttr;
+    if (!key || pending.length === 0) return;
+    const names = pending;
+    pending = [];
+
+    const body = JSON.stringify({ key, events: names });
+    // só marca como enviado depois de despachar; se a request falhar, o nome volta ao buffer
+    // para tentar de novo (o catálogo é idempotente, reenviar não duplica nada).
+    if (beacon && typeof navigator !== "undefined" && navigator.sendBeacon) {
+      const ok = navigator.sendBeacon(`${API}/events`, new Blob([body], { type: "application/json" }));
+      if (ok) rememberSent(names);
+      return;
+    }
+    fetch(`${API}/events`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+      keepalive: true,
+    })
+      .then((r) => {
+        if (r.ok) rememberSent(names);
+        else for (const n of names) if (pending.indexOf(n) < 0) pending.push(n);
+      })
+      .catch(() => {
+        // rede indisponível: devolve ao buffer para a próxima janela de flush
+        for (const n of names) if (pending.indexOf(n) < 0) pending.push(n);
+      });
+  }
+
+  /** Coloca um nome inédito na fila de catalogação (ignora o que já foi enviado). */
+  function enqueueEvent(name: string) {
+    if (sentNames[name] || pending.indexOf(name) >= 0) return;
+    pending.push(name);
+    if (pending.length >= FLUSH_MAX) {
+      flush();
+      return;
+    }
+    if (!flushTimer) flushTimer = setTimeout(() => flush(), FLUSH_MS);
+  }
+
   /**
    * Envia um evento do produto do cliente. Faz duas coisas:
    *  1. ingere o evento (para aparecer no painel como gatilho disponível);
    *  2. dispara qualquer survey ativa cujo gatilho case com o nome (respeitando público-alvo).
+   *
+   * O disparo de pesquisa NÃO espera a ingestão: quem decide é o catálogo já carregado,
+   * então agrupar o envio do nome não atrasa nenhuma pesquisa.
    */
   async function track(rawEvent: string) {
     const key = activeKey || keyFromAttr;
     if (!key || !rawEvent) return;
     const name = slug(rawEvent);
     if (!name) return;
-    // ingestão (best-effort, não bloqueia o disparo)
-    fetch(`${API}/events`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key, event: name }),
-    }).catch(() => {});
+    // ingestão (agrupada, best-effort, não bloqueia o disparo)
+    enqueueEvent(name);
     // disparo por gatilho (qualquer evento da lista que case)
     await ensureCatalog(key);
     for (const s of activeSurveys) {
@@ -558,7 +655,13 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
   // elementos interativos, gerando nomes de evento legíveis automaticamente.
   // `data-luumu-track="nome"` (ou `data-luumu-ignore`) permite ao cliente
   // ajustar/silenciar pontualmente, sem exigir instrumentação manual.
-  const autoSeen = new Set<string>(); // dedupe: mesmo evento não repete na mesma sessão
+  /*
+    Dedupe dos eventos AUTOMÁTICOS dentro deste carregamento de página. Vale para o caminho
+    inteiro de autoTrack (ingestão + avaliação de gatilho), então um botão clicado dez vezes
+    não reavalia dez vezes as pesquisas. A ingestão tem seu próprio dedupe, persistente e
+    entre páginas (sentNames); este aqui é o de curto prazo, em memória.
+  */
+  const autoSeen = new Set<string>();
 
   function textLabel(node: Element): string {
     const aria = node.getAttribute("aria-label");
@@ -611,7 +714,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
 
   function autoTrack(name: string) {
     if (!name) return;
-    // dedupe por nome: cada evento automático só é enviado uma vez por sessão.
+    // dedupe por nome: cada evento automático só é processado uma vez por carregamento de página.
     // (eventos diferentes disparados no mesmo instante, ex: form_submit + form_submit_x, passam ambos)
     if (autoSeen.has(name)) return;
     autoSeen.add(name);
@@ -691,7 +794,16 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
       if (me.clientY <= 0 && !me.relatedTarget) autoTrack("exit_intent");
     });
     // Saída real (fechando/navegando para fora).
-    window.addEventListener("pagehide", () => autoTrack("page_leave"));
+    // Enfileira o último evento e descarrega o buffer por sendBeacon no mesmo passo: é a
+    // única forma de o que foi capturado nos últimos segundos não morrer com a página.
+    window.addEventListener("pagehide", () => {
+      autoTrack("page_leave");
+      flush(true);
+    });
+    // Aba indo para segundo plano (no mobile, muitas vezes o último callback antes de morrer).
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) flush(true);
+    });
 
     // Engajamento por tempo ativo na página (30s e 60s de permanência com aba visível).
     let activeMs = 0;

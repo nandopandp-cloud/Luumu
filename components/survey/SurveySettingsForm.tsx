@@ -30,7 +30,19 @@ export interface WorkspaceEvent {
   lastSeenAt: Date | string;
 }
 
-const EVENTS_POLL_MS = 10_000;
+/*
+  Atualização da lista de eventos disponíveis como gatilho.
+
+  A 10s fixos, um formulário de configurações aberto gerava ~360 requisições/hora — cada uma
+  autenticada e com query no banco — mesmo com a aba em segundo plano e sem ninguém olhando.
+  O catálogo de eventos é descoberta lenta (nomes novos aparecem quando o cliente instrumenta
+  algo), então esse ritmo não comprava nada.
+
+  Agora segue o mesmo padrão do EventDetector: só com a aba visível, num intervalo folgado, e
+  com atualização imediata ao voltar o foco — que é quando o usuário de fato olha a lista. O
+  botão "atualizar" manual continua disponível para quem quer forçar agora.
+*/
+const EVENTS_POLL_MS = 60_000;
 
 // rótulo legível para o nome bruto do evento (prefixos gerados pelo auto-tracking em sdk/luumu.ts)
 function eventLabel(name: string): string {
@@ -273,8 +285,18 @@ export function SurveySettingsForm({
   });
 
   useEffect(() => {
-    const id = setInterval(() => refreshEvents.current(true), EVENTS_POLL_MS);
-    return () => clearInterval(id);
+    const id = setInterval(() => {
+      if (!document.hidden) refreshEvents.current(true);
+    }, EVENTS_POLL_MS);
+    // voltar para a aba é o momento em que a lista desatualizada seria percebida
+    const onVisible = () => {
+      if (!document.hidden) refreshEvents.current(true);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, []);
 
   const specific = v.audience === "Usuários específicos";

@@ -1,4 +1,3 @@
-import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { submitResponse } from "@/lib/db/responses";
 import { getSurvey, enforceResponseLimit } from "@/lib/db/surveys";
@@ -80,11 +79,17 @@ export async function POST(req: Request) {
     respondent: data.respondent ?? null,
     respondentEmail: data.respondentEmail ?? null,
   });
-  await enforceResponseLimit(data.surveyId);
+  // reaproveita a linha já carregada acima em vez de reler a pesquisa
+  await enforceResponseLimit(data.surveyId, survey);
 
-  revalidatePath("/responses");
-  revalidatePath(`/surveys/${data.surveyId}/responses`);
-  revalidatePath("/dashboard");
+  /*
+    Sem revalidatePath aqui de propósito. As três telas que esta rota invalidava
+    (/dashboard, /responses, /surveys/[id]/responses) são `force-dynamic`: elas já renderizam
+    do zero a cada acesso, então não existe cache de rota para derrubar. As chamadas eram
+    trabalho por resposta recebida — no endpoint de escrita mais quente — sem nenhum efeito
+    sobre o que o usuário vê. Se alguma dessas telas passar a ser cacheada, a invalidação
+    precisa voltar junto com a mudança.
+  */
 
   return jsonCors({ ok: true }, { origin: allowOrigin });
 }

@@ -22,41 +22,53 @@ export function normalizeEventName(raw: string): string {
 }
 
 /**
- * Registra um evento INÉDITO do projeto (chamado pela ingestão do SDK).
+ * Registra os eventos INÉDITOS do projeto (ingestão do SDK).
  *
  * O catálogo responde a uma única pergunta: "que eventos existem neste produto?" — é a lista
  * que o cliente usa para escolher gatilhos de pesquisa. A primeira vez que alguém entra em
  * /biblioteca, a rota vira um evento conhecido; as visitas seguintes não acrescentam nada.
  * Por isso repetição não é gravada: nem em memória (caso comum), nem no banco.
  *
- * `onConflictDoNothing` é o que fecha a conta: quando o cache está frio (lambda nova), o
- * INSERT de um evento já catalogado é descartado pelo índice (project_id, name) sem escrever
- * nada — antes, esse mesmo caso virava UPDATE de count/last_seen_at, ou seja, escrita a cada
- * ocorrência. O nome é devolvido de todo jeito, porque quem chama usa isso para casar gatilhos.
+ * O SDK agrupa os nomes inéditos de uma visita e manda todos juntos. Os que esta instância já
+ * conhece são descartados em memória, e o que sobra vira UM único INSERT com várias linhas —
+ * não um INSERT por nome. No caso comum (tudo já catalogado) o banco não é tocado nenhuma vez.
+ * `onConflictDoNothing` fecha a conta quando o cache está frio: o índice (project_id, name)
+ * descarta o que já existe sem escrever nada.
+ *
+ * Devolve os nomes normalizados, na ordem de entrada, porque quem chama usa isso para casar
+ * gatilhos de pesquisa.
  */
-export async function recordEvent(workspaceId: string, projectId: string, rawName: string) {
-  const name = normalizeEventName(rawName);
-  if (!name) return null;
+export async function recordEvents(
+  workspaceId: string,
+  projectId: string,
+  rawNames: string[]
+): Promise<string[]> {
+  const names: string[] = [];
+  for (const raw of rawNames) {
+    const name = normalizeEventName(raw);
+    if (name && names.indexOf(name) < 0) names.push(name);
+  }
+  if (names.length === 0) return [];
 
-  if (isKnownEvent(projectId, name)) return name;
+  const unknown = names.filter((n) => !isKnownEvent(projectId, n));
+  if (unknown.length === 0) return names;
 
-  /*
-    Teto de eventos distintos por projeto. O SDK já normaliza rotas e rótulos, mas ele roda
-    no navegador do cliente: uma versão antiga, um `luumu.track()` com id concatenado ou uma
-    página adulterada ainda podem inventar nomes novos indefinidamente. Sem teto, cada nome
-    inédito é uma linha nova e uma escrita — foi assim que o catálogo chegou a 200 mil.
-    Ao atingir o limite, o evento continua valendo como gatilho (o nome é devolvido), só não
-    entra no catálogo.
-  */
-  if (await isCatalogFull(projectId)) return name;
+  // o teto de catálogo é por projeto: consulta uma vez para o lote, não uma vez por nome
+  const free = await catalogHeadroom(projectId, unknown.length);
+  const toInsert = free <= 0 ? [] : unknown.slice(0, free);
 
-  await db
-    .insert(events)
-    .values({ id: eventId(), workspaceId, projectId, name, count: 1 })
-    .onConflictDoNothing({ target: [events.projectId, events.name] });
+  if (toInsert.length > 0) {
+    await db
+      .insert(events)
+      .values(
+        toInsert.map((name) => ({ id: eventId(), workspaceId, projectId, name, count: 1 }))
+      )
+      .onConflictDoNothing({ target: [events.projectId, events.name] });
 
-  markKnownEvent(projectId, name);
-  return name;
+    for (const name of toInsert) markKnownEvent(projectId, name);
+  }
+
+  return names;
 }
 
 /** Limite de eventos distintos por projeto: o catálogo é uma lista para escolher gatilhos. */
@@ -64,21 +76,35 @@ const MAX_EVENTS_PER_PROJECT = 300;
 const catalogCount = new Map<string, { n: number; checkedAt: number }>();
 const COUNT_TTL_MS = 10 * 60 * 1000;
 
-async function isCatalogFull(projectId: string): Promise<boolean> {
-  const cached = catalogCount.get(projectId);
+/*
+  Quantos nomes novos ainda cabem no catálogo do projeto (0 = cheio), resolvido uma vez para
+  o lote inteiro em vez de uma consulta por nome.
+
+  O teto existe porque o SDK roda no navegador do cliente: mesmo com rotas e rótulos
+  normalizados, uma versão antiga, um `luumu.track()` com id concatenado ou uma página
+  adulterada ainda podem inventar nomes novos indefinidamente — e cada nome inédito é uma
+  linha nova e uma escrita. Foi assim que o catálogo chegou a 200 mil. Atingido o limite, o
+  evento continua valendo como gatilho (o nome é devolvido), só não entra no catálogo.
+*/
+async function catalogHeadroom(projectId: string, wanted: number): Promise<number> {
   const now = Date.now();
+  const cached = catalogCount.get(projectId);
+  let n: number;
   if (cached && now - cached.checkedAt < COUNT_TTL_MS) {
-    if (cached.n >= MAX_EVENTS_PER_PROJECT) return true;
-    cached.n += 1; // otimista: contamos a inserção que está prestes a acontecer
-    return false;
+    n = cached.n;
+  } else {
+    const [row] = await db
+      .select({ n: count() })
+      .from(events)
+      .where(eq(events.projectId, projectId));
+    n = Number(row?.n ?? 0);
+    catalogCount.set(projectId, { n, checkedAt: now });
   }
-  const [row] = await db
-    .select({ n: count() })
-    .from(events)
-    .where(eq(events.projectId, projectId));
-  const n = Number(row?.n ?? 0);
-  catalogCount.set(projectId, { n: n + 1, checkedAt: now });
-  return n >= MAX_EVENTS_PER_PROJECT;
+  const free = Math.max(0, MAX_EVENTS_PER_PROJECT - n);
+  const granted = Math.min(free, wanted);
+  // otimista: conta as inserções que estão prestes a acontecer
+  if (granted > 0) catalogCount.set(projectId, { n: n + granted, checkedAt: cached?.checkedAt ?? now });
+  return granted;
 }
 
 /**

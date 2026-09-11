@@ -30,11 +30,22 @@ export function corsHeaders(origin: string | null): Record<string, string> {
   return h;
 }
 
-/** JSON com CORS resolvido para o origin permitido (ou sem header, se negado). */
-export function jsonCors(data: unknown, opts: { status?: number; origin?: string | null } = {}) {
+/**
+ * JSON com CORS resolvido para o origin permitido (ou sem header, se negado).
+ *
+ * `cache` aceita um valor de Cache-Control para a resposta. Sem ele a rota continua
+ * dinâmica (nenhuma resposta do SDK era cacheável antes), então quem não passa nada
+ * mantém exatamente o comportamento anterior.
+ */
+export function jsonCors(
+  data: unknown,
+  opts: { status?: number; origin?: string | null; cache?: string } = {}
+) {
+  const headers = corsHeaders(opts.origin ?? null);
+  if (opts.cache) headers["Cache-Control"] = opts.cache;
   return NextResponse.json(data, {
     status: opts.status ?? 200,
-    headers: corsHeaders(opts.origin ?? null),
+    headers,
   });
 }
 

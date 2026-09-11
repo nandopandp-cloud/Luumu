@@ -322,8 +322,16 @@ export async function setSurveyStatus(id: string, scope: SurveyScope, status: Su
  * a meta daquele período foi cumprida e não faz sentido ela voltar sozinha antes do
  * fim. Sem vigência, ela apenas PAUSA — o cliente pode aumentar o limite e reativar.
  */
-export async function enforceResponseLimit(id: string) {
-  const [s] = await db.select().from(surveys).where(eq(surveys.id, id)).limit(1);
+export async function enforceResponseLimit(id: string, known?: SurveyRow) {
+  /*
+    `known` evita reler a pesquisa quando quem chama acabou de carregá-la — é o caso da
+    ingestão de respostas do SDK, que já fez esse SELECT para validar tenant e status.
+
+    A saída antecipada importa mais que a releitura: a maioria das pesquisas não tem
+    `responseLimit`, e nesses casos o COUNT sobre `responses` (que cresce sem teto) era
+    executado a cada resposta só para descobrir que não havia limite a aplicar.
+  */
+  const s = known ?? (await db.select().from(surveys).where(eq(surveys.id, id)).limit(1))[0];
   if (!s || s.responseLimit == null || s.status !== "ativa") return;
 
   const [{ n } = { n: 0 }] = await db.select({ n: count() }).from(responses).where(eq(responses.surveyId, id));
