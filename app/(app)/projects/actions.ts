@@ -15,6 +15,7 @@ import {
   deleteProject,
   getProject,
   countProjects,
+  setProjectDomains,
 } from "@/lib/db/projects";
 
 export type ProjectResult = { ok: boolean; error?: string };
@@ -78,6 +79,61 @@ export async function renameProjectAction(projectId: string, input: unknown): Pr
   }
 
   await renameProject(projectId, workspaceId, parsed.data.name);
+  revalidatePath("/settings");
+  return { ok: true };
+}
+
+/**
+ * Normaliza uma URL digitada para o formato que o CORS compara: só o host.
+ * O usuário cola "https://app.site.com/entrar", a allowlist precisa de "app.site.com".
+ */
+function normalizeDomain(raw: string): string | null {
+  const v = raw.trim().toLowerCase();
+  if (!v) return null;
+  let host = v;
+  try {
+    host = new URL(v.includes("://") ? v : `https://${v}`).host;
+  } catch {
+    return null;
+  }
+  // host válido: rótulos alfanuméricos separados por ponto, porta opcional.
+  // localhost é aceito sem ponto para permitir testar o SDK em desenvolvimento.
+  if (!/^[a-z0-9.-]+(:\d+)?$/.test(host)) return null;
+  if (!host.includes(".") && !/^localhost(:\d+)?$/.test(host)) return null;
+  return host;
+}
+
+const domainsSchema = z.object({
+  domains: z.array(z.string()).max(20, "No máximo 20 domínios."),
+});
+
+/**
+ * Define as URLs autorizadas do projeto (só owner/admin).
+ * Lista vazia = sem restrição de origem, que é o padrão de um projeto novo.
+ */
+export async function setProjectDomainsAction(projectId: string, input: unknown): Promise<ProjectResult> {
+  const { workspaceId } = await requireUser();
+  if (!(await canManageWorkspace())) {
+    return { ok: false, error: "Você não tem permissão para editar projetos." };
+  }
+  const parsed = domainsSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+
+  const project = await getProject(projectId, workspaceId);
+  if (!project) return { ok: false, error: "Projeto não encontrado." };
+  if (!(await canAccessProject(projectId))) {
+    return { ok: false, error: "Você não tem acesso a este projeto." };
+  }
+
+  const clean: string[] = [];
+  for (const raw of parsed.data.domains) {
+    if (!raw.trim()) continue;
+    const host = normalizeDomain(raw);
+    if (!host) return { ok: false, error: `URL inválida: ${raw.trim()}` };
+    if (!clean.includes(host)) clean.push(host);
+  }
+
+  await setProjectDomains(projectId, clean);
   revalidatePath("/settings");
   return { ok: true };
 }

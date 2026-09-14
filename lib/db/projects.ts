@@ -1,9 +1,10 @@
 import "server-only";
-import { and, asc, count, eq, inArray } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "./client";
-import { projects, surveys } from "@/db/schema";
+import { apiKeys, projects, surveys } from "@/db/schema";
 import { projectId as newProjectId } from "./ids";
 import { createApiKey } from "./keys";
+import { invalidateKeyCache } from "@/lib/api/keys";
 
 export type ProjectRow = typeof projects.$inferSelect;
 
@@ -31,14 +32,58 @@ export async function listProjects(workspaceId: string) {
 
   if (rows.length === 0) return [];
 
-  const counts = await db
-    .select({ projectId: surveys.projectId, n: count() })
-    .from(surveys)
-    .where(inArray(surveys.projectId, rows.map((p) => p.id)))
-    .groupBy(surveys.projectId);
+  const ids = rows.map((p) => p.id);
+  const [counts, keys] = await Promise.all([
+    db
+      .select({ projectId: surveys.projectId, n: count() })
+      .from(surveys)
+      .where(inArray(surveys.projectId, ids))
+      .groupBy(surveys.projectId),
+    db
+      .select({ projectId: apiKeys.projectId, domains: apiKeys.domains, createdAt: apiKeys.createdAt })
+      .from(apiKeys)
+      .where(and(inArray(apiKeys.projectId, ids), isNull(apiKeys.revokedAt)))
+      .orderBy(asc(apiKeys.createdAt)),
+  ]);
 
   const countByProject = new Map(counts.map((c) => [c.projectId, Number(c.n)]));
-  return rows.map((p) => ({ ...p, surveyCount: countByProject.get(p.id) ?? 0 }));
+  // a URL do projeto mora na allowlist da key primária (a mais antiga ativa)
+  const domainsByProject = new Map<string, string[]>();
+  for (const k of keys) {
+    if (!domainsByProject.has(k.projectId)) {
+      domainsByProject.set(k.projectId, (k.domains as string[]) ?? []);
+    }
+  }
+
+  return rows.map((p) => ({
+    ...p,
+    surveyCount: countByProject.get(p.id) ?? 0,
+    domains: domainsByProject.get(p.id) ?? [],
+  }));
+}
+
+/** Domínios (URLs) autorizados do projeto, lidos da key primária ativa. */
+export async function getProjectDomains(projectId: string): Promise<string[]> {
+  const [k] = await db
+    .select({ domains: apiKeys.domains })
+    .from(apiKeys)
+    .where(and(eq(apiKeys.projectId, projectId), isNull(apiKeys.revokedAt)))
+    .orderBy(asc(apiKeys.createdAt))
+    .limit(1);
+  return (k?.domains as string[]) ?? [];
+}
+
+/**
+ * Regrava a allowlist de domínios de TODAS as keys ativas do projeto.
+ * A URL é uma propriedade do projeto na UI, então keys extras não podem ficar
+ * com uma allowlist divergente — seria uma origem aceita sem aparecer em lugar nenhum.
+ */
+export async function setProjectDomains(projectId: string, domains: string[]) {
+  await db
+    .update(apiKeys)
+    .set({ domains })
+    .where(and(eq(apiKeys.projectId, projectId), isNull(apiKeys.revokedAt)));
+  invalidateKeyCache();
 }
 
 /** Busca um projeto garantindo que pertence ao workspace (ou null). */

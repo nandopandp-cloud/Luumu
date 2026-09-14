@@ -79,6 +79,24 @@ export async function updateUserAvatar(userId: string, avatarUrl: string | null)
   await db.update(users).set({ avatarUrl }).where(eq(users.id, userId));
 }
 
+/**
+ * Marca atividade do usuário. A sessão dura 30 dias, então gravar só no login diria
+ * "quando entrou a senha", não "quando usou" — por isso a marca vem da navegação.
+ * Como isso roda em toda request autenticada, grava no máximo uma vez por intervalo:
+ * a granularidade útil na tela é o dia, não o segundo.
+ */
+const LAST_SEEN_INTERVAL_MS = 15 * 60 * 1000;
+const lastSeenWrite = new Map<string, number>();
+
+export function touchUserLastSeen(userId: string) {
+  const now = Date.now();
+  const last = lastSeenWrite.get(userId) ?? 0;
+  if (now - last < LAST_SEEN_INTERVAL_MS) return;
+  lastSeenWrite.set(userId, now);
+  // best-effort: a marca é telemetria, nunca deve derrubar a request que a disparou
+  db.update(users).set({ lastSeenAt: new Date(now) }).where(eq(users.id, userId)).catch(() => {});
+}
+
 /** Membership de um usuário específico dentro de um workspace (ou null). */
 export async function getMembership(workspaceId: string, userId: string) {
   const [m] = await db
@@ -139,6 +157,7 @@ export async function listWorkspaceMembers(workspaceId: string) {
       email: users.email,
       role: memberships.role,
       avatarUrl: users.avatarUrl,
+      lastSeenAt: users.lastSeenAt,
       membershipId: memberships.id,
     })
     .from(memberships)

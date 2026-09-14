@@ -1,7 +1,7 @@
 import "server-only";
-import { and, asc, count, eq, inArray } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "./client";
-import { memberships, membershipProjects, projects, surveys } from "@/db/schema";
+import { apiKeys, memberships, membershipProjects, projects, surveys } from "@/db/schema";
 import { membershipProjectId } from "./ids";
 
 /**
@@ -104,14 +104,34 @@ export async function listProjectsForUser(workspaceId: string, userId: string) {
 
   if (rows.length === 0) return [];
 
-  const counts = await db
-    .select({ projectId: surveys.projectId, n: count() })
-    .from(surveys)
-    .where(inArray(surveys.projectId, rows.map((p) => p.id)))
-    .groupBy(surveys.projectId);
+  const ids = rows.map((p) => p.id);
+  const [counts, keys] = await Promise.all([
+    db
+      .select({ projectId: surveys.projectId, n: count() })
+      .from(surveys)
+      .where(inArray(surveys.projectId, ids))
+      .groupBy(surveys.projectId),
+    db
+      .select({ projectId: apiKeys.projectId, domains: apiKeys.domains, createdAt: apiKeys.createdAt })
+      .from(apiKeys)
+      .where(and(inArray(apiKeys.projectId, ids), isNull(apiKeys.revokedAt)))
+      .orderBy(asc(apiKeys.createdAt)),
+  ]);
 
   const countByProject = new Map(counts.map((c) => [c.projectId, Number(c.n)]));
-  return rows.map((p) => ({ ...p, surveyCount: countByProject.get(p.id) ?? 0 }));
+  // URL do projeto = allowlist da key primária (a mais antiga ativa)
+  const domainsByProject = new Map<string, string[]>();
+  for (const k of keys) {
+    if (!domainsByProject.has(k.projectId)) {
+      domainsByProject.set(k.projectId, (k.domains as string[]) ?? []);
+    }
+  }
+
+  return rows.map((p) => ({
+    ...p,
+    surveyCount: countByProject.get(p.id) ?? 0,
+    domains: domainsByProject.get(p.id) ?? [],
+  }));
 }
 
 /** Escopo de cada membership do workspace, para montar a tela de membros numa query só. */

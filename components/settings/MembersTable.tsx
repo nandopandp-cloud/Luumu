@@ -22,8 +22,28 @@ export interface MemberRow {
   email: string;
   role: string;
   avatarUrl: string | null;
+  /** última atividade no produto; null = nenhum acesso registrado */
+  lastSeenAt: Date | string | null;
   /** projetos que o membro enxerga; [] = todos (convenção do backend) */
   projectIds: string[];
+}
+
+/** "há 3 min", "ontem", "12 mar" — precisão proporcional à distância do evento. */
+function formatLastSeen(value: Date | string | null): { label: string; title?: string } {
+  if (!value) return { label: "Nunca" };
+  const date = value instanceof Date ? value : new Date(value);
+  if (isNaN(date.getTime())) return { label: "Nunca" };
+
+  const title = date.toLocaleString("pt-BR", { dateStyle: "long", timeStyle: "short" });
+  const min = Math.floor((Date.now() - date.getTime()) / 60000);
+  if (min < 1) return { label: "Agora", title };
+  if (min < 60) return { label: `há ${min} min`, title };
+  const hours = Math.floor(min / 60);
+  if (hours < 24) return { label: `há ${hours}h`, title };
+  const days = Math.floor(hours / 24);
+  if (days === 1) return { label: "Ontem", title };
+  if (days < 30) return { label: `há ${days} dias`, title };
+  return { label: date.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }), title };
 }
 
 const roleMeta: Record<string, { label: string; tone: "brand" | "info" | "success" | "neutral" }> = {
@@ -81,6 +101,7 @@ export function MembersTable({
               <th className="px-6 py-2.5 font-semibold">Membro</th>
               <th className="px-3 py-2.5 font-semibold">Papel</th>
               <th className="px-3 py-2.5 font-semibold">Projetos</th>
+              <th className="px-3 py-2.5 font-semibold">Último acesso</th>
               <th className="px-6 py-2.5 text-right font-semibold">Ações</th>
             </tr>
           </thead>
@@ -125,6 +146,9 @@ export function MembersTable({
                   </td>
                   <td className="px-3 py-3.5">
                     <ScopeCell member={m} projects={projects} />
+                  </td>
+                  <td className="px-3 py-3.5">
+                    <LastSeenCell value={m.lastSeenAt} />
                   </td>
                   <td className="px-6 py-3.5 text-right">
                     {hasMenu ? (
@@ -222,6 +246,24 @@ export function MembersTable({
         </div>
       )}
     </>
+  );
+}
+
+/**
+ * Último acesso. O rótulo é relativo ao "agora", então servidor e cliente podem calcular
+ * minutos diferentes para o mesmo dado; `suppressHydrationWarning` aceita essa diferença
+ * (o valor do cliente prevalece) em vez de adiar o texto para depois da montagem.
+ */
+function LastSeenCell({ value }: { value: Date | string | null }) {
+  const { label, title } = formatLastSeen(value);
+  return (
+    <span
+      suppressHydrationWarning
+      className={`text-sm ${value ? "text-fg-soft" : "text-fg-mut"}`}
+      title={title}
+    >
+      {label}
+    </span>
   );
 }
 

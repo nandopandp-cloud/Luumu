@@ -3,7 +3,7 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getSession, type SessionData } from "./session";
-import { getUserWorkspace } from "@/lib/db/users";
+import { getUserWorkspace, touchUserLastSeen } from "@/lib/db/users";
 import { getProject, getFirstProject, type ProjectRow } from "@/lib/db/projects";
 import { getUserProjectScope, listProjectsForUser } from "@/lib/db/member-projects";
 
@@ -13,6 +13,7 @@ const PROJECT_COOKIE = "luumu_project";
 export async function requireUser(): Promise<SessionData> {
   const session = await getSession();
   if (!session) redirect("/login");
+  touchUserLastSeen(session.userId);
   return session;
 }
 
