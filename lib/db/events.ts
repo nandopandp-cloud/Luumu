@@ -1,5 +1,5 @@
 import "server-only";
-import { and, count, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq, sql } from "drizzle-orm";
 import { db } from "./client";
 import { events } from "@/db/schema";
 import { eventId } from "./ids";
@@ -53,19 +53,53 @@ export async function recordEvents(
   const unknown = names.filter((n) => !isKnownEvent(projectId, n));
   if (unknown.length === 0) return names;
 
-  // o teto de catálogo é por projeto: consulta uma vez para o lote, não uma vez por nome
+  /*
+    Filtro barato em memória primeiro: quando o projeto já está cheio, nem monta o INSERT.
+    Ele é uma OTIMIZAÇÃO, não a garantia — quem garante o teto é o próprio INSERT abaixo.
+  */
   const free = await catalogHeadroom(projectId, unknown.length);
   const toInsert = free <= 0 ? [] : unknown.slice(0, free);
 
   if (toInsert.length > 0) {
-    await db
-      .insert(events)
-      .values(
-        toInsert.map((name) => ({ id: eventId(), workspaceId, projectId, name, count: 1 }))
-      )
-      .onConflictDoNothing({ target: [events.projectId, events.name] });
+    /*
+      O teto é aplicado DENTRO do INSERT, não antes dele.
 
-    for (const name of toInsert) markKnownEvent(projectId, name);
+      `catalogHeadroom` conta em memória, por instância. Com várias lambdas ativas — que é o
+      estado normal sob carga — cada uma achava que tinha o catálogo inteiro disponível e
+      liberava o próprio lote: N instâncias produziam até N× o teto. Foi assim que um projeto
+      com MAX_EVENTS_PER_PROJECT = 300 chegou a 7.273 linhas (~25 instâncias simultâneas).
+
+      Aqui o `where` é avaliado pelo Postgres no momento da escrita, contra a contagem real da
+      tabela, então instâncias concorrentes disputam o mesmo limite em vez de cada uma ter o
+      seu. O `select ... where (subselect) < MAX` descarta as linhas excedentes na própria
+      operação: o teto passa a valer de verdade, independente de quantas lambdas estiverem no ar.
+    */
+    const rows = toInsert.map((name) => ({ id: eventId(), workspaceId, projectId, name }));
+    const values = sql.join(
+      rows.map((r) => sql`(${r.id}, ${r.workspaceId}, ${r.projectId}, ${r.name}, 1)`),
+      sql`, `
+    );
+    const inserted = await db.execute<{ name: string }>(sql`
+      insert into ${events} (id, workspace_id, project_id, name, count)
+      select v.id, v.workspace_id, v.project_id, v.name, v.count
+        from (values ${values}) as v(id, workspace_id, project_id, name, count)
+       where (select count(*) from ${events} where ${events.projectId} = ${projectId})
+             < ${MAX_EVENTS_PER_PROJECT}
+      on conflict (project_id, name) do nothing
+      returning name
+    `);
+
+    const insertedNames = (inserted.rows ?? []) as { name: string }[];
+    // só marca como conhecido o que REALMENTE entrou: se o teto barrou, o nome continua
+    // inédito e não deve ser dado como catalogado
+    for (const row of insertedNames) markKnownEvent(projectId, row.name);
+
+    /*
+      A contagem otimista em memória mentiria se o banco tivesse recusado parte do lote.
+      Invalidar força a próxima chamada a reler a contagem real — uma query a cada 10 min por
+      projeto, e só quando houve nome inédito.
+    */
+    if (insertedNames.length !== rows.length) catalogCount.delete(projectId);
   }
 
   return names;

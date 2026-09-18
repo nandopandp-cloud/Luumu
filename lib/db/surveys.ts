@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "./client";
 import { surveys, questions, responses } from "@/db/schema";
@@ -117,6 +118,35 @@ export async function getSurveyWithQuestions(id: string, scope?: SurveyScope) {
   ]);
   if (!s) return null;
   return { survey: s, questions: qs };
+}
+
+/**
+ * Mesma busca, memoizada por request (React.cache).
+ *
+ * A página pública `/s/[id]` resolve a pesquisa duas vezes na MESMA renderização:
+ * uma em `generateMetadata` (para o <title>) e outra no componente. Sem memoização
+ * isso é 4 queries por visualização em vez de 2 — na página de maior volume da
+ * plataforma, e para devolver exatamente a mesma linha.
+ *
+ * A chave do cache inclui o escopo serializado: duas chamadas com escopos diferentes
+ * são perguntas diferentes ("esta pesquisa, vista por este tenant?") e não podem
+ * compartilhar resposta — senão um escopo estrito herdaria o resultado de um aberto.
+ */
+const getSurveyWithQuestionsMemo = cache(
+  async (id: string, scopeKey: string) => {
+    const scope = scopeKey ? (JSON.parse(scopeKey) as SurveyScope) : undefined;
+    return getSurveyWithQuestions(id, scope);
+  }
+);
+
+/** Wrapper público da versão memoizada — escopo vira chave estável do cache. */
+export function getSurveyWithQuestionsCached(id: string, scope?: SurveyScope) {
+  // ordem das chaves fixa: {projectId, workspaceId} e {workspaceId, projectId} são o
+  // mesmo escopo e precisam gerar a mesma chave
+  const scopeKey = scope
+    ? JSON.stringify({ workspaceId: scope.workspaceId ?? null, projectId: scope.projectId ?? null })
+    : "";
+  return getSurveyWithQuestionsMemo(id, scopeKey);
 }
 
 /**

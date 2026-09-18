@@ -274,7 +274,16 @@ export function SurveySettingsForm({
   const refreshEvents = useRef(async (silent = false) => {
     if (!silent) setRefreshing(true);
     try {
-      const r = await fetch("/api/events/status", { cache: "no-store" });
+      /*
+        A rota responde com `private, max-age=10`, o que é o certo para os ticks de fundo
+        (polling, voltar para a aba): eles toleram alguns segundos de atraso e deixam de
+        acordar a função.
+
+        O clique em "atualizar" é o oposto: a pessoa está dizendo que acabou de disparar um
+        evento e quer vê-lo agora. Servir a cópia guardada aí faria o botão parecer quebrado,
+        então só este caminho força ida ao servidor.
+      */
+      const r = await fetch("/api/events/status", silent ? undefined : { cache: "no-store" });
       if (r.ok) {
         const d = await r.json();
         setEvents((d.events || []) as WorkspaceEvent[]);

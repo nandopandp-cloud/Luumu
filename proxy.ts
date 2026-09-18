@@ -77,6 +77,20 @@ export async function proxy(req: NextRequest) {
 }
 
 export const config = {
-  // não intercepta assets, api, sdk.js, s/[id] (survey pública), r/[token] (relatório público), demo
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|sdk.js|mascot|s/|r/|demo).*)"],
+  /*
+    O proxy roda ANTES de qualquer rota e conta como invocação própria — então tudo que ele
+    intercepta sem ter o que decidir é custo puro.
+
+    Além das exclusões por caminho (api, _next, sdk.js, s/[id], r/[token], demo), a última
+    alternativa exclui qualquer requisição com extensão de arquivo (`.png`, `.svg`, `.css`,
+    `.woff2`...). Sem ela, todo asset servido de `public/` — login-panel.png, os SVGs, os
+    frames do mascote — acordava a função só para cair no `NextResponse.next()` da primeira
+    linha, já que nenhum deles está em PROTECTED nem em AUTH_PAGES.
+
+    Nenhuma rota do app tem ponto no nome, então excluir por extensão não esconde nada que
+    precise de sessão.
+  */
+  matcher: [
+    "/((?!api|_next/static|_next/image|favicon.ico|sdk.js|mascot|s/|r/|demo|.*\\.[\\w]+$).*)",
+  ],
 };

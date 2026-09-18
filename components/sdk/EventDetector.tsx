@@ -47,7 +47,10 @@ export function EventDetector({ initial, projectId }: { initial: Status; project
       if (document.hidden) return;
       try {
         const qs = projectId ? `?projectId=${encodeURIComponent(projectId)}` : "";
-        const r = await fetch(`/api/events/status${qs}`, { cache: "no-store" });
+        // sem `no-store`: a rota manda `private, max-age=10`, e é justamente ela que
+        // absorve os ticks extras (voltar para a aba, remontar o componente) sem virar
+        // invocação. O intervalo de polling continua sendo quem define a frequência real.
+        const r = await fetch(`/api/events/status${qs}`);
         if (!r.ok || !alive) return;
         const data: Status = await r.json();
         if (data.total > prevTotal.current) {

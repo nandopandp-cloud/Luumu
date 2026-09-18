@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { LuumuLogo, Mascot } from "@/components/ui/Mascot";
 import { SurveyRenderer } from "@/components/survey/SurveyRenderer";
-import { getSurveyWithQuestions } from "@/lib/db/surveys";
+import { getSurveyWithQuestionsCached } from "@/lib/db/surveys";
 import { formatDate, scheduleState } from "@/lib/schedule";
 import type { BuilderQuestion } from "@/lib/builder";
 
@@ -12,7 +12,7 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const data = await getSurveyWithQuestions(id);
+  const data = await getSurveyWithQuestionsCached(id);
   return { title: data ? `${data.survey.name} · Luumu` : "Pesquisa · Luumu" };
 }
 
@@ -22,7 +22,7 @@ export default async function PublicSurveyPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const data = await getSurveyWithQuestions(id);
+  const data = await getSurveyWithQuestionsCached(id);
   if (!data) notFound();
   const { survey, questions } = data;
 

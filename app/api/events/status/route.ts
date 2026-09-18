@@ -31,12 +31,30 @@ export async function GET(req: Request) {
   if (!projectId) return NextResponse.json({ connected: false, total: 0, events: [] });
 
   const events = await listEvents(projectId);
-  return NextResponse.json({
-    connected: events.length > 0,
-    total: events.length, // eventos distintos detectados
-    events: events.map((e) => ({
-      name: e.name,
-      lastSeenAt: e.lastSeenAt,
-    })),
-  });
+  return NextResponse.json(
+    {
+      connected: events.length > 0,
+      total: events.length, // eventos distintos detectados
+      events: events.map((e) => ({
+        name: e.name,
+        lastSeenAt: e.lastSeenAt,
+      })),
+    },
+    {
+      /*
+        `private` porque a resposta é do projeto ativo DAQUELE usuário: só o navegador dele
+        pode guardar, nunca a CDN compartilhada.
+
+        Os 10s existem para o caso que o polling sozinho não cobre: a mesma aba voltando ao
+        foco (`visibilitychange` dispara um tick imediato), duas telas do painel montadas
+        juntas, ou uma navegação que remonta o componente. Sem isso, cada um desses vira uma
+        invocação completa — sessão + escopo + projeto + SELECT de eventos — para devolver um
+        catálogo que muda quando alguém instala o SDK, não a cada segundo.
+
+        A janela é curta de propósito: o valor da tela é perceber o primeiro evento chegando,
+        e 10s de atraso máximo não muda a sensação de "detectou na hora".
+      */
+      headers: { "Cache-Control": "private, max-age=10" },
+    }
+  );
 }

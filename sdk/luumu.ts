@@ -703,13 +703,51 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
       .slice(0, 48); // rótulos longos são texto de conteúdo, não nome de ação
   }
 
+  /*
+    Um rótulo é NOME DE AÇÃO ("Entrar", "Salvar alterações", "Criar nova batalha") ou é
+    CONTEÚDO — o enunciado de uma questão, a alternativa de um quiz, o título de um card.
+
+    A diferença importa porque conteúdo é um espaço de nomes infinito: cada questão nova do
+    produto do cliente inventa um nome de evento que nunca existiu, o dedupe local (sentNames)
+    nunca reconhece, e cada clique vira um POST /api/v1/events. Foi assim que um único projeto
+    chegou a 7.273 eventos distintos, quase todos com count=1 — e a rota de ingestão virou o
+    maior custo da plataforma, catalogando texto de prova.
+
+    `labelPattern` já normaliza números ("unidade 6" → "unidade :n"), mas isso só resolve
+    listas; não tem defesa contra frase. Aqui a pergunta é outra: isto PARECE ação?
+
+    Quem precisa do nome exato de um clique específico continua tendo `data-luumu-track`,
+    que é verificado antes e passa direto — a intenção explícita do cliente nunca é descartada.
+  */
+  const ACTION_MAX_WORDS = 4;
+  const ACTION_MAX_CHARS = 28;
+
+  function looksLikeContent(label: string): boolean {
+    const text = label.trim();
+    if (!text) return false;
+    // pontuação de frase: rótulo de botão não termina em ponto final, vírgula ou interrogação
+    if (/[.,;:!?]$/.test(text)) return true;
+    if (text.length > ACTION_MAX_CHARS) return true;
+    if (text.split(/\s+/).length > ACTION_MAX_WORDS) return true;
+    return false;
+  }
+
   function autoEventName(node: Element): string | null {
     const explicit = node.getAttribute("data-luumu-track");
     if (explicit) return `click_${slug(explicit)}`;
     const tag = node.tagName.toLowerCase();
-    const label = textLabel(node) || node.getAttribute("name") || node.id || tag;
     const kind = tag === "a" ? "link" : "click";
-    return `${kind}_${slug(labelPattern(label))}`;
+    const raw = textLabel(node) || node.getAttribute("name") || node.id || tag;
+
+    /*
+      Conteúdo vira um nome genérico pelo TIPO do elemento: o painel continua mostrando que
+      houve clique em link/botão (o sinal de engajamento se mantém, e serve de gatilho), mas
+      com um punhado de nomes estáveis em vez de um nome por texto clicado. O catálogo volta
+      a ser o que ele deveria ser: a lista de ações do produto.
+    */
+    if (looksLikeContent(raw)) return `${kind}_${tag === "a" ? "link" : "button"}`;
+
+    return `${kind}_${slug(labelPattern(raw))}`;
   }
 
   function autoTrack(name: string) {
@@ -735,10 +773,35 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
       if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(seg)) return ":id"; // uuid
       if (/^[0-9a-f]{16,}$/i.test(seg)) return ":id"; // hash hex
       if (/^[a-z]{2,5}_[A-Za-z0-9]{8,}$/.test(seg)) return ":id"; // ids tipo usr_ab12cd34
+
+      /*
+        Abaixo, os casos que vazavam. Produtos que passam estado no CAMINHO (e não na query)
+        põem data, termo de busca e valor de filtro como segmento — e cada valor distinto
+        virava um nome de evento eterno: `cronograma/selectedDate/2026-08-08T00:00:00.000Z`
+        é a MESMA tela que `.../2026-08-19T...`, mas contava como duas rotas.
+      */
+      // data ISO ou timestamp, em qualquer variação (2026-08-30, 2026-08-30T00:00:00.000Z)
+      if (/^\d{4}-\d{2}-\d{2}([T ].*)?$/.test(seg)) return ":date";
+      // JWT: três blocos base64url separados por ponto. Precede a regra de tamanho para
+      // não depender do comprimento do token.
+      if (/^[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]+$/.test(seg)) return ":token";
+      // qualquer coisa com escape de URL é valor, não nome de rota (institutions%2Fassign)
+      if (/%[0-9a-f]{2}/i.test(seg)) return ":value";
+      // segmento longo sem número também é valor (termo de busca digitado pelo usuário);
+      // a regra antiga exigia dígito e deixava passar busca por texto puro
+      if (seg.length > 24) return ":value";
       if (seg.length > 24 && /\d/.test(seg)) return ":id"; // slug longo com número
       return seg;
     });
-    return parts.length ? parts.join("/") : "home";
+    /*
+      Teto de profundidade: a rota é a TELA, e nenhum produto tem tela identificada pelo 8º
+      segmento. Sem o corte, caminhos que empilham pares chave/valor
+      (`/instituicao/type/summative/periodFrom/.../periodTo/...`) continuariam gerando um nome
+      novo por combinação, mesmo com cada valor já normalizado.
+    */
+    const MAX_DEPTH = 6;
+    const capped = parts.length > MAX_DEPTH ? parts.slice(0, MAX_DEPTH) : parts;
+    return capped.length ? capped.join("/") : "home";
   }
 
   function trackPageView() {
