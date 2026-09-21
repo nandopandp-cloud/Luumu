@@ -55,6 +55,27 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
   const scriptSrc = currentScript?.src || "";
   const ORIGIN = scriptSrc ? new URL(scriptSrc).origin : location.origin;
   const API = `${ORIGIN}/api/v1`;
+
+  /*
+    Content-Type dos POSTs do SDK.
+
+    O SDK roda no site do cliente, então TODA chamada à nossa API é cross-origin. O browser
+    só dispensa o preflight OPTIONS quando a request é "simples" — e, para o Content-Type,
+    simples significa exatamente um destes três: application/x-www-form-urlencoded,
+    multipart/form-data ou text/plain. `application/json` NÃO está na lista: cada POST de
+    evento ou resposta virava DUAS requests (OPTIONS + POST), dobrando o Edge Request
+    cobrado no caminho mais quente da plataforma.
+
+    `Access-Control-Max-Age: 86400` (lib/api/cors.ts) manda o browser cachear o preflight,
+    mas esse cache é por (origem, caminho, método, headers) e não sobrevive de forma
+    confiável entre navegações — num site multipágina o preflight reaparecia o tempo todo.
+
+    Mandar text/plain não muda nada no servidor: as rotas leem o corpo com `req.json()`,
+    que desserializa o texto independentemente do Content-Type declarado. O corpo continua
+    sendo JSON — só paramos de anunciá-lo de um jeito que custa uma request a mais.
+  */
+  const SIMPLE_CONTENT_TYPE = "text/plain;charset=UTF-8";
+
   const keyFromAttr = currentScript?.getAttribute("data-luumu") || "";
   let activeKey = ""; // SDK key em uso (setada em start())
 
@@ -265,7 +286,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
       try {
         await fetch(`${API}/responses`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": SIMPLE_CONTENT_TYPE },
           body: JSON.stringify({
             key: activeKey,
             surveyId: survey.id,
@@ -466,21 +487,90 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     }
   }
 
-  async function fetchActive(key: string): Promise<ActiveSurvey[]> {
+  /*
+    Cache do catálogo entre navegações.
+
+    `catalogLoaded` é uma flag em memória: ela morre a cada troca de página. Num produto
+    multipágina isso significava um GET /config por PAGEVIEW, para sempre — e essa é a rota
+    que todo visitante de todo site cliente chama, o maior volume da plataforma.
+
+    O `s-maxage=60` da rota (app/api/v1/config/route.ts) já evita acordar a função, mas a
+    Vercel cobra Edge Request mesmo quando quem responde é a CDN: só deixar de FAZER a
+    request tira o custo.
+
+    sessionStorage e não localStorage: o catálogo vale enquanto a aba está aberta e some
+    quando ela fecha, então uma pesquisa despublicada não fica pendurada no navegador de
+    quem não voltar ao site tão cedo.
+
+    A chave inclui a SDK key — um mesmo navegador pode ter abas de workspaces diferentes,
+    e devolver o catálogo errado mostraria a pesquisa de outro workspace.
+
+    TTL de 5 min é o atraso máximo para uma pesquisa publicada começar a aparecer numa aba
+    já aberta (antes era ≤1min, o do s-maxage). Publicação de pesquisa não é operação de
+    tempo real, e a primeira aba nova pega na hora.
+  */
+  const CATALOG_TTL_MS = 5 * 60 * 1000;
+  const catalogKey = (key: string) => `luumu_catalog_${key}`;
+
+  function readCachedCatalog(key: string): ActiveSurvey[] | null {
+    try {
+      const raw = sessionStorage.getItem(catalogKey(key));
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as { t: number; surveys: ActiveSurvey[] };
+      if (!parsed || typeof parsed.t !== "number" || !Array.isArray(parsed.surveys)) return null;
+      if (Date.now() - parsed.t > CATALOG_TTL_MS) return null;
+      return parsed.surveys;
+    } catch {
+      // sessionStorage indisponível (modo privado, storage bloqueado) ou JSON corrompido:
+      // segue pelo caminho de rede, que é o comportamento anterior.
+      return null;
+    }
+  }
+
+  function writeCachedCatalog(key: string, surveys: ActiveSurvey[]) {
+    try {
+      sessionStorage.setItem(catalogKey(key), JSON.stringify({ t: Date.now(), surveys }));
+    } catch {}
+  }
+
+  /**
+   * Busca o catálogo na rede. `null` = a request falhou (rede caída, 4xx/5xx) e é diferente
+   * de `[]` = o workspace realmente não tem pesquisa ativa. A distinção importa porque só o
+   * segundo caso pode ir para o cache: gravar `[]` de uma falha silenciaria as pesquisas do
+   * cliente por 5 minutos inteiros a cada soluço de rede.
+   */
+  async function fetchActive(key: string): Promise<ActiveSurvey[] | null> {
     try {
       const r = await fetch(`${API}/config?key=${encodeURIComponent(key)}`);
-      if (!r.ok) return [];
+      if (!r.ok) return null;
       const d = await r.json();
       return (d.surveys || []) as ActiveSurvey[];
     } catch {
-      return [];
+      return null;
     }
   }
 
   // garante que o catálogo de surveys ativas esteja carregado (uma vez por sessão)
   async function ensureCatalog(key: string) {
     if (catalogLoaded) return;
-    activeSurveys = await fetchActive(key);
+
+    const cached = readCachedCatalog(key);
+    if (cached) {
+      activeSurveys = cached;
+      catalogLoaded = true;
+      return;
+    }
+
+    const fetched = await fetchActive(key);
+    if (fetched === null) {
+      // falha de rede: não marca como carregado nem grava cache, para a próxima chamada
+      // (outro evento, outra navegação) tentar de novo em vez de ficar sem catálogo.
+      activeSurveys = [];
+      return;
+    }
+
+    activeSurveys = fetched;
+    writeCachedCatalog(key, fetched);
     catalogLoaded = true;
   }
 
@@ -597,13 +687,13 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     // só marca como enviado depois de despachar; se a request falhar, o nome volta ao buffer
     // para tentar de novo (o catálogo é idempotente, reenviar não duplica nada).
     if (beacon && typeof navigator !== "undefined" && navigator.sendBeacon) {
-      const ok = navigator.sendBeacon(`${API}/events`, new Blob([body], { type: "application/json" }));
+      const ok = navigator.sendBeacon(`${API}/events`, new Blob([body], { type: SIMPLE_CONTENT_TYPE }));
       if (ok) rememberSent(names);
       return;
     }
     fetch(`${API}/events`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": SIMPLE_CONTENT_TYPE },
       body,
       keepalive: true,
     })
