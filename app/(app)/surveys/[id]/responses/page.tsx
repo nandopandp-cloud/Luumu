@@ -67,7 +67,7 @@ export default async function SurveyResponsesPage({
         <ExportMenu surveyId={id} />
       </div>
 
-      <SurveySubnav id={id} />
+      <SurveySubnav id={id} status={survey.status} />
 
       <ResponsesView responses={items} distribution={distribution} total={stats.total} wordCloud={wordCloud} />
     </div>

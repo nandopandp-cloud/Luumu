@@ -38,7 +38,7 @@ export default async function BuilderPage({
         <ArrowLeft className="size-4" /> Pesquisas
       </Link>
 
-      <SurveySubnav id={survey.id} />
+      <SurveySubnav id={survey.id} status={survey.status} />
 
       <SurveyBuilder
         surveyId={survey.id}

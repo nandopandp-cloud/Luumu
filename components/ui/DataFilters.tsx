@@ -20,13 +20,23 @@ export interface SurveyOption {
  *
  * Quando period=custom, abre um popover com dois <input type="date"> para
  * selecionar início e fim; ao confirmar, grava period=custom&from=&to= na URL.
+ *
+ * Sem ?surveyId na URL, o filtro cai em `defaultSurveyId` (a última pesquisa
+ * vigente/criada, resolvida no servidor) para refletir o recorte que a página já
+ * está mostrando. Ver "todas" é uma escolha explícita: grava surveyId=all.
  */
-export function DataFilters({ surveys }: { surveys?: SurveyOption[] }) {
+export function DataFilters({
+  surveys,
+  defaultSurveyId,
+}: {
+  surveys?: SurveyOption[];
+  defaultSurveyId?: string;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const surveyId = searchParams.get("surveyId") ?? "";
+  const surveyId = searchParams.get("surveyId") ?? defaultSurveyId ?? "";
   const period = searchParams.get("period") ?? "30d";
   const from = searchParams.get("from") ?? "";
   const to = searchParams.get("to") ?? "";
@@ -81,10 +91,10 @@ export function DataFilters({ surveys }: { surveys?: SurveyOption[] }) {
       {surveys && (
         <Select
           value={surveyId}
-          onChange={(e) => update({ surveyId: e.target.value || null })}
+          onChange={(e) => update({ surveyId: e.target.value })}
           className="w-auto min-w-[180px] py-1.5 text-sm"
         >
-          <option value="">Todas as pesquisas</option>
+          <option value="all">Todas as pesquisas</option>
           {surveys.map((s) => (
             <option key={s.id} value={s.id}>
               {s.name}

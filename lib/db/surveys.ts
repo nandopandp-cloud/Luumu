@@ -23,6 +23,23 @@ export async function listSurveyOptions(projectId: string) {
 }
 
 /**
+ * Pesquisa que o app deve mostrar por padrão quando nenhum filtro foi escolhido
+ * (dashboard, respostas, relatórios): a mais recente que ainda está no ar; se
+ * nenhuma estiver ativa, a última criada. Sem isso, essas telas abriam sempre em
+ * "Todas as pesquisas", que raramente é o que o usuário quer ver de cara.
+ */
+export async function getDefaultSurveyId(projectId: string): Promise<string | undefined> {
+  const [row] = await db
+    .select({ id: surveys.id })
+    .from(surveys)
+    .where(eq(surveys.projectId, projectId))
+    // ativa primeiro, depois a mais nova
+    .orderBy(sql`case when ${surveys.status} = 'ativa' then 0 else 1 end`, desc(surveys.createdAt))
+    .limit(1);
+  return row?.id;
+}
+
+/**
  * Lista de pesquisas do projeto com métricas derivadas (nº respostas + score na
  * metodologia correta de cada uma — NPS, CSAT e CES têm fórmulas diferentes, não é
  * uma média simples). 3 queries totais (surveys, perguntas de nota, respostas com
@@ -463,4 +480,18 @@ export async function listActiveSurveysForSdk(projectId: string) {
     .from(surveys)
     .where(and(eq(surveys.projectId, projectId), eq(surveys.status, "ativa"), withinScheduleSql(today())))
     .orderBy(desc(surveys.publishedAt));
+}
+
+/**
+ * Traduz o ?surveyId da URL no recorte que as páginas de dados devem usar:
+ * ausente → última pesquisa vigente/criada; "all" → todas (escolha explícita do
+ * usuário); qualquer outro valor → aquela pesquisa. Devolve também o valor que o
+ * <select> do DataFilters deve exibir, pra barra não dizer "todas" enquanto os
+ * números na tela são de uma pesquisa só.
+ */
+export async function resolveSurveyScope(projectId: string, surveyIdParam?: string) {
+  if (surveyIdParam === "all") return { surveyId: undefined, defaultSurveyId: "all" };
+  if (surveyIdParam) return { surveyId: surveyIdParam, defaultSurveyId: surveyIdParam };
+  const fallback = await getDefaultSurveyId(projectId);
+  return { surveyId: fallback, defaultSurveyId: fallback };
 }

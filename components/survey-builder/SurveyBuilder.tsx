@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -21,7 +20,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
-  GripVertical, Trash2, Plus, Eye, Settings2, Rocket, Check, Loader2,
+  GripVertical, Trash2, Plus, Eye, Settings2, Check, Loader2,
   Star, Smile, Hash, Type, AlignLeft, ListChecks, CheckSquare, ChevronDown,
   Calendar, Upload, Gauge, Link2,
 } from "lucide-react";
@@ -32,8 +31,9 @@ import { Select } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
 import { builderBlocks, surveyTemplates } from "@/lib/mock/surveys";
 import { defaultConfig, type BuilderQuestion } from "@/lib/builder";
+import { registerPrePublish } from "@/components/survey/PublishButton";
 import { QuestionSettings } from "./QuestionSettings";
-import { saveDraftAction, publishSurveyAction } from "@/app/(app)/surveys/actions";
+import { saveDraftAction } from "@/app/(app)/surveys/actions";
 
 const statusTone = {
   ativa: "success", pausada: "warn", encerrada: "neutral", rascunho: "brand",
@@ -165,7 +165,6 @@ export function SurveyBuilder({
   status: string;
   initialQuestions: BuilderQuestion[];
 }) {
-  const router = useRouter();
   const toast = useToast();
   const [name, setName] = useState(surveyName);
   const [type, setType] = useState(surveyType);
@@ -173,9 +172,6 @@ export function SurveyBuilder({
   const [selectedUid, setSelectedUid] = useState<string | null>(initialQuestions[0]?.uid ?? null);
   const [activeDrag, setActiveDrag] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
-  const [, startTransition] = useTransition();
-  const [publishing, setPublishing] = useState(false);
-  const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const dirty = useRef(false);
   const firstRender = useRef(true);
@@ -219,20 +215,12 @@ export function SurveyBuilder({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [questions, name, type]);
 
-  async function handlePublish() {
-    setPublishing(true);
-    // garante que o rascunho atual está salvo antes de publicar
-    await save(true);
-    const res = await publishSurveyAction(surveyId);
-    setPublishing(false);
-    if (res.ok) {
-      setPublishedUrl(res.url);
-      toast("success", "Pesquisa publicada! 🎉");
-      startTransition(() => router.refresh());
-    } else {
-      toast("error", res.error);
-    }
-  }
+  /* ----- o botão Publicar mora na subnav: garantir rascunho salvo antes ----- */
+  // ref porque registramos o callback uma vez só, mas ele precisa enxergar o
+  // estado mais recente do builder na hora em que o botão for clicado
+  const saveRef = useRef(save);
+  useEffect(() => { saveRef.current = save; });
+  useEffect(() => registerPrePublish(() => saveRef.current(true)), []);
 
   function handleDragStart(e: DragStartEvent) { setActiveDrag(String(e.active.id)); }
 
@@ -320,27 +308,25 @@ export function SurveyBuilder({
           <Button variant="ghost" size="sm" onClick={() => save(false)}>
             Salvar rascunho
           </Button>
-          <Button size="sm" onClick={handlePublish} disabled={publishing}>
-            {publishing ? <Loader2 className="size-4 animate-spin" /> : <Rocket className="size-4" />}
-            {status === "ativa" ? "Republicar" : "Publicar"}
-          </Button>
         </div>
       </div>
 
-      {/* Aviso de publicada com link */}
-      {publishedUrl && (
+      {/* Aviso de publicada com link — agora ligado ao status do servidor (e não a
+          um estado efêmero do clique), então o link continua à mão em toda visita
+          e também quando a publicação sai por outra aba. */}
+      {status === "ativa" && (
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-sucesso/30 bg-sucesso/10 px-4 py-3">
           <span className="flex items-center gap-2 text-sm font-medium text-[#16a34a] dark:text-[#4ade80]">
             <Check className="size-4" /> Pesquisa ativa! Compartilhe o link público:
           </span>
           <div className="flex items-center gap-2">
             <code className="rounded-md bg-bg-elev px-2.5 py-1 font-mono text-xs">
-              {typeof window !== "undefined" ? window.location.origin : ""}{publishedUrl}
+              {typeof window !== "undefined" ? window.location.origin : ""}/s/{surveyId}
             </code>
             <Button
               variant="subtle" size="sm"
               onClick={() => {
-                navigator.clipboard?.writeText(`${window.location.origin}${publishedUrl}`);
+                navigator.clipboard?.writeText(`${window.location.origin}/s/${surveyId}`);
                 toast("success", "Link copiado!");
               }}
             >

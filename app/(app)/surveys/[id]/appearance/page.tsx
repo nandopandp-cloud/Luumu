@@ -56,7 +56,7 @@ export default async function AppearancePage({
         </p>
       </div>
 
-      <SurveySubnav id={id} />
+      <SurveySubnav id={id} status={survey.status} />
 
       <AppearanceEditor
         id={id}

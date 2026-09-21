@@ -20,17 +20,23 @@ const FORMATS = [
 export function ExportPanel({
   surveys,
   totalResponses,
+  initialSurveyId,
   period,
   from,
   to,
 }: {
   surveys: SurveyOpt[];
   totalResponses: number;
+  /** Pré-seleção vinda da página (última pesquisa vigente/criada). Ignorada se
+   *  essa pesquisa ainda não tem resposta — ela não aparece na lista. */
+  initialSurveyId?: string;
   period?: string;
   from?: string;
   to?: string;
 }) {
-  const [surveyId, setSurveyId] = useState<string>("");
+  const [surveyId, setSurveyId] = useState<string>(
+    initialSurveyId && surveys.some((s) => s.id === initialSurveyId) ? initialSurveyId : ""
+  );
   const [busy, setBusy] = useState<string | null>(null);
 
   const selectedCount = surveyId

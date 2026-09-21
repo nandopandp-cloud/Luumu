@@ -9,7 +9,7 @@ import { Mascot } from "@/components/ui/Mascot";
 import { DataFilters } from "@/components/ui/DataFilters";
 import { periodToRange } from "@/lib/period";
 import { AreaTrend, DonutChart } from "@/components/charts/Charts";
-import { listSurveys, listSurveyOptions } from "@/lib/db/surveys";
+import { listSurveys, listSurveyOptions, resolveSurveyScope } from "@/lib/db/surveys";
 import { getStats, getChannelSplit, getScoreTrend, getMainScore } from "@/lib/db/responses";
 import { formatScore } from "@/lib/scoring";
 import { requireUser, getCurrentProjectId } from "@/lib/auth/current";
@@ -34,7 +34,9 @@ export default async function DashboardPage({
   const { surveyId, period, from, to } = await searchParams;
   const projectId = await getCurrentProjectId();
   const { from: dateFrom, to: dateTo } = periodToRange(period, from, to);
-  const scope = { projectId, surveyId: surveyId || undefined, dateFrom, dateTo };
+  // sem filtro na URL, abre já na última pesquisa vigente/criada
+  const { surveyId: scopedSurveyId, defaultSurveyId } = await resolveSurveyScope(projectId, surveyId);
+  const scope = { projectId, surveyId: scopedSurveyId, dateFrom, dateTo };
   const trendWeeks = period ? (TREND_WEEKS_BY_PERIOD[period] ?? 8) : 8;
 
   const [allSurveys, surveyOptions, stats, channelSplit, csatTrend, mainScore] = await Promise.all([
@@ -69,7 +71,7 @@ export default async function DashboardPage({
       />
 
       <div className="mb-4">
-        <DataFilters surveys={surveyOptions} />
+        <DataFilters surveys={surveyOptions} defaultSurveyId={defaultSurveyId} />
       </div>
 
       {/* Métricas */}

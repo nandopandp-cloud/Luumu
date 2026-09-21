@@ -45,7 +45,7 @@ export default async function SurveySettingsPage({
         </p>
       </div>
 
-      <SurveySubnav id={id} />
+      <SurveySubnav id={id} status={survey.status} />
 
       <SurveySettingsForm
         initial={{
