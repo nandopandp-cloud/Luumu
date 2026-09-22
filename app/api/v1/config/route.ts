@@ -3,7 +3,14 @@ import { normalizeAppearance } from "@/lib/builder";
 import { resolveKey } from "@/lib/api/keys";
 import { allowedOrigin, jsonCors, preflight } from "@/lib/api/cors";
 
-export const dynamic = "force-dynamic";
+/*
+  Sem `dynamic = "force-dynamic"` de propósito.
+
+  Esta rota lê a query string (`?key=`) e o header `Origin`, então já é dinâmica por
+  natureza — o `force-dynamic` não a tornava dinâmica, ele apenas fazia o Next anunciar
+  `no-store` para a borda, o que ANULAVA o `Cache-Control` montado logo abaixo. O cache
+  existia no código e nunca valia na prática: toda chamada do SDK virava invocação.
+*/
 
 /**
  * Cache de borda do catálogo de pesquisas.

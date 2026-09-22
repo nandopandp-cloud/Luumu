@@ -4,7 +4,10 @@ import { isWithinSchedule } from "@/lib/schedule";
 import { resolveKey } from "@/lib/api/keys";
 import { allowedOrigin, jsonCors, preflight } from "@/lib/api/cors";
 
-export const dynamic = "force-dynamic";
+/*
+  Sem `dynamic = "force-dynamic"`: ele anunciava `no-store` para a borda e anulava o
+  `Cache-Control` definido abaixo, então o cache desta rota nunca chegou a valer.
+*/
 
 /*
   Cache de borda do conteúdo da pesquisa (perguntas + aparência).

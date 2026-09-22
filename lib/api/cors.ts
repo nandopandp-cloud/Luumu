@@ -31,6 +31,25 @@ export function corsHeaders(origin: string | null): Record<string, string> {
 }
 
 /**
+ * Respostas cacheáveis usam `*` em vez de refletir o Origin.
+ *
+ * Refletir o Origin obriga a manter `Vary: Origin`, e aí a CDN guarda uma cópia por site
+ * cliente: com muitos domínios o hit rate desaba e a borda volta a acordar a função. Como
+ * o conteúdo destas rotas é idêntico para qualquer origem (a autorização é pela `key`, que
+ * já faz parte da chave de cache via query string), `*` serve todo mundo com UMA entrada.
+ *
+ * Só vale para respostas sem credenciais — o SDK não manda cookie nestas chamadas.
+ */
+export function cacheableCorsHeaders(): Record<string, string> {
+  return {
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Max-Age": "86400",
+    "Access-Control-Allow-Origin": "*",
+  };
+}
+
+/**
  * JSON com CORS resolvido para o origin permitido (ou sem header, se negado).
  *
  * `cache` aceita um valor de Cache-Control para a resposta. Sem ele a rota continua
@@ -41,7 +60,8 @@ export function jsonCors(
   data: unknown,
   opts: { status?: number; origin?: string | null; cache?: string } = {}
 ) {
-  const headers = corsHeaders(opts.origin ?? null);
+  // com `cache` a resposta vai para a borda, e aí ela não pode variar por origem
+  const headers = opts.cache ? cacheableCorsHeaders() : corsHeaders(opts.origin ?? null);
   if (opts.cache) headers["Cache-Control"] = opts.cache;
   return NextResponse.json(data, {
     status: opts.status ?? 200,

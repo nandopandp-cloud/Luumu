@@ -477,14 +477,46 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     render();
   }
 
+  /*
+    Cache do conteúdo da pesquisa (perguntas + aparência).
+
+    Sem isto, toda EXIBIÇÃO de pesquisa era um GET /surveys/[id] — e numa pesquisa que
+    dispara bem isso é uma request por visitante que a vê, todas devolvendo o mesmo JSON.
+    Como a Vercel cobra Edge Request mesmo quando a CDN responde, o `s-maxage` da rota
+    sozinho não tira esse custo: é preciso não fazer a request.
+
+    TTL curto (5 min) porque este payload carrega também o estado da pesquisa. Servir um
+    conteúdo de alguns minutos atrás é seguro: quem responde ainda é validado na gravação
+    (POST /responses relê status e vigência no banco, sem cache), então uma pesquisa
+    encerrada não recebe resposta mesmo montada a partir do cache.
+  */
+  const SURVEY_TTL_MS = 5 * 60 * 1000;
+  const surveyKey = (id: string, key: string) => `luumu_survey_${key}_${id}`;
+
   async function fetchSurvey(id: string, key: string): Promise<SurveyData | null> {
+    try {
+      const raw = localStorage.getItem(surveyKey(id, key));
+      if (raw) {
+        const parsed = JSON.parse(raw) as { t: number; survey: SurveyData };
+        if (parsed && typeof parsed.t === "number" && parsed.survey && Date.now() - parsed.t <= SURVEY_TTL_MS) {
+          return parsed.survey;
+        }
+      }
+    } catch {}
+
+    let survey: SurveyData;
     try {
       const r = await fetch(`${API}/surveys/${id}?key=${encodeURIComponent(key)}`);
       if (!r.ok) return null;
-      return (await r.json()) as SurveyData;
+      survey = (await r.json()) as SurveyData;
     } catch {
       return null;
     }
+
+    try {
+      localStorage.setItem(surveyKey(id, key), JSON.stringify({ t: Date.now(), survey }));
+    } catch {}
+    return survey;
   }
 
   /*
@@ -498,30 +530,36 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     Vercel cobra Edge Request mesmo quando quem responde é a CDN: só deixar de FAZER a
     request tira o custo.
 
-    sessionStorage e não localStorage: o catálogo vale enquanto a aba está aberta e some
-    quando ela fecha, então uma pesquisa despublicada não fica pendurada no navegador de
-    quem não voltar ao site tão cedo.
+    localStorage e não sessionStorage: com sessionStorage o catálogo morria junto com a aba,
+    então CADA nova visita — e cada aba — recomeçava com um GET /config. Numa base de
+    visitantes recorrentes isso é a maior fatia das Edge Requests que sobra depois do cache
+    de borda, porque a cobrança acontece mesmo quando quem responde é a CDN.
+
+    O TTL abaixo é o que limita o quanto um catálogo velho pode ser usado, e ele vale igual
+    nos dois storages: trocar de sessionStorage para localStorage não deixa uma pesquisa
+    despublicada pendurada por mais tempo, só evita refazer a request a cada visita dentro
+    da janela.
 
     A chave inclui a SDK key — um mesmo navegador pode ter abas de workspaces diferentes,
     e devolver o catálogo errado mostraria a pesquisa de outro workspace.
 
-    TTL de 5 min é o atraso máximo para uma pesquisa publicada começar a aparecer numa aba
-    já aberta (antes era ≤1min, o do s-maxage). Publicação de pesquisa não é operação de
-    tempo real, e a primeira aba nova pega na hora.
+    TTL de 30 min é o atraso máximo para uma pesquisa publicada começar a aparecer para quem
+    já tem catálogo em cache. Publicação de pesquisa não é operação de tempo real, e quem
+    chega sem cache (visitante novo) pega na hora.
   */
-  const CATALOG_TTL_MS = 5 * 60 * 1000;
+  const CATALOG_TTL_MS = 30 * 60 * 1000;
   const catalogKey = (key: string) => `luumu_catalog_${key}`;
 
   function readCachedCatalog(key: string): ActiveSurvey[] | null {
     try {
-      const raw = sessionStorage.getItem(catalogKey(key));
+      const raw = localStorage.getItem(catalogKey(key));
       if (!raw) return null;
       const parsed = JSON.parse(raw) as { t: number; surveys: ActiveSurvey[] };
       if (!parsed || typeof parsed.t !== "number" || !Array.isArray(parsed.surveys)) return null;
       if (Date.now() - parsed.t > CATALOG_TTL_MS) return null;
       return parsed.surveys;
     } catch {
-      // sessionStorage indisponível (modo privado, storage bloqueado) ou JSON corrompido:
+      // localStorage indisponível (modo privado, storage bloqueado) ou JSON corrompido:
       // segue pelo caminho de rede, que é o comportamento anterior.
       return null;
     }
@@ -529,7 +567,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
 
   function writeCachedCatalog(key: string, surveys: ActiveSurvey[]) {
     try {
-      sessionStorage.setItem(catalogKey(key), JSON.stringify({ t: Date.now(), surveys }));
+      localStorage.setItem(catalogKey(key), JSON.stringify({ t: Date.now(), surveys }));
     } catch {}
   }
 

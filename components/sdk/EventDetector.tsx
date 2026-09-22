@@ -73,13 +73,20 @@ export function EventDetector({ initial, projectId }: { initial: Status; project
       segundo plano — retomando na hora em que ela volta ao foco.
     */
     const FAST_MS = 5000;
-    const SLOW_MS = 60000;
     let timer: ReturnType<typeof setTimeout>;
 
-    const delay = () => (prevTotal.current > 0 ? SLOW_MS : FAST_MS);
+    /*
+      O polling serve para ver o PRIMEIRO evento chegar. Depois que ele chegou, a pergunta
+      do onboarding já está respondida — continuar perguntando era ~60 req/h por aba aberta
+      (uma aba esquecida num monitor gerava isso o dia inteiro) para reconfirmar algo que
+      não volta a ser falso. Ao conectar, o polling para; a lista de eventos continua
+      atualizando a cada visita à tela, que é a granularidade que essa informação pede.
+    */
+    const connected = () => prevTotal.current > 0;
     const schedule = () => {
       clearTimeout(timer);
-      timer = setTimeout(tick, delay());
+      if (connected()) return;
+      timer = setTimeout(tick, FAST_MS);
     };
     async function tick() {
       if (!alive) return;
@@ -88,12 +95,15 @@ export function EventDetector({ initial, projectId }: { initial: Status; project
     }
 
     const onVisible = () => {
-      if (!document.hidden) void tick();
+      if (!document.hidden && !connected()) void tick();
     };
     document.addEventListener("visibilitychange", onVisible);
 
-    void poll();
-    schedule();
+    // já conectado no SSR: nada a descobrir, nem o primeiro poll é necessário
+    if (!connected()) {
+      void poll();
+      schedule();
+    }
     return () => {
       alive = false;
       clearTimeout(timer);
