@@ -168,6 +168,32 @@ export function invalidateEventCache() {
   knownEvents.clear();
 }
 
+/**
+ * Estado do catálogo que o SDK precisa para decidir se vale a pena mandar um nome.
+ *
+ * O dedupe do SDK é POR NAVEGADOR: cada visitante novo reenviava "page_view_home",
+ * "click_entrar"... mesmo com o projeto já tendo esses nomes há semanas. E num projeto com o
+ * catálogo cheio, `recordEvents` descarta tudo — o POST /events vira invocação sem efeito
+ * nenhum. Foi o que fez essa rota responder por ~85% das invocações da plataforma, quase todas
+ * de projetos já no teto.
+ *
+ * Vai junto com /config, que já é cacheado na borda e no navegador, então informar isso ao
+ * SDK não custa request nenhuma a mais.
+ *  - `open: false` → catálogo cheio: o SDK não manda mais nada (o servidor descartaria).
+ *  - `known`       → nomes já catalogados: o SDK só manda o que for realmente novo.
+ *
+ * `limit` no teto: o que importa é saber se cabe mais, não contar além disso.
+ */
+export async function eventCatalogForSdk(projectId: string): Promise<{ open: boolean; known: string[] }> {
+  const rows = await db
+    .select({ name: events.name })
+    .from(events)
+    .where(eq(events.projectId, projectId))
+    .limit(MAX_EVENTS_PER_PROJECT);
+  if (rows.length >= MAX_EVENTS_PER_PROJECT) return { open: false, known: [] };
+  return { open: true, known: rows.map((r) => r.name) };
+}
+
 /** Lista os eventos do projeto (mais recentes/frequentes primeiro) para o seletor de gatilho. */
 export async function listEvents(projectId: string) {
   return db

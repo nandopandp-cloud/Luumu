@@ -1,4 +1,5 @@
 import { listActiveSurveysForSdk } from "@/lib/db/surveys";
+import { eventCatalogForSdk } from "@/lib/db/events";
 import { normalizeAppearance } from "@/lib/builder";
 import { resolveKey } from "@/lib/api/keys";
 import { allowedOrigin, jsonCors, preflight } from "@/lib/api/cors";
@@ -52,7 +53,10 @@ export async function GET(req: Request) {
     return jsonCors({ error: "Origem não autorizada." }, { status: 403, origin: null });
   }
 
-  const active = await listActiveSurveysForSdk(resolved.projectId);
+  const [active, eventCatalog] = await Promise.all([
+    listActiveSurveysForSdk(resolved.projectId),
+    eventCatalogForSdk(resolved.projectId),
+  ]);
   return jsonCors(
     {
       surveys: active.map((s) => ({
@@ -68,6 +72,8 @@ export async function GET(req: Request) {
         audienceList: (s.audienceList as string[]) ?? [], // emails/IDs alvo
         frequency: s.frequency,
       })),
+      // estado do catálogo de eventos: diz ao SDK quando NÃO mandar POST /events
+      events: eventCatalog,
     },
     { origin: allowOrigin, cache: CONFIG_CACHE }
   );

@@ -93,6 +93,14 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
   let activeSurveys: ActiveSurvey[] = [];
   let catalogLoaded = false;
 
+  // estado do catálogo de EVENTOS no servidor (vem junto com /config); decide se vale mandar
+  // um nome no POST /events. `null` = ainda não sabemos (catálogo não carregou, ou veio de um
+  // cache gravado antes deste campo existir) → manda como antes.
+  type EventCatalog = { open: boolean; known: string[] };
+  type Catalog = { surveys: ActiveSurvey[]; events: EventCatalog | null };
+  let eventsOpen: boolean | null = null;
+  let serverKnown: Record<string, 1> = {};
+
   // identidade do usuário atual (informada pelo cliente via Luumu.identify)
   let identity: { id?: string; email?: string } = {};
   try {
@@ -550,14 +558,21 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
   const CATALOG_TTL_MS = 30 * 60 * 1000;
   const catalogKey = (key: string) => `luumu_catalog_${key}`;
 
-  function readCachedCatalog(key: string): ActiveSurvey[] | null {
+  // aceita só o formato esperado; qualquer outra coisa vira "não sabemos" (null)
+  function parseEventCatalog(v: unknown): EventCatalog | null {
+    const e = v as EventCatalog | null | undefined;
+    if (!e || typeof e.open !== "boolean" || !Array.isArray(e.known)) return null;
+    return { open: e.open, known: e.known.filter((n) => typeof n === "string") };
+  }
+
+  function readCachedCatalog(key: string): Catalog | null {
     try {
       const raw = localStorage.getItem(catalogKey(key));
       if (!raw) return null;
-      const parsed = JSON.parse(raw) as { t: number; surveys: ActiveSurvey[] };
+      const parsed = JSON.parse(raw) as { t: number; surveys: ActiveSurvey[]; events?: unknown };
       if (!parsed || typeof parsed.t !== "number" || !Array.isArray(parsed.surveys)) return null;
       if (Date.now() - parsed.t > CATALOG_TTL_MS) return null;
-      return parsed.surveys;
+      return { surveys: parsed.surveys, events: parseEventCatalog(parsed.events) };
     } catch {
       // localStorage indisponível (modo privado, storage bloqueado) ou JSON corrompido:
       // segue pelo caminho de rede, que é o comportamento anterior.
@@ -565,51 +580,86 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     }
   }
 
-  function writeCachedCatalog(key: string, surveys: ActiveSurvey[]) {
+  function writeCachedCatalog(key: string, catalog: Catalog) {
     try {
-      localStorage.setItem(catalogKey(key), JSON.stringify({ t: Date.now(), surveys }));
+      localStorage.setItem(
+        catalogKey(key),
+        JSON.stringify({ t: Date.now(), surveys: catalog.surveys, events: catalog.events })
+      );
     } catch {}
   }
 
   /**
    * Busca o catálogo na rede. `null` = a request falhou (rede caída, 4xx/5xx) e é diferente
-   * de `[]` = o workspace realmente não tem pesquisa ativa. A distinção importa porque só o
-   * segundo caso pode ir para o cache: gravar `[]` de uma falha silenciaria as pesquisas do
-   * cliente por 5 minutos inteiros a cada soluço de rede.
+   * de `surveys: []` = o workspace realmente não tem pesquisa ativa. A distinção importa porque
+   * só o segundo caso pode ir para o cache: gravar `[]` de uma falha silenciaria as pesquisas
+   * do cliente pelo TTL inteiro a cada soluço de rede.
    */
-  async function fetchActive(key: string): Promise<ActiveSurvey[] | null> {
+  async function fetchActive(key: string): Promise<Catalog | null> {
     try {
       const r = await fetch(`${API}/config?key=${encodeURIComponent(key)}`);
       if (!r.ok) return null;
       const d = await r.json();
-      return (d.surveys || []) as ActiveSurvey[];
+      return { surveys: (d.surveys || []) as ActiveSurvey[], events: parseEventCatalog(d.events) };
     } catch {
       return null;
     }
   }
 
-  // garante que o catálogo de surveys ativas esteja carregado (uma vez por sessão)
-  async function ensureCatalog(key: string) {
-    if (catalogLoaded) return;
+  function applyCatalog(catalog: Catalog) {
+    activeSurveys = catalog.surveys;
+    if (catalog.events) {
+      eventsOpen = catalog.events.open;
+      serverKnown = {};
+      for (const n of catalog.events.known) serverKnown[n] = 1;
+    }
+    catalogLoaded = true;
+  }
 
+  /*
+    Uma busca por vez, e sem insistir quando ela falha.
+
+    `track()` chama ensureCatalog a cada evento automático (page view, clique, engaged_30s,
+    page_leave...). Sem estes dois controles:
+     - os eventos disparados juntos no load faziam, cada um, o seu GET /config em paralelo;
+     - quando o /config falhava (key revogada, origem fora da allowlist, rede), CADA evento
+       seguinte refazia a request — e resposta de erro não é cacheada na borda, então cada uma
+       virava invocação de função. Um site mal configurado geraria uma invocação por clique.
+    Depois de uma falha, a próxima tentativa só acontece passado CATALOG_RETRY_MS.
+  */
+  const CATALOG_RETRY_MS = 60 * 1000;
+  let catalogInFlight: Promise<void> | null = null;
+  let catalogRetryAt = 0;
+
+  async function loadCatalog(key: string) {
     const cached = readCachedCatalog(key);
     if (cached) {
-      activeSurveys = cached;
-      catalogLoaded = true;
+      applyCatalog(cached);
       return;
     }
+    if (Date.now() < catalogRetryAt) return;
 
     const fetched = await fetchActive(key);
     if (fetched === null) {
-      // falha de rede: não marca como carregado nem grava cache, para a próxima chamada
-      // (outro evento, outra navegação) tentar de novo em vez de ficar sem catálogo.
+      // falha: não marca como carregado nem grava cache; tenta de novo depois da espera
       activeSurveys = [];
+      catalogRetryAt = Date.now() + CATALOG_RETRY_MS;
       return;
     }
 
-    activeSurveys = fetched;
+    applyCatalog(fetched);
     writeCachedCatalog(key, fetched);
-    catalogLoaded = true;
+  }
+
+  // garante que o catálogo de surveys ativas esteja carregado (uma vez por sessão)
+  function ensureCatalog(key: string): Promise<void> {
+    if (catalogLoaded) return Promise.resolve();
+    if (!catalogInFlight) {
+      catalogInFlight = loadCatalog(key).finally(() => {
+        catalogInFlight = null;
+      });
+    }
+    return catalogInFlight;
   }
 
   // slug de evento, DEVE casar com normalizeEventName() do servidor (lib/db/events.ts)
@@ -717,6 +767,8 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
       flushTimer = null;
     }
     const key = activeKey || keyFromAttr;
+    // o catálogo pode ter carregado depois que o nome entrou na fila: filtra de novo aqui
+    pending = pending.filter(worthSending);
     if (!key || pending.length === 0) return;
     const names = pending;
     pending = [];
@@ -745,9 +797,22 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
       });
   }
 
+  /*
+    Só vale mandar o que o SERVIDOR ainda não tem. `sentNames` sozinho não resolve: ele é por
+    navegador, então cada visitante novo reenviava o catálogo inteiro que o projeto já conhecia
+    — e num projeto com o catálogo cheio o servidor descarta tudo, então cada POST era uma
+    invocação sem efeito. O estado do servidor vem no /config (ver lib/db/events.ts,
+    eventCatalogForSdk); enquanto ele não chegou, `eventsOpen` é null e vale o comportamento
+    anterior.
+  */
+  function worthSending(name: string): boolean {
+    if (eventsOpen === false) return false;
+    return !serverKnown[name] && !sentNames[name];
+  }
+
   /** Coloca um nome inédito na fila de catalogação (ignora o que já foi enviado). */
   function enqueueEvent(name: string) {
-    if (sentNames[name] || pending.indexOf(name) >= 0) return;
+    if (!worthSending(name) || pending.indexOf(name) >= 0) return;
     pending.push(name);
     if (pending.length >= FLUSH_MAX) {
       flush();
