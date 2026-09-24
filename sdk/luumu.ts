@@ -590,29 +590,30 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
   }
 
   /**
-   * Busca o catálogo na rede. `null` = a request falhou (rede caída, 4xx/5xx) e é diferente
-   * de `surveys: []` = o workspace realmente não tem pesquisa ativa. A distinção importa porque
-   * só o segundo caso pode ir para o cache: gravar `[]` de uma falha silenciaria as pesquisas
-   * do cliente pelo TTL inteiro a cada soluço de rede.
+   * Busca o catálogo na rede. `catalog: null` = a request falhou (rede caída, 4xx/5xx) e é
+   * diferente de `surveys: []` = o workspace realmente não tem pesquisa ativa. A distinção
+   * importa porque só o segundo caso pode ir para o cache: gravar `[]` de uma falha silenciaria
+   * as pesquisas do cliente pelo TTL inteiro a cada soluço de rede. `status` 0 = sem resposta.
    */
-  async function fetchActive(key: string): Promise<Catalog | null> {
+  async function fetchActive(key: string): Promise<{ catalog: Catalog | null; status: number }> {
     try {
       const r = await fetch(`${API}/config?key=${encodeURIComponent(key)}`);
-      if (!r.ok) return null;
+      if (!r.ok) return { catalog: null, status: r.status };
       const d = await r.json();
-      return { surveys: (d.surveys || []) as ActiveSurvey[], events: parseEventCatalog(d.events) };
+      return {
+        catalog: { surveys: (d.surveys || []) as ActiveSurvey[], events: parseEventCatalog(d.events) },
+        status: r.status,
+      };
     } catch {
-      return null;
+      return { catalog: null, status: 0 };
     }
   }
 
   function applyCatalog(catalog: Catalog) {
     activeSurveys = catalog.surveys;
-    if (catalog.events) {
-      eventsOpen = catalog.events.open;
-      serverKnown = {};
-      for (const n of catalog.events.known) serverKnown[n] = 1;
-    }
+    eventsOpen = catalog.events ? catalog.events.open : null;
+    serverKnown = {};
+    if (catalog.events) for (const n of catalog.events.known) serverKnown[n] = 1;
     catalogLoaded = true;
   }
 
@@ -625,11 +626,31 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
      - quando o /config falhava (key revogada, origem fora da allowlist, rede), CADA evento
        seguinte refazia a request — e resposta de erro não é cacheada na borda, então cada uma
        virava invocação de função. Um site mal configurado geraria uma invocação por clique.
-    Depois de uma falha, a próxima tentativa só acontece passado CATALOG_RETRY_MS.
+    Depois de uma falha, a próxima tentativa espera. A espera fica no localStorage e não só em
+    memória: senão cada NOVA página do site recomeçava do zero e um site mal configurado ainda
+    gerava uma invocação por pageview, mesmo sem nenhuma pesquisa no ar. 4xx (key inválida,
+    domínio fora da lista) é configuração e não se resolve em segundos, então espera mais.
   */
   const CATALOG_RETRY_MS = 60 * 1000;
+  const CATALOG_CONFIG_ERROR_RETRY_MS = 10 * 60 * 1000;
+  const retryKey = (key: string) => `luumu_catalog_retry_${key}`;
   let catalogInFlight: Promise<void> | null = null;
   let catalogRetryAt = 0;
+
+  function retryAt(key: string): number {
+    let t = catalogRetryAt;
+    try {
+      t = Math.max(t, Number(localStorage.getItem(retryKey(key))) || 0);
+    } catch {}
+    return t;
+  }
+
+  function deferRetry(key: string, ms: number) {
+    catalogRetryAt = Date.now() + ms;
+    try {
+      localStorage.setItem(retryKey(key), String(catalogRetryAt));
+    } catch {}
+  }
 
   async function loadCatalog(key: string) {
     const cached = readCachedCatalog(key);
@@ -637,18 +658,26 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
       applyCatalog(cached);
       return;
     }
-    if (Date.now() < catalogRetryAt) return;
-
-    const fetched = await fetchActive(key);
-    if (fetched === null) {
-      // falha: não marca como carregado nem grava cache; tenta de novo depois da espera
-      activeSurveys = [];
-      catalogRetryAt = Date.now() + CATALOG_RETRY_MS;
+    /*
+      Durante a espera também não há ingestão: o POST /events valida a mesma key e a mesma
+      origem, então seria recusado pelo mesmo motivo — só que depois de acordar a função.
+    */
+    if (Date.now() < retryAt(key)) {
+      eventsOpen = false;
       return;
     }
 
-    applyCatalog(fetched);
-    writeCachedCatalog(key, fetched);
+    const { catalog, status } = await fetchActive(key);
+    if (catalog === null) {
+      // falha: não marca como carregado nem grava cache; tenta de novo depois da espera
+      activeSurveys = [];
+      eventsOpen = false;
+      deferRetry(key, status >= 400 && status < 500 ? CATALOG_CONFIG_ERROR_RETRY_MS : CATALOG_RETRY_MS);
+      return;
+    }
+
+    applyCatalog(catalog);
+    writeCachedCatalog(key, catalog);
   }
 
   // garante que o catálogo de surveys ativas esteja carregado (uma vez por sessão)
@@ -803,7 +832,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     — e num projeto com o catálogo cheio o servidor descarta tudo, então cada POST era uma
     invocação sem efeito. O estado do servidor vem no /config (ver lib/db/events.ts,
     eventCatalogForSdk); enquanto ele não chegou, `eventsOpen` é null e vale o comportamento
-    anterior.
+    anterior. Se o /config falhou, `eventsOpen` é false até a próxima tentativa (loadCatalog).
   */
   function worthSending(name: string): boolean {
     if (eventsOpen === false) return false;
@@ -1108,7 +1137,16 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     if (opts.surveyId) {
       // pedido explícito: ignora catálogo/gatilho, mas ainda respeita a frequência configurada
       await ensureCatalog(key);
-      const catalogEntry = activeSurveys.find((s) => s.id === opts.surveyId) || { id: opts.surveyId };
+      const listed = activeSurveys.find((s) => s.id === opts.surveyId);
+      /*
+        Fora do catálogo = fora do ar (encerrada, pausada ou fora da vigência). Um
+        `Luumu.init({ surveyId })` fixo no site do cliente continuaria pedindo essa pesquisa a
+        cada página depois da campanha acabar — e a resposta de erro não é cacheada na borda,
+        então cada uma virava invocação de função. Só confia na ausência se o catálogo
+        carregou; `force` (Luumu.show, usado em teste) continua indo ao servidor.
+      */
+      if (!opts.force && catalogLoaded && !listed) return;
+      const catalogEntry = listed || { id: opts.surveyId };
       if (!opts.force && blockedByFrequency(catalogEntry)) return;
       const survey = await fetchSurvey(opts.surveyId, key);
       if (!survey) return;

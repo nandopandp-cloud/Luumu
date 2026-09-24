@@ -50,7 +50,10 @@ export async function GET(req: Request) {
 
   const allowOrigin = allowedOrigin(origin, resolved.domains);
   if (origin && allowOrigin === null) {
-    return jsonCors({ error: "Origem não autorizada." }, { status: 403, origin: null });
+    // CORS liberado só nesta resposta de erro (não expõe nada): sem ele o navegador esconde o
+    // status do SDK, que tomava o 403 por queda de rede e voltava a tentar em 1 min em vez
+    // de 10 — num site com domínio fora da lista, é uma invocação por visitante a cada minuto.
+    return jsonCors({ error: "Origem não autorizada." }, { status: 403, origin });
   }
 
   const [active, eventCatalog] = await Promise.all([
