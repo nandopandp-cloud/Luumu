@@ -14,15 +14,6 @@ import { membershipProjectId } from "./ids";
  * acesso total — sem precisar reconciliar nada.
  */
 
-/** Ids dos projetos permitidos a uma membership, ou null se não houver restrição. */
-export async function getMembershipProjectIds(membershipId: string): Promise<string[] | null> {
-  const rows = await db
-    .select({ projectId: membershipProjects.projectId })
-    .from(membershipProjects)
-    .where(eq(membershipProjects.membershipId, membershipId));
-  return rows.length === 0 ? null : rows.map((r) => r.projectId);
-}
-
 /**
  * Escopo do usuário no workspace: null = todos os projetos.
  * O owner nunca é restringido — mesmo que existam linhas, ele enxerga o workspace inteiro.
@@ -31,15 +22,17 @@ export async function getUserProjectScope(
   workspaceId: string,
   userId: string
 ): Promise<string[] | null> {
-  const [m] = await db
-    .select({ id: memberships.id, role: memberships.role })
+  // papel + projetos permitidos numa só ida ao banco (roda em toda navegação do painel)
+  const rows = await db
+    .select({ role: memberships.role, projectId: membershipProjects.projectId })
     .from(memberships)
-    .where(and(eq(memberships.workspaceId, workspaceId), eq(memberships.userId, userId)))
-    .limit(1);
+    .leftJoin(membershipProjects, eq(membershipProjects.membershipId, memberships.id))
+    .where(and(eq(memberships.workspaceId, workspaceId), eq(memberships.userId, userId)));
 
-  if (!m) return [];
-  if (m.role === "owner") return null;
-  return getMembershipProjectIds(m.id);
+  if (rows.length === 0) return [];
+  if (rows[0].role === "owner") return null;
+  const ids = rows.map((r) => r.projectId).filter((v): v is string => !!v);
+  return ids.length === 0 ? null : ids;
 }
 
 /**

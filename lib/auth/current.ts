@@ -70,19 +70,25 @@ export async function canManageWorkspace(): Promise<boolean> {
  */
 export const getCurrentProject = cache(async (): Promise<ProjectRow | null> => {
   const session = await requireUser();
-  const [store, scope] = await Promise.all([cookies(), getProjectScope()]);
+  const store = await cookies();
   const cookieId = store.get(PROJECT_COOKIE)?.value;
+  /*
+    O projeto do cookie é buscado EM PARALELO com o escopo, e só depois validado contra ele.
+    Antes era escopo → projeto, duas idas ao banco em sequência em toda navegação do painel.
+    A busca especulativa não libera nada: o resultado é descartado se o escopo não permitir.
+  */
+  const [scope, cookieProject] = await Promise.all([
+    getProjectScope(),
+    cookieId ? getProject(cookieId, session.workspaceId) : Promise.resolve(null),
+  ]);
 
   // membro restrito a nenhum projeto não tem projeto ativo
   if (scope !== null && scope.length === 0) return null;
 
-  // o cookie é escolha do usuário, não credencial: além de conferir o workspace,
+  // o cookie é escolha do usuário, não credencial: além de conferir o workspace (getProject),
   // exigimos que o projeto esteja no escopo do membro. Sem isso, um membro restrito
   // trocaria de projeto só reescrevendo o cookie.
-  if (cookieId && (scope === null || scope.includes(cookieId))) {
-    const p = await getProject(cookieId, session.workspaceId);
-    if (p) return p;
-  }
+  if (cookieProject && (scope === null || scope.includes(cookieProject.id))) return cookieProject;
 
   if (scope === null) return getFirstProject(session.workspaceId);
 
