@@ -153,6 +153,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     events: EventCatalog | null;
     hostKnown: boolean | null;
     tours: TourCatalogEntry[];
+    sdk: string | null; // versão atual dos bundles sob demanda (vem do servidor)
   };
   let eventsOpen: boolean | null = null;
   let serverKnown: Record<string, 1> = {};
@@ -633,6 +634,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
         events?: unknown;
         hostKnown?: unknown;
         tours?: unknown;
+        sdk?: unknown;
       };
       if (!parsed || typeof parsed.t !== "number" || !Array.isArray(parsed.surveys)) return null;
       if (Date.now() - parsed.t > CATALOG_TTL_MS) return null;
@@ -641,6 +643,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
         events: parseEventCatalog(parsed.events),
         hostKnown: typeof parsed.hostKnown === "boolean" ? parsed.hostKnown : null,
         tours: Array.isArray(parsed.tours) ? (parsed.tours as TourCatalogEntry[]) : [],
+        sdk: typeof parsed.sdk === "string" ? parsed.sdk : null,
       };
     } catch {
       // localStorage indisponível (modo privado, storage bloqueado) ou JSON corrompido:
@@ -659,6 +662,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
           events: catalog.events,
           hostKnown: catalog.hostKnown,
           tours: catalog.tours,
+          sdk: catalog.sdk,
         })
       );
     } catch {}
@@ -681,6 +685,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
           events: parseEventCatalog(d.events),
           hostKnown: d.host && typeof d.host.known === "boolean" ? d.host.known : null,
           tours: Array.isArray(d.tours) ? (d.tours as TourCatalogEntry[]) : [],
+          sdk: typeof d.sdk === "string" ? d.sdk : null,
         },
         status: r.status,
       };
@@ -702,6 +707,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     if (catalog.events) for (const n of catalog.events.known) serverKnown[n] = 1;
     hostKnown = catalog.hostKnown;
     activeTours = catalog.tours;
+    if (catalog.sdk) bundleVersion = catalog.sdk;
     catalogLoaded = true;
     maybeAnnounceHost(key);
     safe(maybeLoadTours);
@@ -715,6 +721,8 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
    * API. Segmentação por traits e o resto ficam no runtime, que não pesa em quem não tem tour.
    */
   let activeTours: TourCatalogEntry[] = [];
+  // versão dos bundles sob demanda: a do servidor (/config) vence a gravada neste arquivo
+  let bundleVersion = BUILD;
   let runtime: ToursRuntime | null = null;
   let runtimeLoading: Promise<ToursRuntime | null> | null = null;
 
@@ -731,7 +739,12 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
   function loadScript(file: string): Promise<void> {
     return new Promise((resolve, reject) => {
       const s = document.createElement("script");
-      s.src = `${ORIGIN}/${file}?v=${encodeURIComponent(BUILD)}`;
+      /*
+        Preview e builder são usados por quem acabou de mudar algo e precisa ver na hora:
+        nesses modos o bundle é sempre baixado de novo. Para o usuário final vale o cache.
+      */
+      const fresh = builderToken || previewToken ? `&t=${Date.now()}` : "";
+      s.src = `${ORIGIN}/${file}?v=${encodeURIComponent(bundleVersion)}${fresh}`;
       s.async = true;
       s.onload = () => resolve();
       s.onerror = () => reject(new Error("load"));

@@ -2,6 +2,7 @@ import { listActiveSurveysForSdk } from "@/lib/db/surveys";
 import { eventCatalogForSdk } from "@/lib/db/events";
 import { hostStateForSdk, normalizeHost } from "@/lib/db/hosts";
 import { listPublishedToursForSdk } from "@/lib/db/tours";
+import { SDK_BUNDLE_VERSION } from "@/lib/tours/sdk-version";
 import { normalizeAppearance } from "@/lib/builder";
 import { resolveKey } from "@/lib/api/keys";
 import { allowedOrigin, jsonCors, preflight } from "@/lib/api/cors";
@@ -103,6 +104,8 @@ export async function GET(req: Request) {
       // diz ao SDK se ele precisa se apresentar (POST /events) para esta plataforma entrar no painel
       host: hostState,
       tours,
+      // versão atual de sdk-tours.js / sdk-builder.js (o core pode estar em cache e ser mais velho)
+      sdk: SDK_BUNDLE_VERSION,
     },
     { origin: allowOrigin, cache: CONFIG_CACHE }
   );
