@@ -211,6 +211,9 @@ h1, h2, h3, h4, h5 {
 
 @keyframes spin-slow { to { transform: rotate(360deg); } }
 @keyframes shimmer { to { transform: translateX(100%); } }
+/* abertura do menu do Select (components/ui/Select.tsx) */
+@keyframes luumuSelectIn { from { opacity: 0; transform: translateY(-4px) scale(.98); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { [class*="luumuSelectIn"] { animation: none !important; } }
 @keyframes marquee { to { transform: translateX(-50%); } }
 
 /* Flashlight / spotlight card */

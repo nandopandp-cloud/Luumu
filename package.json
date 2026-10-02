@@ -12,7 +12,7 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx db/seed.ts",
-    "test": "node --import tsx --test --test-force-exit \"tests/**/*.test.ts\"",
+    "test": "node --import tsx --test --test-force-exit \"tests/**/*.test.ts\" \"tests/**/*.test.tsx\"",
     "test:report-email": "tsx --tsconfig scripts/tsconfig.scripts.json scripts/test-report-email.ts"
   },
   "dependencies": {

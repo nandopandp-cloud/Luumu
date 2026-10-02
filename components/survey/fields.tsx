@@ -1,5 +1,6 @@
 "use client";
 
+import { Select } from "@/components/ui/Select";
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { scoreBlocks, type BuilderQuestion } from "@/lib/builder";
@@ -153,14 +154,16 @@ export function QuestionField({
 
   if (q.blockId === "dropdown") {
     return (
-      <select
+      <Select
         value={(value as string) ?? ""}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full max-w-md rounded-xl border border-line-strong bg-bg-elev px-3.5 py-2.5 text-sm focus:border-accent focus:outline-none"
+        className="max-w-md"
+        placeholder="Selecione…"
+        aria-label={q.title}
       >
         <option value="" disabled>Selecione…</option>
         {(cfg.options ?? []).map((o) => <option key={o}>{o}</option>)}
-      </select>
+      </Select>
     );
   }
 
