@@ -5,6 +5,7 @@ import { SurveySettingsForm } from "@/components/survey/SurveySettingsForm";
 import { SurveySubnav } from "@/components/survey/SurveySubnav";
 import { getSurvey } from "@/lib/db/surveys";
 import { listEvents } from "@/lib/db/events";
+import { listHosts } from "@/lib/db/hosts";
 import { getStats } from "@/lib/db/responses";
 import { getCurrentProjectId } from "@/lib/auth/current";
 import { getWorkspace } from "@/lib/db/workspace";
@@ -24,8 +25,10 @@ export default async function SurveySettingsPage({
   const survey = await getSurvey(id, { projectId });
   if (!survey) notFound();
   // eventos disponíveis como gatilho são os do projeto desta pesquisa
-  const [events, stats, workspace] = await Promise.all([
+  // plataformas (hostnames) em que o SDK deste projeto já rodou, para direcionar a pesquisa
+  const [events, hosts, stats, workspace] = await Promise.all([
     listEvents(survey.projectId),
+    listHosts(survey.projectId),
     getStats({ projectId: survey.projectId, surveyId: survey.id }),
     getWorkspace(survey.workspaceId),
   ]);
@@ -62,12 +65,14 @@ export default async function SurveySettingsPage({
               : [],
           audienceMode: (survey.audienceMode as "email" | "id" | null) ?? null,
           audienceList: (survey.audienceList as string[]) ?? [],
+          targetHosts: (survey.targetHosts as string[]) ?? [],
           frequency: survey.frequency,
           startsAt: survey.startsAt ?? "",
           endsAt: survey.endsAt ?? "",
           responseLimit: survey.responseLimit ?? null,
         }}
         events={events}
+        hosts={hosts}
         currentResponses={stats.total}
         currentDate={today(workspace?.timezone)}
       />

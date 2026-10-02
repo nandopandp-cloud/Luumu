@@ -25,6 +25,7 @@ export default async function SurveysPage() {
     type: s.type,
     status: s.status as SurveyStatus,
     channel: s.channel,
+    targetHosts: (s.targetHosts as string[]) ?? [],
     responseCount: s.responseCount,
     score: s.score,
     updatedAtLabel: timeAgo(s.updatedAt),

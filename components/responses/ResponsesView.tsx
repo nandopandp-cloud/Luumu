@@ -13,6 +13,7 @@ export interface ResponseItem {
   id: string;
   user: string;
   channel: string;
+  host: string | null; // plataforma de onde a resposta veio
   when: string;
   sentiment: "positivo" | "neutro" | "negativo" | null;
   score: number | null;
@@ -59,7 +60,10 @@ export function ResponsesView({
                 </span>
                 <div>
                   <div className="text-sm font-semibold">{r.user}</div>
-                  <div className="text-xs text-fg-mut">{r.channel} · {r.when}</div>
+                  <div className="text-xs text-fg-mut">
+                    {r.channel}
+                    {r.host && <> · <span className="font-mono">{r.host}</span></>} · {r.when}
+                  </div>
                 </div>
               </div>
               <div className="flex items-center gap-2">

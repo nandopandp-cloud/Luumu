@@ -1,5 +1,6 @@
 import { listActiveSurveysForSdk } from "@/lib/db/surveys";
 import { eventCatalogForSdk } from "@/lib/db/events";
+import { hostStateForSdk, normalizeHost } from "@/lib/db/hosts";
 import { normalizeAppearance } from "@/lib/builder";
 import { resolveKey } from "@/lib/api/keys";
 import { allowedOrigin, jsonCors, preflight } from "@/lib/api/cors";
@@ -37,8 +38,17 @@ export function OPTIONS(req: Request) {
 }
 
 /**
- * GET /api/v1/config?key=pk_...
- * Resolve o workspace pela SDK key e retorna as pesquisas ativas DAQUELE workspace.
+ * GET /api/v1/config?key=pk_...&host=plataforma.cliente.com
+ * Resolve o workspace pela SDK key e retorna as pesquisas ativas DAQUELE workspace que valem
+ * para a plataforma informada.
+ *
+ * Uma mesma key pode estar instalada em vários produtos do cliente. `host` é o hostname em
+ * que o SDK está rodando: pesquisas com `targetHosts` só são devolvidas para esses hosts.
+ * Ele vai na query string (e não é lido do header Origin) porque a resposta é cacheada na
+ * borda por URL e sem `Vary: Origin` — o host precisa fazer parte da chave de cache.
+ *
+ * Sem `host` (versões do SDK anteriores a este parâmetro) só saem as pesquisas sem
+ * plataforma definida: melhor não exibir do que exibir no produto errado.
  */
 export async function GET(req: Request) {
   const origin = req.headers.get("origin");
@@ -56,13 +66,19 @@ export async function GET(req: Request) {
     return jsonCors({ error: "Origem não autorizada." }, { status: 403, origin });
   }
 
-  const [active, eventCatalog] = await Promise.all([
+  const host = normalizeHost(searchParams.get("host"));
+  const [active, eventCatalog, hostState] = await Promise.all([
     listActiveSurveysForSdk(resolved.projectId),
     eventCatalogForSdk(resolved.projectId),
+    hostStateForSdk(resolved.projectId, host),
   ]);
+  const forHost = active.filter((s) => {
+    const targets = (s.targetHosts as string[] | null) ?? [];
+    return targets.length === 0 || (!!host && targets.includes(host));
+  });
   return jsonCors(
     {
-      surveys: active.map((s) => ({
+      surveys: forHost.map((s) => ({
         id: s.id,
         name: s.name,
         type: s.type,
@@ -73,10 +89,13 @@ export async function GET(req: Request) {
         audience: s.audience, // "Todos os usuários" | "Usuários específicos"
         audienceMode: s.audienceMode, // "email" | "id" | null
         audienceList: (s.audienceList as string[]) ?? [], // emails/IDs alvo
+        targetHosts: (s.targetHosts as string[]) ?? [], // plataformas onde pode aparecer ([] = todas)
         frequency: s.frequency,
       })),
       // estado do catálogo de eventos: diz ao SDK quando NÃO mandar POST /events
       events: eventCatalog,
+      // diz ao SDK se ele precisa se apresentar (POST /events) para esta plataforma entrar no painel
+      host: hostState,
     },
     { origin: allowOrigin, cache: CONFIG_CACHE }
   );

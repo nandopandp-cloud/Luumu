@@ -37,6 +37,7 @@ export default async function ResponsesPage({
     id: r.id,
     user: r.respondentEmail ?? r.respondent ?? "Anônimo",
     channel: r.channel,
+    host: r.host,
     when: timeAgo(r.createdAt),
     sentiment: r.sentiment as ResponseItem["sentiment"],
     score: r.score,

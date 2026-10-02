@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { submitResponse } from "@/lib/db/responses";
 import { getSurvey, enforceResponseLimit } from "@/lib/db/surveys";
+import { hostFromOrigin } from "@/lib/db/hosts";
 import { deriveSentiment } from "@/lib/sentiment";
 import { resolveKey } from "@/lib/api/keys";
 import { checkRateLimit } from "@/lib/api/ratelimit";
@@ -66,6 +67,13 @@ export async function POST(req: Request) {
     return jsonCors({ error: "Pesquisa indisponível." }, { status: 403, origin: allowOrigin });
   }
 
+  // plataforma de onde a resposta veio; pesquisa direcionada só aceita resposta das plataformas-alvo
+  const host = hostFromOrigin(origin);
+  const targets = (survey.targetHosts as string[] | null) ?? [];
+  if (targets.length > 0 && host && !targets.includes(host)) {
+    return jsonCors({ error: "Pesquisa indisponível nesta plataforma." }, { status: 403, origin: allowOrigin });
+  }
+
   await submitResponse({
     surveyId: data.surveyId,
     channel: data.channel ?? "SDK",
@@ -78,6 +86,7 @@ export async function POST(req: Request) {
     }),
     respondent: data.respondent ?? null,
     respondentEmail: data.respondentEmail ?? null,
+    host: host || null,
   });
   // reaproveita a linha já carregada acima em vez de reler a pesquisa
   await enforceResponseLimit(data.surveyId, survey);

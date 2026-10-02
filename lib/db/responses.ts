@@ -39,6 +39,7 @@ export async function listResponses(scope: Scope) {
       respondent: responses.respondent,
       respondentEmail: responses.respondentEmail,
       channel: responses.channel,
+      host: responses.host,
       sentiment: responses.sentiment,
       score: responses.score,
       createdAt: responses.createdAt,
@@ -369,6 +370,7 @@ export async function submitResponse(input: {
   sentiment: "positivo" | "neutro" | "negativo" | null;
   respondent?: string | null;
   respondentEmail?: string | null;
+  host?: string | null;
 }) {
   const rid = responseId();
   await db.insert(responses).values({
@@ -379,6 +381,7 @@ export async function submitResponse(input: {
     sentiment: input.sentiment ?? undefined,
     respondent: input.respondent ?? undefined,
     respondentEmail: input.respondentEmail ?? undefined,
+    host: input.host ?? undefined,
   });
   if (input.answers.length) {
     await db.insert(answers).values(

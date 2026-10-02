@@ -57,6 +57,13 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
   const API = `${ORIGIN}/api/v1`;
 
   /*
+    Plataforma em que o SDK está rodando. Uma mesma key pode estar instalada em vários
+    produtos do cliente (ex.: preparasp.* e matematicaem.* no mesmo projeto), e cada pesquisa
+    pode ser direcionada a alguns deles. DEVE casar com normalizeHost() (lib/db/hosts.ts).
+  */
+  const HOST = (location.hostname || "").toLowerCase().replace(/\.$/, "");
+
+  /*
     Content-Type dos POSTs do SDK.
 
     O SDK roda no site do cliente, então TODA chamada à nossa API é cross-origin. O browser
@@ -87,6 +94,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     audience?: string | null; // "Todos os usuários" | "Usuários específicos"
     audienceMode?: "email" | "id" | null;
     audienceList?: string[] | null;
+    targetHosts?: string[] | null; // plataformas onde pode aparecer; vazio = todas
     frequency?: string | null; // "Uma vez por usuário" | "Recorrente (30 dias)" | "Sempre"
     appearance?: Appearance;
   };
@@ -97,9 +105,11 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
   // um nome no POST /events. `null` = ainda não sabemos (catálogo não carregou, ou veio de um
   // cache gravado antes deste campo existir) → manda como antes.
   type EventCatalog = { open: boolean; known: string[] };
-  type Catalog = { surveys: ActiveSurvey[]; events: EventCatalog | null };
+  // hostKnown: o projeto já conhece esta plataforma? `null` = não sabemos (cache antigo, falha)
+  type Catalog = { surveys: ActiveSurvey[]; events: EventCatalog | null; hostKnown: boolean | null };
   let eventsOpen: boolean | null = null;
   let serverKnown: Record<string, 1> = {};
+  let hostKnown: boolean | null = null;
 
   // identidade do usuário atual (informada pelo cliente via Luumu.identify)
   let identity: { id?: string; email?: string } = {};
@@ -569,10 +579,14 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     try {
       const raw = localStorage.getItem(catalogKey(key));
       if (!raw) return null;
-      const parsed = JSON.parse(raw) as { t: number; surveys: ActiveSurvey[]; events?: unknown };
+      const parsed = JSON.parse(raw) as { t: number; surveys: ActiveSurvey[]; events?: unknown; hostKnown?: unknown };
       if (!parsed || typeof parsed.t !== "number" || !Array.isArray(parsed.surveys)) return null;
       if (Date.now() - parsed.t > CATALOG_TTL_MS) return null;
-      return { surveys: parsed.surveys, events: parseEventCatalog(parsed.events) };
+      return {
+        surveys: parsed.surveys,
+        events: parseEventCatalog(parsed.events),
+        hostKnown: typeof parsed.hostKnown === "boolean" ? parsed.hostKnown : null,
+      };
     } catch {
       // localStorage indisponível (modo privado, storage bloqueado) ou JSON corrompido:
       // segue pelo caminho de rede, que é o comportamento anterior.
@@ -584,7 +598,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     try {
       localStorage.setItem(
         catalogKey(key),
-        JSON.stringify({ t: Date.now(), surveys: catalog.surveys, events: catalog.events })
+        JSON.stringify({ t: Date.now(), surveys: catalog.surveys, events: catalog.events, hostKnown: catalog.hostKnown })
       );
     } catch {}
   }
@@ -597,11 +611,15 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
    */
   async function fetchActive(key: string): Promise<{ catalog: Catalog | null; status: number }> {
     try {
-      const r = await fetch(`${API}/config?key=${encodeURIComponent(key)}`);
+      const r = await fetch(`${API}/config?key=${encodeURIComponent(key)}&host=${encodeURIComponent(HOST)}`);
       if (!r.ok) return { catalog: null, status: r.status };
       const d = await r.json();
       return {
-        catalog: { surveys: (d.surveys || []) as ActiveSurvey[], events: parseEventCatalog(d.events) },
+        catalog: {
+          surveys: (d.surveys || []) as ActiveSurvey[],
+          events: parseEventCatalog(d.events),
+          hostKnown: d.host && typeof d.host.known === "boolean" ? d.host.known : null,
+        },
         status: r.status,
       };
     } catch {
@@ -609,12 +627,20 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     }
   }
 
-  function applyCatalog(catalog: Catalog) {
-    activeSurveys = catalog.surveys;
+  // a pesquisa vale para esta plataforma? (o servidor já filtra; isto cobre catálogos em cache)
+  function forThisHost(s: ActiveSurvey): boolean {
+    const targets = Array.isArray(s.targetHosts) ? s.targetHosts : [];
+    return targets.length === 0 || targets.indexOf(HOST) >= 0;
+  }
+
+  function applyCatalog(catalog: Catalog, key: string) {
+    activeSurveys = catalog.surveys.filter(forThisHost);
     eventsOpen = catalog.events ? catalog.events.open : null;
     serverKnown = {};
     if (catalog.events) for (const n of catalog.events.known) serverKnown[n] = 1;
+    hostKnown = catalog.hostKnown;
     catalogLoaded = true;
+    maybeAnnounceHost(key);
   }
 
   /*
@@ -655,7 +681,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
   async function loadCatalog(key: string) {
     const cached = readCachedCatalog(key);
     if (cached) {
-      applyCatalog(cached);
+      applyCatalog(cached, key);
       return;
     }
     /*
@@ -676,7 +702,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
       return;
     }
 
-    applyCatalog(catalog);
+    applyCatalog(catalog, key);
     writeCachedCatalog(key, catalog);
   }
 
@@ -786,6 +812,42 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
   const FLUSH_MS = 2000; // janela de agrupamento
   const FLUSH_MAX = 20; // envia na hora ao acumular este tanto
 
+  function scheduleFlush() {
+    if (!flushTimer) flushTimer = setTimeout(() => flush(), FLUSH_MS);
+  }
+
+  /*
+    Apresentação da plataforma. O servidor registra o host de todo POST /events (pelo Origin),
+    mas numa plataforma nova cujos eventos o projeto já conhece nenhum POST sairia — e ela
+    nunca apareceria no painel para receber pesquisas. Quando o /config diz que o host é
+    desconhecido, o SDK manda um lote (vazio, se não houver nome inédito) para se apresentar.
+
+    A marca no localStorage segura as repetições enquanto o catálogo em cache (até 30 min) e
+    o da borda (60s) ainda dizem "desconhecido": um navegador se apresenta no máximo uma vez
+    por janela, não uma vez por página.
+  */
+  const HOST_ANNOUNCE_TTL_MS = 6 * 60 * 60 * 1000;
+  const hostAnnouncedKey = (key: string) => `luumu_host_announced_${key}`;
+  let announceHost = false;
+
+  function maybeAnnounceHost(key: string) {
+    if (!HOST || hostKnown !== false || announceHost) return;
+    try {
+      const last = Number(localStorage.getItem(hostAnnouncedKey(key))) || 0;
+      if (Date.now() - last < HOST_ANNOUNCE_TTL_MS) return;
+    } catch {}
+    announceHost = true;
+    scheduleFlush();
+  }
+
+  function hostAnnounced(key: string) {
+    announceHost = false;
+    hostKnown = true;
+    try {
+      localStorage.setItem(hostAnnouncedKey(key), String(Date.now()));
+    } catch {}
+  }
+
   /**
    * Envia o buffer. `beacon` é usado quando a página está sendo descarregada: fetch normal
    * é cancelado nesse momento, sendBeacon não — é isso que evita perder o último evento.
@@ -798,16 +860,20 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     const key = activeKey || keyFromAttr;
     // o catálogo pode ter carregado depois que o nome entrou na fila: filtra de novo aqui
     pending = pending.filter(worthSending);
-    if (!key || pending.length === 0) return;
+    if (!key || (pending.length === 0 && !announceHost)) return;
     const names = pending;
+    const announcing = announceHost;
     pending = [];
 
-    const body = JSON.stringify({ key, events: names });
+    const body = JSON.stringify({ key, events: names, host: HOST });
     // só marca como enviado depois de despachar; se a request falhar, o nome volta ao buffer
     // para tentar de novo (o catálogo é idempotente, reenviar não duplica nada).
     if (beacon && typeof navigator !== "undefined" && navigator.sendBeacon) {
       const ok = navigator.sendBeacon(`${API}/events`, new Blob([body], { type: SIMPLE_CONTENT_TYPE }));
-      if (ok) rememberSent(names);
+      if (ok) {
+        rememberSent(names);
+        if (announcing) hostAnnounced(key);
+      }
       return;
     }
     fetch(`${API}/events`, {
@@ -817,8 +883,10 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
       keepalive: true,
     })
       .then((r) => {
-        if (r.ok) rememberSent(names);
-        else for (const n of names) if (pending.indexOf(n) < 0) pending.push(n);
+        if (r.ok) {
+          rememberSent(names);
+          if (announcing) hostAnnounced(key);
+        } else for (const n of names) if (pending.indexOf(n) < 0) pending.push(n);
       })
       .catch(() => {
         // rede indisponível: devolve ao buffer para a próxima janela de flush
@@ -847,7 +915,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
       flush();
       return;
     }
-    if (!flushTimer) flushTimer = setTimeout(() => flush(), FLUSH_MS);
+    scheduleFlush();
   }
 
   /**

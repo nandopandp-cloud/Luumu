@@ -19,6 +19,7 @@ import { submitResponse } from "@/lib/db/responses";
 import { deriveSentiment } from "@/lib/sentiment";
 import { normalizeAppearance } from "@/lib/builder";
 import { isWithinSchedule, normalizeDate } from "@/lib/schedule";
+import { normalizeHost } from "@/lib/hosts";
 import { getCurrentWorkspaceId, getCurrentProjectId } from "@/lib/auth/current";
 import { getSurvey } from "@/lib/db/surveys";
 import type { SurveyType, SurveyStatus } from "@/lib/mock/surveys";
@@ -69,6 +70,7 @@ const settingsSchema = z.object({
   triggerEvents: z.array(z.string()).optional(),
   audienceMode: z.enum(["email", "id"]).nullable().optional(),
   audienceList: z.array(z.string()).optional(),
+  targetHosts: z.array(z.string()).max(50).optional(),
   frequency: z.string().optional(),
   startsAt: z.string().optional(),
   endsAt: z.string().optional(),
@@ -76,7 +78,7 @@ const settingsSchema = z.object({
 });
 
 export async function saveSettingsAction(input: unknown) {
-  const { id, triggerEvents, ...rest } = settingsSchema.parse(input);
+  const { id, triggerEvents, targetHosts, ...rest } = settingsSchema.parse(input);
   const from = normalizeDate(rest.startsAt);
   const to = normalizeDate(rest.endsAt);
   if (from && to && from > to) {
@@ -88,6 +90,10 @@ export async function saveSettingsAction(input: unknown) {
     ...rest,
     ...(triggerEvents !== undefined
       ? { triggerEvents, triggerEvent: triggerEvents[0] ?? null }
+      : {}),
+    // plataformas-alvo normalizadas como o SDK as compara ([] = todas)
+    ...(targetHosts !== undefined
+      ? { targetHosts: Array.from(new Set(targetHosts.map(normalizeHost).filter(Boolean))) }
       : {}),
   };
   await updateSurvey(id, { projectId }, patch);

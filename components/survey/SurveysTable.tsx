@@ -22,6 +22,7 @@ export interface SurveyListItem {
   type: string;
   status: SurveyStatus;
   channel: string;
+  targetHosts: string[]; // plataformas onde aparece ([] = todas)
   responseCount: number;
   score: number | null;
   updatedAtLabel: string;
@@ -139,6 +140,11 @@ export function SurveysTable({ items, currentDate }: { items: SurveyListItem[]; 
                 <tr key={s.id} className="group border-b border-line last:border-0 transition-colors hover:bg-bg-sunken/50">
                   <td className="px-6 py-3.5">
                     <Link href={`/surveys/${s.id}/builder`} className="font-semibold hover:text-accent">{s.name}</Link>
+                    {s.targetHosts.length > 0 && (
+                      <div className="mt-0.5 truncate font-mono text-[11px] text-fg-mut" title={s.targetHosts.join(", ")}>
+                        {s.targetHosts.join(", ")}
+                      </div>
+                    )}
                   </td>
                   <td className="px-3 py-3.5"><Badge tone="brand" dot={false}>{s.type}</Badge></td>
                   <td className="px-3 py-3.5"><Badge tone={statusTone[s.status]}>{s.status}</Badge></td>

@@ -152,6 +152,31 @@ export const events = pgTable(
   ]
 );
 
+/**
+ * Plataformas (hostnames) em que o SDK de um projeto já rodou.
+ *
+ * Uma mesma SDK key costuma ser instalada em mais de um produto do cliente — ex.: o projeto
+ * GenieX atende preparasp.jovensgenios.com e matematicaem.jovensgenios.com com a mesma key.
+ * Esta tabela é o catálogo dessas plataformas: o SDK informa o hostname em que está rodando,
+ * e o painel usa a lista para direcionar uma pesquisa a uma (ou algumas) delas.
+ * Um registro por (projeto, host); repetição não gera escrita.
+ */
+export const projectHosts = pgTable(
+  "project_hosts",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    host: text("host").notNull(), // hostname normalizado, sem protocolo e sem porta
+    firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("project_hosts_project_host_uidx").on(t.projectId, t.host)]
+);
+
 export const surveys = pgTable(
   "surveys",
   {
@@ -179,6 +204,8 @@ export const surveys = pgTable(
     audienceMode: text("audience_mode"), // "email" | "id" | null
     // lista de emails ou IDs alvo quando audience = "Usuários específicos"
     audienceList: jsonb("audience_list").notNull().default([]),
+    // plataformas (hostnames) onde a pesquisa pode aparecer; [] = em todas as plataformas do projeto
+    targetHosts: jsonb("target_hosts").notNull().default([]),
     frequency: text("frequency").notNull().default("Uma vez por usuário"),
     delay: text("delay").notNull().default("5s"),
     startsAt: text("starts_at"),
@@ -223,6 +250,7 @@ export const responses = pgTable(
     respondent: text("respondent"), // nullable (anônimo) — id externo informado via Luumu.identify()
     respondentEmail: text("respondent_email"), // email informado via Luumu.identify() (nullable)
     channel: text("channel").notNull().default("Link"),
+    host: text("host"), // plataforma (hostname) de onde a resposta veio; null = link público/legado
     sentiment: text("sentiment"), // positivo|neutro|negativo (derivado)
     score: real("score"), // nota principal (nullable)
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -312,3 +340,4 @@ export type MembershipProject = typeof membershipProjects.$inferSelect;
 export type ApiKey = typeof apiKeys.$inferSelect;
 export type Event = typeof events.$inferSelect;
 export type Project = typeof projects.$inferSelect;
+export type ProjectHost = typeof projectHosts.$inferSelect;

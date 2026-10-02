@@ -254,6 +254,7 @@ export async function duplicateSurvey(
     triggerEvents: source.triggerEvents as object,
     audienceMode: source.audienceMode,
     audienceList: source.audienceList as object,
+    targetHosts: source.targetHosts as object,
     frequency: source.frequency,
     delay: source.delay,
     startsAt: schedule.startsAt,
@@ -294,7 +295,7 @@ export async function duplicateSurvey(
 export async function updateSurvey(
   id: string,
   scope: SurveyScope,
-  patch: Partial<Pick<SurveyRow, "name" | "type" | "channel" | "audience" | "segment" | "language" | "trigger" | "triggerEvent" | "triggerEvents" | "audienceMode" | "audienceList" | "frequency" | "delay" | "startsAt" | "endsAt" | "responseLimit">>
+  patch: Partial<Pick<SurveyRow, "name" | "type" | "channel" | "audience" | "segment" | "language" | "trigger" | "triggerEvent" | "triggerEvents" | "audienceMode" | "audienceList" | "targetHosts" | "frequency" | "delay" | "startsAt" | "endsAt" | "responseLimit">>
 ) {
   await assertOwned(id, scope);
   await db.update(surveys).set({ ...patch, updatedAt: new Date() }).where(eq(surveys.id, id));
@@ -459,7 +460,7 @@ export async function listActiveSurveys(projectId: string) {
 
 /**
  * Versão enxuta para /api/v1/config — a rota que TODO visitante dos sites dos clientes chama.
- * Seleciona só as 13 colunas que o SDK usa, em vez de `select()` (linha inteira, incluindo
+ * Seleciona só as colunas que o SDK usa, em vez de `select()` (linha inteira, incluindo
  * campos que o widget nunca lê). Menos bytes por linha, no endpoint de maior volume.
  */
 export async function listActiveSurveysForSdk(projectId: string) {
@@ -475,6 +476,7 @@ export async function listActiveSurveysForSdk(projectId: string) {
       audience: surveys.audience,
       audienceMode: surveys.audienceMode,
       audienceList: surveys.audienceList,
+      targetHosts: surveys.targetHosts,
       frequency: surveys.frequency,
     })
     .from(surveys)

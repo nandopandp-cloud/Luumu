@@ -1,4 +1,4 @@
-import { Key, Zap, MonitorSmartphone, ArrowUpRight, MousePointerClick, Sparkles, Code2, UserCheck } from "lucide-react";
+import { Key, Zap, MonitorSmartphone, ArrowUpRight, MousePointerClick, Sparkles, Code2, UserCheck, Globe } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -9,6 +9,7 @@ import { EventDetector } from "@/components/sdk/EventDetector";
 import { getCurrentProjectId } from "@/lib/auth/current";
 import { getPrimaryPublicKey } from "@/lib/db/keys";
 import { listEvents } from "@/lib/db/events";
+import { listHosts } from "@/lib/db/hosts";
 import { listActiveSurveys } from "@/lib/db/surveys";
 
 export const dynamic = "force-dynamic";
@@ -32,10 +33,11 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
 
 export default async function SdkPage() {
   const projectId = await getCurrentProjectId();
-  const [sdkKey, events, activeSurveys] = await Promise.all([
+  const [sdkKey, events, activeSurveys, hosts] = await Promise.all([
     getPrimaryPublicKey(projectId),
     listEvents(projectId),
     listActiveSurveys(projectId),
+    listHosts(projectId),
   ]);
 
   const initialStatus = {
@@ -248,6 +250,33 @@ async function handleLoginSuccess(user) {
             <p className="mt-3 text-xs leading-relaxed text-fg-mut">
               Pode ficar exposta no front-end do seu produto, ela só resolve para este workspace e respeita a
               lista de domínios permitidos.
+            </p>
+          </Card>
+
+          <Card>
+            <div className="mb-3 flex items-center gap-2">
+              <Globe className="size-4 text-accent" />
+              <CardTitle>Plataformas usando esta chave</CardTitle>
+            </div>
+            {hosts.length > 0 ? (
+              <ul className="flex flex-col gap-1.5">
+                {hosts.map((h) => (
+                  <li
+                    key={h}
+                    className="truncate rounded-lg border border-line bg-bg-sunken px-3 py-1.5 font-mono text-xs text-fg-soft"
+                    title={h}
+                  >
+                    {h}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-xs text-fg-mut">Nenhuma plataforma detectada ainda.</p>
+            )}
+            <p className="mt-3 text-xs leading-relaxed text-fg-mut">
+              A mesma chave pode ser instalada em vários produtos. Cada endereço onde o SDK carrega aparece
+              aqui, e em <strong>Configurações</strong> de cada pesquisa você escolhe em quais deles ela é
+              exibida.
             </p>
           </Card>
 
