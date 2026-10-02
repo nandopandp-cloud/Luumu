@@ -10,6 +10,7 @@ import {
   Plug,
   Code2,
   Settings,
+  Route,
   type LucideIcon,
 } from "lucide-react";
 import { LOCKED_ROUTES } from "@/lib/locked-routes";
@@ -22,6 +23,8 @@ export interface NavItem {
   icon: LucideIcon;
   /** Área ainda sem fonte de dados real, item desabilitado na sidebar e rota bloqueada. */
   locked?: boolean;
+  /** Selo curto ao lado do rótulo (ex.: "Novo"). */
+  badge?: string;
 }
 
 export interface NavGroup {
@@ -36,6 +39,7 @@ export const NAV: NavGroup[] = [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
       { href: "/surveys", label: "Pesquisas", icon: ClipboardList },
       { href: "/responses", label: "Respostas", icon: MessageSquare },
+      { href: "/tours", label: "Tours", icon: Route, badge: "Novo" },
     ],
   },
   {

@@ -25,6 +25,15 @@ const nextConfig: NextConfig = {
         source: "/sdk.js",
         headers: [{ key: "Cache-Control", value: "public, max-age=3600, stale-while-revalidate=86400" }],
       },
+      {
+        /*
+          Bundles carregados sob demanda pelo core (runtime dos tours e overlay do builder).
+          O core sempre os pede com `?v=<build>`, então a URL muda a cada deploy e o cache
+          pode ser longo sem risco de servir versão velha.
+        */
+        source: "/sdk-:bundle(tours|builder).js",
+        headers: [{ key: "Cache-Control", value: "public, max-age=604800, immutable" }],
+      },
     ];
   },
 };

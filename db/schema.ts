@@ -357,6 +357,148 @@ export const publicReports = pgTable(
   (t) => [index("public_reports_project_idx").on(t.projectId)]
 );
 
+/* =====================================================================
+   PRODUCT TOURS — ver docs/tours/ARQUITETURA.md
+   ===================================================================== */
+
+/**
+ * Tour guiado. O conteúdo vive em versões: a versão 0 é o rascunho (sempre existe, é o que o
+ * builder edita) e cada publicação copia o rascunho para uma versão nova (1, 2, 3...). O que
+ * os usuários finais veem é `publishedVersionId` — editar nunca altera o que está no ar.
+ */
+export const tours = pgTable(
+  "tours",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+    projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    description: text("description").notNull().default(""),
+    status: text("status").notNull().default("draft"), // draft | published | archived
+    publishedVersionId: text("published_version_id"),
+    // o rascunho difere da versão publicada (badge "alterações não publicadas")
+    hasUnpublishedChanges: boolean("has_unpublished_changes").notNull().default(true),
+    createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("tours_project_idx").on(t.projectId)]
+);
+
+/** Versão de um tour (TourVersion). `settings` = gatilho, frequência, público, plataformas, aparência. */
+export const tourVersions = pgTable(
+  "tour_versions",
+  {
+    id: text("id").primaryKey(),
+    tourId: text("tour_id").notNull().references(() => tours.id, { onDelete: "cascade" }),
+    projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    version: integer("version").notNull(), // 0 = rascunho
+    status: text("status").notNull().default("draft"), // draft | published | superseded
+    settings: jsonb("settings").notNull().default({}),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    publishedBy: text("published_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("tour_versions_tour_version_uidx").on(t.tourId, t.version)]
+);
+
+/**
+ * Passo de uma versão (TourStep). `target` é o descritor resiliente do elemento
+ * (TourStepTarget, ver lib/tours/types.ts) e `config` guarda o resto do passo tipado
+ * (posição por dispositivo, botões, ação, condições...). `key` é estável entre versões.
+ */
+export const tourSteps = pgTable(
+  "tour_steps",
+  {
+    id: text("id").primaryKey(),
+    versionId: text("version_id").notNull().references(() => tourVersions.id, { onDelete: "cascade" }),
+    tourId: text("tour_id").notNull().references(() => tours.id, { onDelete: "cascade" }),
+    key: text("key").notNull(),
+    order: integer("order").notNull().default(0),
+    type: text("type").notNull(), // modal | tooltip | popover | spotlight
+    title: text("title").notNull().default(""),
+    body: text("body").notNull().default(""),
+    route: text("route"),
+    target: jsonb("target"),
+    config: jsonb("config").notNull().default({}),
+  },
+  (t) => [index("tour_steps_version_idx").on(t.versionId)]
+);
+
+/** Eventos de execução dos tours (TourEvent) — base do analytics. */
+export const tourEvents = pgTable(
+  "tour_events",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+    projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    tourId: text("tour_id").notNull().references(() => tours.id, { onDelete: "cascade" }),
+    versionId: text("version_id"),
+    stepKey: text("step_key"),
+    type: text("type").notNull(),
+    userId: text("user_id"),
+    anonymousId: text("anonymous_id"),
+    sessionId: text("session_id"),
+    route: text("route"),
+    host: text("host"),
+    meta: jsonb("meta").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("tour_events_tour_created_idx").on(t.tourId, t.createdAt),
+    index("tour_events_project_idx").on(t.projectId),
+  ]
+);
+
+/** Rotas do produto vistas pelo Product Discovery Engine (ProductRoute). */
+export const productRoutes = pgTable(
+  "product_routes",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+    projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    host: text("host").notNull(),
+    route: text("route").notNull(),
+    title: text("title").notNull().default(""),
+    elementCount: integer("element_count").notNull().default(0),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("product_routes_uidx").on(t.projectId, t.host, t.route)]
+);
+
+/**
+ * Element Registry (ProductElement): elementos interativos que o discovery encontrou em cada
+ * rota. Alimenta o seletor de alvo do builder e, no futuro, o gerador de tours por IA — que só
+ * pode usar elementos daqui, nunca inventar.
+ */
+export const productElements = pgTable(
+  "product_elements",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+    projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    host: text("host").notNull(),
+    route: text("route").notNull(),
+    fingerprint: text("fingerprint").notNull(),
+    kind: text("kind").notNull().default("other"),
+    label: text("label").notNull().default(""),
+    target: jsonb("target").notNull(),
+    stability: real("stability").notNull().default(0),
+    firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull().defaultNow(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("product_elements_uidx").on(t.projectId, t.host, t.route, t.fingerprint),
+    index("product_elements_project_idx").on(t.projectId),
+  ]
+);
+
+export type Tour = typeof tours.$inferSelect;
+export type TourVersion = typeof tourVersions.$inferSelect;
+export type TourStepRow = typeof tourSteps.$inferSelect;
+export type TourEvent = typeof tourEvents.$inferSelect;
+export type ProductElement = typeof productElements.$inferSelect;
+
 export type Workspace = typeof workspaces.$inferSelect;
 export type Survey = typeof surveys.$inferSelect;
 export type ScheduledReport = typeof scheduledReports.$inferSelect;

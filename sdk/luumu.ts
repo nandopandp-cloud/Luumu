@@ -1,13 +1,32 @@
 /**
- * Luumu SDK, widget embutido de pesquisas (Voice of Customer).
+ * Luumu SDK, widget embutido de pesquisas (Voice of Customer) + ponte do Product Tours.
  * Vanilla TS, sem dependências, isolado via Shadow DOM.
  * Compilado para /public/sdk.js (IIFE). Fonte da verdade dos blocos: lib/builder.ts.
+ *
+ * O runtime dos tours (/sdk-tours.js) e o overlay do builder (/sdk-builder.js) são bundles
+ * separados, baixados SÓ quando necessários — ver docs/tours/ARQUITETURA.md.
  *
  * Uso:
  *   <script src="https://luumu-five.vercel.app/sdk.js" data-luumu="pk_..."></script>
  * ou programático:
  *   Luumu.init({ key: "pk_...", surveyId?: "svy_..." })
  */
+import { canShow } from "../lib/tours/frequency";
+import type { TourCatalogEntry } from "../lib/tours/types";
+import type { ToursRuntime } from "./tours/runtime";
+import {
+  isFirstSession,
+  readActive,
+  readMemory,
+  readSession,
+  shownThisSession,
+  touchFirstVisit,
+  writeSession,
+} from "./shared/memory";
+
+// versão do build (injetada pelo esbuild): versiona a URL dos bundles carregados sob demanda
+declare const __LUUMU_BUILD__: string;
+const BUILD = typeof __LUUMU_BUILD__ !== "undefined" ? __LUUMU_BUILD__ : "dev";
 
 type Format = "popup" | "slider" | "modal" | "bar";
 type Position = "bottom-right" | "bottom-left" | "top" | "bottom" | "center";
@@ -64,6 +83,29 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
   const HOST = (location.hostname || "").toLowerCase().replace(/\.$/, "");
 
   /*
+    Modos do painel. O administrador abre o produto pelo painel com ?luumu_builder=<token>
+    (builder) ou ?luumu_preview=<token> (preview do rascunho). O token vai para o
+    sessionStorage da aba — continua valendo enquanto ele navega — e sai da URL, para não
+    ficar no histórico nem ser copiado junto com o link.
+  */
+  const BUILDER_TOKEN = "luumu_builder_token";
+  const PREVIEW_TOKEN = "luumu_preview_token";
+  function takeParam(param: string, storeKey: string): string | null {
+    try {
+      const url = new URL(location.href);
+      const v = url.searchParams.get(param);
+      if (v) {
+        writeSession(storeKey, v);
+        url.searchParams.delete(param);
+        history.replaceState(history.state, "", url.pathname + url.search + url.hash);
+      }
+    } catch {}
+    return readSession(storeKey);
+  }
+  const builderToken = takeParam("luumu_builder", BUILDER_TOKEN);
+  const previewToken = builderToken ? null : takeParam("luumu_preview", PREVIEW_TOKEN);
+
+  /*
     Content-Type dos POSTs do SDK.
 
     O SDK roda no site do cliente, então TODA chamada à nossa API é cross-origin. O browser
@@ -106,13 +148,19 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
   // cache gravado antes deste campo existir) → manda como antes.
   type EventCatalog = { open: boolean; known: string[] };
   // hostKnown: o projeto já conhece esta plataforma? `null` = não sabemos (cache antigo, falha)
-  type Catalog = { surveys: ActiveSurvey[]; events: EventCatalog | null; hostKnown: boolean | null };
+  type Catalog = {
+    surveys: ActiveSurvey[];
+    events: EventCatalog | null;
+    hostKnown: boolean | null;
+    tours: TourCatalogEntry[];
+  };
   let eventsOpen: boolean | null = null;
   let serverKnown: Record<string, 1> = {};
   let hostKnown: boolean | null = null;
 
-  // identidade do usuário atual (informada pelo cliente via Luumu.identify)
-  let identity: { id?: string; email?: string } = {};
+  // identidade do usuário atual (informada pelo cliente via Luumu.identify): id, email e
+  // traits livres (plan, role, company...) usados na segmentação dos tours
+  let identity: { id?: string; email?: string; [trait: string]: unknown } = {};
   try {
     const saved = localStorage.getItem("luumu_identity");
     if (saved) identity = JSON.parse(saved);
@@ -579,13 +627,20 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     try {
       const raw = localStorage.getItem(catalogKey(key));
       if (!raw) return null;
-      const parsed = JSON.parse(raw) as { t: number; surveys: ActiveSurvey[]; events?: unknown; hostKnown?: unknown };
+      const parsed = JSON.parse(raw) as {
+        t: number;
+        surveys: ActiveSurvey[];
+        events?: unknown;
+        hostKnown?: unknown;
+        tours?: unknown;
+      };
       if (!parsed || typeof parsed.t !== "number" || !Array.isArray(parsed.surveys)) return null;
       if (Date.now() - parsed.t > CATALOG_TTL_MS) return null;
       return {
         surveys: parsed.surveys,
         events: parseEventCatalog(parsed.events),
         hostKnown: typeof parsed.hostKnown === "boolean" ? parsed.hostKnown : null,
+        tours: Array.isArray(parsed.tours) ? (parsed.tours as TourCatalogEntry[]) : [],
       };
     } catch {
       // localStorage indisponível (modo privado, storage bloqueado) ou JSON corrompido:
@@ -598,7 +653,13 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     try {
       localStorage.setItem(
         catalogKey(key),
-        JSON.stringify({ t: Date.now(), surveys: catalog.surveys, events: catalog.events, hostKnown: catalog.hostKnown })
+        JSON.stringify({
+          t: Date.now(),
+          surveys: catalog.surveys,
+          events: catalog.events,
+          hostKnown: catalog.hostKnown,
+          tours: catalog.tours,
+        })
       );
     } catch {}
   }
@@ -619,6 +680,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
           surveys: (d.surveys || []) as ActiveSurvey[],
           events: parseEventCatalog(d.events),
           hostKnown: d.host && typeof d.host.known === "boolean" ? d.host.known : null,
+          tours: Array.isArray(d.tours) ? (d.tours as TourCatalogEntry[]) : [],
         },
         status: r.status,
       };
@@ -639,9 +701,108 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     serverKnown = {};
     if (catalog.events) for (const n of catalog.events.known) serverKnown[n] = 1;
     hostKnown = catalog.hostKnown;
+    activeTours = catalog.tours;
     catalogLoaded = true;
     maybeAnnounceHost(key);
+    safe(maybeLoadTours);
   }
+
+  /* ---------- Product Tours: ponte com o runtime carregado sob demanda ----------
+   *
+   * O core só decide SE vale baixar o runtime. A regra é barata e conservadora: há tour em
+   * andamento (retomar), ou algum tour de carregamento/primeiro acesso que a frequência
+   * ainda permite neste navegador. Tours por evento esperam o evento; manuais, a chamada de
+   * API. Segmentação por traits e o resto ficam no runtime, que não pesa em quem não tem tour.
+   */
+  let activeTours: TourCatalogEntry[] = [];
+  let runtime: ToursRuntime | null = null;
+  let runtimeLoading: Promise<ToursRuntime | null> | null = null;
+
+  function safe(fn: () => void) {
+    try {
+      fn();
+    } catch {}
+  }
+
+  const userKey = () => (typeof identity.id === "string" ? identity.id : undefined);
+  const tourAllowed = (t: TourCatalogEntry) =>
+    canShow(t.frequency, readMemory(t.id, userKey()), shownThisSession(t.id));
+
+  function loadScript(file: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = `${ORIGIN}/${file}?v=${encodeURIComponent(BUILD)}`;
+      s.async = true;
+      s.onload = () => resolve();
+      s.onerror = () => reject(new Error("load"));
+      (document.head || document.documentElement).appendChild(s);
+    });
+  }
+
+  function loadRuntime(): Promise<ToursRuntime | null> {
+    if (runtime) return Promise.resolve(runtime);
+    if (!runtimeLoading) {
+      runtimeLoading = loadScript("sdk-tours.js")
+        .then(() => {
+          const r = (window as unknown as { __luumuToursRuntime?: ToursRuntime }).__luumuToursRuntime || null;
+          if (r) {
+            r.boot({
+              api: API,
+              key: activeKey || keyFromAttr,
+              host: HOST,
+              identity: () => identity,
+              track: (name: string) => void track(name),
+              catalog: activeTours,
+              previewToken,
+            });
+          }
+          runtime = r;
+          return r;
+        })
+        .catch(() => {
+          runtimeLoading = null; // tenta de novo na próxima oportunidade
+          return null;
+        });
+    }
+    return runtimeLoading;
+  }
+
+  function maybeLoadTours() {
+    if (builderToken) return;
+    if (runtime) {
+      runtime.updateCatalog(activeTours);
+      return;
+    }
+    const wanted =
+      !!previewToken ||
+      !!readActive() ||
+      activeTours.some(
+        (t) => (t.trigger.type === "page_load" || (t.trigger.type === "first_access" && isFirstSession())) && tourAllowed(t)
+      );
+    if (wanted) void loadRuntime();
+  }
+
+  function toursOnTrack(name: string) {
+    if (builderToken) return;
+    if (runtime) return runtime.onTrack(name);
+    if (activeTours.some((t) => t.trigger.type === "event" && t.trigger.event === name && tourAllowed(t))) {
+      void loadRuntime().then((r) => r?.onTrack(name));
+    }
+  }
+
+  /** API pública Luumu.tours: o primeiro uso carrega o runtime. */
+  const tours = {
+    start(tourId: string) {
+      void loadRuntime().then((r) => r?.start(tourId));
+    },
+    stop: () => runtime?.stop(),
+    next: () => runtime?.next(),
+    previous: () => runtime?.previous(),
+    skip: () => runtime?.skip(),
+    complete: () => runtime?.complete(),
+    isActive: () => (runtime ? !!runtime.isActive() : false),
+    getCurrentStep: () => (runtime ? runtime.getCurrentStep() : null),
+  };
 
   /*
     Uma busca por vez, e sem insistir quando ela falha.
@@ -938,6 +1099,8 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     for (const s of activeSurveys) {
       if (surveyTriggers(s).indexOf(name) >= 0) trigger(s, key, false, inAudience(s));
     }
+    // tours: iniciar por evento ou avançar quando o passo espera este evento
+    safe(() => toursOnTrack(name));
   }
 
   // ---------- Auto-tracking (zero-config) ----------
@@ -1194,10 +1357,30 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
 
   let autoTrackingInstalled = false;
 
+  let builderStarted = false;
+
   async function start(opts: { key?: string; surveyId?: string; force?: boolean }) {
     const key = opts.key || keyFromAttr;
     if (!key) return;
     activeKey = key;
+
+    /*
+      Modo builder: a aba é do administrador montando um tour. Nada de pesquisas, tours ou
+      auto-tracking (os cliques dele não são comportamento do usuário final) — só o overlay.
+    */
+    if (builderToken) {
+      if (builderStarted) return;
+      builderStarted = true;
+      loadScript("sdk-builder.js")
+        .then(() => {
+          const b = (window as unknown as { __luumuBuilder?: { boot: (c: object) => void } }).__luumuBuilder;
+          b?.boot({ api: API, origin: ORIGIN, key, token: builderToken });
+        })
+        .catch(() => {});
+      return;
+    }
+
+    safe(touchFirstVisit);
     if (!autoTrackingInstalled && currentScript?.getAttribute("data-luumu-autotrack") !== "false") {
       autoTrackingInstalled = true;
       installAutoTracking();
@@ -1236,9 +1419,11 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
   }
 
   const Luumu = {
-    init(opts: { key?: string; surveyId?: string; force?: boolean } = {}) {
-      start({ key: opts.key || keyFromAttr, surveyId: opts.surveyId, force: opts.force });
+    // `publicKey` é aceito como sinônimo de `key` (formato da documentação de tours)
+    init(opts: { key?: string; publicKey?: string; projectId?: string; surveyId?: string; force?: boolean } = {}) {
+      start({ key: opts.key || opts.publicKey || keyFromAttr, surveyId: opts.surveyId, force: opts.force });
     },
+    tours,
     // exibe uma pesquisa específica ignorando "já visto" (útil para testes/preview)
     show(surveyId: string) {
       start({ surveyId, force: true });
@@ -1247,9 +1432,15 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     track(event: string) {
       track(event);
     },
-    // informa quem é o usuário logado (habilita público-alvo por email/ID)
-    identify(user: { id?: string; email?: string } = {}) {
-      identity = { id: user.id, email: user.email };
+    // informa quem é o usuário logado (habilita público-alvo por email/ID e segmentação de
+    // tours por traits: plan, role, company...). Só valores simples são guardados.
+    identify(user: { id?: string; email?: string; [trait: string]: unknown } = {}) {
+      const next: typeof identity = {};
+      for (const [k, v] of Object.entries(user || {}).slice(0, 30)) {
+        if (typeof v === "string") next[k] = v.slice(0, 200);
+        else if (typeof v === "number" || typeof v === "boolean") next[k] = v;
+      }
+      identity = next;
       try {
         localStorage.setItem("luumu_identity", JSON.stringify(identity));
       } catch {}
@@ -1264,6 +1455,8 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
   };
 
   w.Luumu = Luumu;
+  // alias minúsculo (luumu.tours.start(...), como na documentação de tours)
+  (window as unknown as { luumu?: typeof Luumu }).luumu = Luumu;
 
   // auto-init se houver data-luumu (a menos que data-luumu-auto="false")
   const autoAttr = currentScript?.getAttribute("data-luumu-auto");

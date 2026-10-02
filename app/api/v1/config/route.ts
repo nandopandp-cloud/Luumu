@@ -1,6 +1,7 @@
 import { listActiveSurveysForSdk } from "@/lib/db/surveys";
 import { eventCatalogForSdk } from "@/lib/db/events";
 import { hostStateForSdk, normalizeHost } from "@/lib/db/hosts";
+import { listPublishedToursForSdk } from "@/lib/db/tours";
 import { normalizeAppearance } from "@/lib/builder";
 import { resolveKey } from "@/lib/api/keys";
 import { allowedOrigin, jsonCors, preflight } from "@/lib/api/cors";
@@ -67,10 +68,15 @@ export async function GET(req: Request) {
   }
 
   const host = normalizeHost(searchParams.get("host"));
-  const [active, eventCatalog, hostState] = await Promise.all([
+  const [active, eventCatalog, hostState, tours] = await Promise.all([
     listActiveSurveysForSdk(resolved.projectId),
     eventCatalogForSdk(resolved.projectId, host),
     hostStateForSdk(resolved.projectId, host),
+    // tours publicados para esta plataforma, SEM os passos: o runtime só é baixado se algum
+    // for elegível neste navegador (ver docs/tours/ARQUITETURA.md §4)
+    // tolerante a falha: um problema nos tours (ex.: migração ainda não aplicada) não pode
+    // derrubar a rota de que as pesquisas de todos os clientes dependem
+    listPublishedToursForSdk(resolved.projectId, host).catch(() => []),
   ]);
   const forHost = active.filter((s) => {
     const targets = (s.targetHosts as string[] | null) ?? [];
@@ -96,6 +102,7 @@ export async function GET(req: Request) {
       events: eventCatalog,
       // diz ao SDK se ele precisa se apresentar (POST /events) para esta plataforma entrar no painel
       host: hostState,
+      tours,
     },
     { origin: allowOrigin, cache: CONFIG_CACHE }
   );

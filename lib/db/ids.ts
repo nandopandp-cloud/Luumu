@@ -15,6 +15,12 @@ export const publicReportId = () => newId("pub");
 export const membershipProjectId = () => newId("mpr");
 export const projectHostId = () => newId("hst");
 export const eventHostId = () => newId("evh");
+export const tourId = () => newId("tur");
+export const tourVersionId = () => newId("tvr");
+export const tourStepId = () => newId("tst");
+export const tourEventId = () => newId("tev");
+export const productRouteId = () => newId("prt");
+export const productElementId = () => newId("pel");
 
 // token secreto e longo para links públicos (não segue o padrão de ids do app)
 const nanoToken = customAlphabet("23456789abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ", 32);

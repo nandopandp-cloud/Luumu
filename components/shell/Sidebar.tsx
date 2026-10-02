@@ -76,7 +76,17 @@ export function Sidebar({
                     )}
                   >
                     <Icon className="size-[18px]" />
-                    {item.label}
+                    <span className="flex-1">{item.label}</span>
+                    {item.badge && (
+                      <span
+                        className={cn(
+                          "rounded-full px-1.5 py-px text-[10px] font-bold",
+                          active ? "bg-white/20 text-white" : "bg-surface-brand text-accent"
+                        )}
+                      >
+                        {item.badge}
+                      </span>
+                    )}
                   </Link>
                 );
               })}

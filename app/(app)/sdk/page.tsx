@@ -1,4 +1,4 @@
-import { Key, Zap, MonitorSmartphone, ArrowUpRight, MousePointerClick, Sparkles, Code2, UserCheck, Globe } from "lucide-react";
+import { Key, Zap, MonitorSmartphone, ArrowUpRight, MousePointerClick, Sparkles, Code2, UserCheck, Globe, Route } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -279,6 +279,29 @@ async function handleLoginSuccess(user) {
               aqui, e em <strong>Configurações</strong> de cada pesquisa você escolhe em quais deles ela é
               exibida.
             </p>
+          </Card>
+
+          <Card>
+            <div className="mb-2 flex items-center gap-2">
+              <Route className="size-4 text-accent" />
+              <CardTitle>Tours guiados</CardTitle>
+            </div>
+            <p className="text-xs leading-relaxed text-fg-mut">
+              O mesmo script roda os tours. Para garantir que um elemento seja sempre reencontrado, mesmo depois de
+              mudanças na tela, marque-o com um identificador estável:
+            </p>
+            <CodeBlock
+              className="mt-3"
+              lang="html"
+              code={`<button data-luumu-id="criar-projeto">\n  Criar projeto\n</button>`}
+            />
+            <p className="mt-3 text-xs leading-relaxed text-fg-mut">
+              Atributos passados em <code className="font-mono text-[12px]">Luumu.identify()</code> (plano, cargo...) viram
+              segmentação dos tours.
+            </p>
+            <Button href="/tours" size="sm" variant="ghost" className="mt-3">
+              Abrir Tours <ArrowUpRight className="size-3.5" />
+            </Button>
           </Card>
 
           <Card>
