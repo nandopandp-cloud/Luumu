@@ -1,79 +1,54 @@
 import { PageHeader } from "@/components/ui/PageHeader";
-import { MetricCard } from "@/components/ui/MetricCard";
-import { DataFilters } from "@/components/ui/DataFilters";
-import { periodToRange } from "@/lib/period";
-import { ResponsesView, type ResponseItem } from "@/components/responses/ResponsesView";
 import { ExportMenu } from "@/components/responses/ExportMenu";
-import { listResponses, getStats, getScoreDistribution, getWordCloud, getMainScore } from "@/lib/db/responses";
+import { ResponsesWorkspace } from "@/components/responses/feed/ResponsesWorkspace";
 import { listSurveyOptions, resolveSurveyScope } from "@/lib/db/surveys";
-import { getCurrentProjectId } from "@/lib/auth/current";
 import { listHosts } from "@/lib/db/hosts";
+import { getCurrentProjectId } from "@/lib/auth/current";
 import { normalizeHost } from "@/lib/hosts";
-import { timeAgo } from "@/lib/utils";
-import { formatScore } from "@/lib/scoring";
+import { periodToRange } from "@/lib/period";
 
 export const dynamic = "force-dynamic";
 
 export default async function ResponsesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ surveyId?: string; period?: string; from?: string; to?: string; host?: string }>;
+  searchParams: Promise<{
+    surveyId?: string;
+    period?: string;
+    from?: string;
+    to?: string;
+    host?: string;
+    view?: string;
+    sort?: string;
+    limit?: string;
+  }>;
 }) {
-  const { surveyId, period, from, to, host: hostParam } = await searchParams;
+  const sp = await searchParams;
   const projectId = await getCurrentProjectId();
-  const host = normalizeHost(hostParam) || undefined;
-  const { from: dateFrom, to: dateTo } = periodToRange(period, from, to);
+  const host = normalizeHost(sp.host) || undefined;
+  const { from: dateFrom, to: dateTo } = periodToRange(sp.period, sp.from, sp.to);
   // sem filtro na URL, abre já na última pesquisa vigente/criada (da plataforma, se filtrada)
-  const { surveyId: scopedSurveyId, defaultSurveyId } = await resolveSurveyScope(projectId, surveyId, host);
-  const scope = { projectId, surveyId: scopedSurveyId, dateFrom, dateTo, host };
-
-  const [rows, stats, distribution, wordCloud, surveyOptions, mainScore, hosts] = await Promise.all([
-    listResponses(scope),
-    getStats(scope),
-    getScoreDistribution(scope),
-    getWordCloud(scope),
+  const [{ surveyId, defaultSurveyId }, surveyOptions, hosts] = await Promise.all([
+    resolveSurveyScope(projectId, sp.surveyId, host),
     listSurveyOptions(projectId, host),
-    getMainScore(scope),
     listHosts(projectId),
   ]);
-
-  const items: ResponseItem[] = rows.map((r) => ({
-    id: r.id,
-    user: r.respondentEmail ?? r.respondent ?? "Anônimo",
-    channel: r.channel,
-    host: r.host,
-    when: timeAgo(r.createdAt),
-    sentiment: r.sentiment as ResponseItem["sentiment"],
-    score: r.score,
-    comment: r.comment,
-  }));
 
   return (
     <div>
       <PageHeader
         eyebrow="Respostas"
-        title="Respostas"
-        description="A voz dos seus clientes, agregada de todas as pesquisas, com sentimento e temas."
-        actions={<ExportMenu surveyId={scopedSurveyId} host={host} />}
+        title="Respostas recebidas"
+        description="A voz dos seus clientes, com sentimento, temas e comentários em um só lugar."
+        actions={<ExportMenu surveyId={surveyId} host={host} />}
       />
-
-      <div className="mb-4">
-        <DataFilters surveys={surveyOptions} defaultSurveyId={defaultSurveyId} hosts={hosts} />
-      </div>
-
-      <div className="mb-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <MetricCard label="Total de respostas" value={stats.total} accent="roxo" />
-        <MetricCard label="Sentimento positivo" value={`${stats.positivePct}%`} accent="verde" />
-        <MetricCard
-          label={mainScore?.surveyName ? `${mainScore.label} · ${mainScore.surveyName}` : mainScore?.label ?? "Score"}
-          value={mainScore ? formatScore(mainScore) : "—"}
-          accent="azul"
-          hint={mainScore ? mainScore.formula : undefined}
-        />
-        <MetricCard label="Com comentário" value={items.filter((i) => i.comment).length} accent="laranja" />
-      </div>
-
-      <ResponsesView responses={items} distribution={distribution} total={stats.total} wordCloud={wordCloud} />
+      <ResponsesWorkspace
+        scope={{ projectId, surveyId, dateFrom, dateTo, host }}
+        params={{ view: sp.view, sort: sp.sort, limit: sp.limit }}
+        hosts={hosts}
+        surveyFilter={{ options: surveyOptions, defaultSurveyId }}
+        hrefBase="/responses"
+      />
     </div>
   );
 }

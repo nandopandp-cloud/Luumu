@@ -23,7 +23,7 @@ export interface Scope {
 }
 
 /** Filtro combinado: sempre por projeto (via join com surveys), opcionalmente por pesquisa e período. */
-function scopeWhere(scope: Scope): SQL | undefined {
+export function scopeWhere(scope: Scope): SQL | undefined {
   const parts = [eq(surveys.projectId, scope.projectId)];
   if (scope.surveyId) parts.push(eq(responses.surveyId, scope.surveyId));
   if (scope.dateFrom) parts.push(gte(responses.createdAt, scope.dateFrom));
@@ -43,31 +43,6 @@ function scopeWhere(scope: Scope): SQL | undefined {
     );
   }
   return and(...parts);
-}
-
-/** Feed de respostas do workspace (ou de uma pesquisa dele) com o comentário principal. */
-export async function listResponses(scope: Scope) {
-  const rows = await db
-    .select({
-      id: responses.id,
-      surveyId: responses.surveyId,
-      respondent: responses.respondent,
-      respondentEmail: responses.respondentEmail,
-      channel: responses.channel,
-      host: responses.host,
-      sentiment: responses.sentiment,
-      score: responses.score,
-      createdAt: responses.createdAt,
-      surveyName: surveys.name,
-    })
-    .from(responses)
-    .innerJoin(surveys, eq(responses.surveyId, surveys.id))
-    .where(scopeWhere(scope))
-    .orderBy(desc(responses.createdAt))
-    .limit(50);
-
-  const commentByResponse = await commentsByResponseId(rows.map((r) => r.id));
-  return rows.map((r) => ({ ...r, comment: commentByResponse.get(r.id) ?? "" }));
 }
 
 /**
