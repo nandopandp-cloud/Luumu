@@ -1,15 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { FileText, Table2, FileSpreadsheet, Download, Loader2 } from "lucide-react";
+import { FileText, Table2, FileSpreadsheet, Download, Loader2, Filter } from "lucide-react";
 import { Card, CardTitle, CardSubtitle } from "@/components/ui/Card";
-import { Select } from "@/components/ui/Input";
-
-interface SurveyOpt {
-  id: string;
-  name: string;
-  responseCount: number;
-}
 
 const FORMATS = [
   { id: "pdf", label: "PDF", desc: "Relatório visual pronto para apresentar", Icon: FileText },
@@ -17,37 +10,41 @@ const FORMATS = [
   { id: "csv", label: "CSV", desc: "Dados brutos para planilhas", Icon: Table2 },
 ] as const;
 
+/**
+ * Exporta exatamente o recorte dos filtros do topo da página (plataforma, pesquisa, período).
+ * Não tem seletor próprio: antes havia um segundo seletor de pesquisa aqui, que só lia o
+ * filtro do topo ao abrir a página e depois seguia independente — dois filtros para a mesma
+ * coisa, que podiam discordar.
+ */
 export function ExportPanel({
-  surveys,
-  totalResponses,
-  initialSurveyId,
+  count,
+  surveyId,
+  surveyName,
+  host,
+  periodText,
   period,
   from,
   to,
 }: {
-  surveys: SurveyOpt[];
-  totalResponses: number;
-  /** Pré-seleção vinda da página (última pesquisa vigente/criada). Ignorada se
-   *  essa pesquisa ainda não tem resposta — ela não aparece na lista. */
-  initialSurveyId?: string;
+  /** respostas no recorte atual */
+  count: number;
+  surveyId?: string;
+  surveyName: string;
+  host?: string;
+  periodText: string;
   period?: string;
   from?: string;
   to?: string;
 }) {
-  const [surveyId, setSurveyId] = useState<string>(
-    initialSurveyId && surveys.some((s) => s.id === initialSurveyId) ? initialSurveyId : ""
-  );
   const [busy, setBusy] = useState<string | null>(null);
-
-  const selectedCount = surveyId
-    ? surveys.find((s) => s.id === surveyId)?.responseCount ?? 0
-    : totalResponses;
+  const selectedCount = count;
 
   async function download(format: string) {
     setBusy(format);
     try {
       const qs = new URLSearchParams({ format });
       if (surveyId) qs.set("surveyId", surveyId);
+      if (host) qs.set("host", host);
       if (period) qs.set("period", period);
       if (from) qs.set("from", from);
       if (to) qs.set("to", to);
@@ -78,16 +75,20 @@ export function ExportPanel({
       <CardTitle>Exportar respostas</CardTitle>
       <CardSubtitle>Baixe as respostas reais do seu workspace no formato ideal.</CardSubtitle>
 
-      <div className="mt-4 max-w-sm">
-        <label className="mb-1.5 block text-sm font-semibold text-fg-soft">Pesquisa</label>
-        <Select value={surveyId} onChange={(e) => setSurveyId(e.target.value)}>
-          <option value="">Todas as pesquisas ({totalResponses} respostas)</option>
-          {surveys.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name} ({s.responseCount})
-            </option>
-          ))}
-        </Select>
+      <div className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl bg-bg-sunken px-4 py-3 text-sm">
+        <Filter className="size-4 shrink-0 text-accent" />
+        <span className="font-bold">{count.toLocaleString("pt-BR")} {count === 1 ? "resposta" : "respostas"}</span>
+        <span className="text-fg-mut">·</span>
+        <span className="text-fg-soft">{surveyName}</span>
+        {host && (
+          <>
+            <span className="text-fg-mut">·</span>
+            <span className="font-mono text-xs text-fg-soft">{host}</span>
+          </>
+        )}
+        <span className="text-fg-mut">·</span>
+        <span className="text-fg-soft">{periodText}</span>
+        <span className="ml-auto text-xs text-fg-mut">Ajuste nos filtros do topo</span>
       </div>
 
       <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -112,7 +113,7 @@ export function ExportPanel({
 
       {selectedCount === 0 && (
         <p className="mt-3 text-xs text-fg-mut">
-          Nenhuma resposta para exportar {surveyId ? "nesta pesquisa" : "ainda"}.
+          Nenhuma resposta neste recorte. Ajuste a plataforma, a pesquisa ou o período no topo.
         </p>
       )}
     </Card>

@@ -4,36 +4,40 @@ import { ExportPanel } from "@/components/reports/ExportPanel";
 import { ScheduleReports, type ScheduledItem } from "@/components/reports/ScheduleReports";
 import { PublicLinks, type PublicLinkItem } from "@/components/reports/PublicLinks";
 import { getCurrentProjectId } from "@/lib/auth/current";
-import { listSurveys, resolveSurveyScope } from "@/lib/db/surveys";
+import { listSurveys, listSurveyOptions, resolveSurveyScope } from "@/lib/db/surveys";
+import { listHosts } from "@/lib/db/hosts";
+import { normalizeHost } from "@/lib/hosts";
 import { getStats } from "@/lib/db/responses";
 import { listScheduledReports, listPublicReports } from "@/lib/db/reports";
-import { periodToRange } from "@/lib/period";
+import { periodLabel, periodToRange } from "@/lib/period";
 
 export const dynamic = "force-dynamic";
 
 export default async function ReportsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ surveyId?: string; period?: string; from?: string; to?: string }>;
+  searchParams: Promise<{ surveyId?: string; period?: string; from?: string; to?: string; host?: string }>;
 }) {
-  const { surveyId, period, from, to } = await searchParams;
+  const { surveyId, period, from, to, host: hostParam } = await searchParams;
   const projectId = await getCurrentProjectId();
+  const host = normalizeHost(hostParam) || undefined;
   const { from: dateFrom, to: dateTo } = periodToRange(period, from, to);
-  // sem filtro na URL, abre já na última pesquisa vigente/criada
-  const { surveyId: scopedSurveyId, defaultSurveyId } = await resolveSurveyScope(projectId, surveyId);
+  // sem filtro na URL, abre já na última pesquisa vigente/criada (da plataforma, se filtrada)
+  const { surveyId: scopedSurveyId, defaultSurveyId } = await resolveSurveyScope(projectId, surveyId, host);
 
-  const [surveys, stats, scheduled, publicLinks] = await Promise.all([
+  const [surveys, filterOptions, hosts, stats, scheduled, publicLinks] = await Promise.all([
     listSurveys(projectId),
-    // total sem recorte: o ExportPanel tem seletor próprio e mostra "Todas as pesquisas (N)"
-    getStats({ projectId, dateFrom, dateTo }),
+    listSurveyOptions(projectId, host),
+    listHosts(projectId),
+    // contagem do recorte exato que a exportação vai baixar (mesmos filtros do topo)
+    getStats({ projectId, surveyId: scopedSurveyId, dateFrom, dateTo, host }),
     listScheduledReports(projectId),
     listPublicReports(projectId),
   ]);
 
-  // export panel: só pesquisas que já têm resposta
-  const exportOpts = surveys
-    .filter((s) => s.responseCount > 0)
-    .map((s) => ({ id: s.id, name: s.name, responseCount: s.responseCount }));
+  const scopedSurveyName = scopedSurveyId
+    ? surveys.find((s) => s.id === scopedSurveyId)?.name ?? "Pesquisa"
+    : "Todas as pesquisas";
 
   // agendamento/links: todas as pesquisas (você pode agendar antes de ter resposta)
   const surveyOpts = surveys.map((s) => ({ id: s.id, name: s.name }));
@@ -76,15 +80,18 @@ export default async function ReportsPage({
       />
 
       <div className="mb-4">
-        <DataFilters surveys={surveyOpts} defaultSurveyId={defaultSurveyId} />
+        <DataFilters surveys={filterOptions} defaultSurveyId={defaultSurveyId} hosts={hosts} />
       </div>
 
       {/* Export manual */}
       <div className="mb-4">
         <ExportPanel
-          surveys={exportOpts}
-          totalResponses={stats.total}
-          initialSurveyId={scopedSurveyId}
+          count={stats.total}
+          surveyId={scopedSurveyId}
+          surveyName={scopedSurveyName}
+          host={host}
+          // sem período na URL os dados não têm recorte de data: o resumo diz isso, e não "30 dias"
+          periodText={period ? periodLabel(period, from, to) : "Todo o período"}
           period={period}
           from={from}
           to={to}
