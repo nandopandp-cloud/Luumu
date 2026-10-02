@@ -69,7 +69,7 @@ export async function GET(req: Request) {
   const host = normalizeHost(searchParams.get("host"));
   const [active, eventCatalog, hostState] = await Promise.all([
     listActiveSurveysForSdk(resolved.projectId),
-    eventCatalogForSdk(resolved.projectId),
+    eventCatalogForSdk(resolved.projectId, host),
     hostStateForSdk(resolved.projectId, host),
   ]);
   const forHost = active.filter((s) => {
@@ -92,7 +92,7 @@ export async function GET(req: Request) {
         targetHosts: (s.targetHosts as string[]) ?? [], // plataformas onde pode aparecer ([] = todas)
         frequency: s.frequency,
       })),
-      // estado do catálogo de eventos: diz ao SDK quando NÃO mandar POST /events
+      // estado do catálogo de eventos (desta plataforma, se `host` veio): diz ao SDK quando NÃO mandar POST /events
       events: eventCatalog,
       // diz ao SDK se ele precisa se apresentar (POST /events) para esta plataforma entrar no painel
       host: hostState,

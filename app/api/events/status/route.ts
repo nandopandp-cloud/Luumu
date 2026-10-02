@@ -37,7 +37,9 @@ export async function GET(req: Request) {
       total: events.length, // eventos distintos detectados
       events: events.map((e) => ({
         name: e.name,
+        count: e.count,
         lastSeenAt: e.lastSeenAt,
+        hosts: e.hosts, // plataformas onde o evento foi visto ([] = origem não identificada)
       })),
     },
     {

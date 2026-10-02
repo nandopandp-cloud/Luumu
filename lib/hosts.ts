@@ -22,3 +22,16 @@ export function normalizeHost(raw: string | null | undefined): string {
     return "";
   }
 }
+
+/**
+ * Rótulo curto de uma plataforma para badges: o primeiro nível do hostname
+ * ("matematicaem.jovensgenios.com" → "matematicaem"). Volta ao hostname inteiro quando o
+ * rótulo curto não identifica sozinho — "www", ou duas plataformas com o mesmo primeiro nível
+ * em domínios diferentes (passadas em `all`).
+ */
+export function hostLabel(host: string, all: string[] = []): string {
+  const first = host.split(".")[0];
+  if (!first || first === "www" || first === host) return host;
+  const clash = all.some((h) => h !== host && h.split(".")[0] === first);
+  return clash ? host : first;
+}

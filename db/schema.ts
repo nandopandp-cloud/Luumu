@@ -177,6 +177,34 @@ export const projectHosts = pgTable(
   (t) => [uniqueIndex("project_hosts_project_host_uidx").on(t.projectId, t.host)]
 );
 
+/**
+ * Catálogo de eventos POR PLATAFORMA: em qual hostname cada evento já foi visto.
+ *
+ * `events` é o catálogo do projeto inteiro e não diz de onde o evento veio. Quando uma mesma
+ * key roda em vários produtos, o painel precisa separar "page_view_cursos do preparasp" de
+ * "page_view_cursos do matematicaem". Cada plataforma tem o próprio teto (lib/db/events.ts),
+ * então um produto barulhento não ocupa o espaço dos outros.
+ */
+export const eventHosts = pgTable(
+  "event_hosts",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    host: text("host").notNull(), // hostname normalizado (lib/hosts.ts)
+    name: text("name").notNull(), // slug do evento (normalizeEventName)
+    firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("event_hosts_project_host_name_uidx").on(t.projectId, t.host, t.name),
+    index("event_hosts_project_idx").on(t.projectId),
+  ]
+);
+
 export const surveys = pgTable(
   "surveys",
   {
@@ -341,3 +369,4 @@ export type ApiKey = typeof apiKeys.$inferSelect;
 export type Event = typeof events.$inferSelect;
 export type Project = typeof projects.$inferSelect;
 export type ProjectHost = typeof projectHosts.$inferSelect;
+export type EventHost = typeof eventHosts.$inferSelect;

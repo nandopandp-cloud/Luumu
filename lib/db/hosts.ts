@@ -1,5 +1,5 @@
 import "server-only";
-import { asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { db } from "./client";
 import { projectHosts } from "@/db/schema";
 import { projectHostId } from "./ids";
@@ -35,24 +35,48 @@ function markKnown(projectId: string, host: string) {
   knownHosts.set(`${projectId}:${host}`, true);
 }
 
+// hosts recusados pelo teto, por instância: não insiste a cada request (expira para reavaliar)
+const REJECTED_TTL_MS = 10 * 60 * 1000;
+const rejectedHosts = new Map<string, number>();
+
 /**
  * Registra a plataforma em que o SDK do projeto está rodando (idempotente).
  * O teto é aplicado dentro do próprio INSERT, como em recordEvents (lib/db/events.ts), para
  * valer mesmo com várias instâncias gravando ao mesmo tempo.
+ *
+ * Devolve se o host faz parte das plataformas do projeto. Quem grava dados por plataforma
+ * (o catálogo de eventos) só deve fazê-lo quando isto for true — senão o teto de plataformas
+ * não limitaria nada.
  */
-export async function recordHost(workspaceId: string, projectId: string, rawHost: string): Promise<void> {
+export async function recordHost(workspaceId: string, projectId: string, rawHost: string): Promise<boolean> {
   const host = normalizeHost(rawHost);
-  if (!host || knownHosts.has(`${projectId}:${host}`)) return;
+  if (!host) return false;
+  const key = `${projectId}:${host}`;
+  if (knownHosts.has(key)) return true;
+  if ((rejectedHosts.get(key) ?? 0) > Date.now()) return false;
 
-  await db.execute(sql`
+  const inserted = await db.execute<{ host: string }>(sql`
     insert into ${projectHosts} (id, workspace_id, project_id, host)
     select ${projectHostId()}, ${workspaceId}, ${projectId}, ${host}
      where (select count(*) from ${projectHosts} where ${projectHosts.projectId} = ${projectId})
            < ${MAX_HOSTS_PER_PROJECT}
     on conflict (project_id, host) do nothing
+    returning host
   `);
-  // mesmo quando o teto barrou, não insiste a cada request desta instância
-  markKnown(projectId, host);
+  // não entrou: ou já existia (cache frio desta instância) ou o projeto está no teto
+  const exists =
+    (inserted.rows ?? []).length > 0 ||
+    (
+      await db
+        .select({ host: projectHosts.host })
+        .from(projectHosts)
+        .where(and(eq(projectHosts.projectId, projectId), eq(projectHosts.host, host)))
+        .limit(1)
+    ).length > 0;
+
+  if (exists) markKnown(projectId, host);
+  else rejectedHosts.set(key, Date.now() + REJECTED_TTL_MS);
+  return exists;
 }
 
 /** Plataformas do projeto, na ordem em que foram detectadas. */

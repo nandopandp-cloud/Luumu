@@ -69,22 +69,23 @@ export async function POST(req: Request) {
     Plataforma: vale o Origin (posto pelo navegador) e, só na falta dele, o que o SDK declarou.
     Qualquer POST do SDK atualiza o catálogo de plataformas; no caso comum (host já conhecido)
     isso não toca o banco. É best-effort: uma falha aqui não derruba a ingestão dos eventos.
+    O catálogo de eventos da plataforma só é alimentado se ela foi aceita (teto de plataformas).
   */
-  const host = hostFromOrigin(origin) || normalizeHost(parsed.data.host);
-  const hostWrite = host
-    ? recordHost(resolved.workspaceId, resolved.projectId, host).catch(() => {})
-    : Promise.resolve();
+  const rawHost = hostFromOrigin(origin) || normalizeHost(parsed.data.host);
+  const hostOk = rawHost
+    ? await recordHost(resolved.workspaceId, resolved.projectId, rawHost).catch(() => false)
+    : false;
+  const host = hostOk ? rawHost : "";
 
   // normaliza os dois formatos numa lista única, sem repetição dentro do mesmo lote
   const incoming = parsed.data.events ?? (parsed.data.event ? [parsed.data.event] : []);
   const unique = Array.from(new Set(incoming));
   if (unique.length === 0) {
-    if (!host) return jsonCors({ error: "Payload inválido." }, { status: 422, origin });
-    await hostWrite;
+    if (!rawHost) return jsonCors({ error: "Payload inválido." }, { status: 422, origin });
     return jsonCors({ ok: true, events: [] }, { origin: allowOrigin });
   }
 
-  const [names] = await Promise.all([recordEvents(resolved.workspaceId, resolved.projectId, unique), hostWrite]);
+  const names = await recordEvents(resolved.workspaceId, resolved.projectId, unique, host);
 
   // resposta no formato de quem chamou: o SDK antigo lê `event`, o novo lê `events`
   if (parsed.data.events) {

@@ -1,8 +1,8 @@
 import "server-only";
-import { and, count, desc, eq, sql } from "drizzle-orm";
+import { and, count, eq, inArray, sql } from "drizzle-orm";
 import { db } from "./client";
-import { events } from "@/db/schema";
-import { eventId } from "./ids";
+import { events, eventHosts } from "@/db/schema";
+import { eventHostId, eventId } from "./ids";
 
 /**
  * Normaliza o nome do evento em um slug estável e determinístico.
@@ -35,13 +35,18 @@ export function normalizeEventName(raw: string): string {
  * `onConflictDoNothing` fecha a conta quando o cache está frio: o índice (project_id, name)
  * descarta o que já existe sem escrever nada.
  *
+ * `host` é a plataforma de onde o lote veio: além do catálogo do projeto, o nome entra no
+ * catálogo daquela plataforma (event_hosts), que é o que permite ao painel dizer de qual
+ * produto do cliente cada evento vem.
+ *
  * Devolve os nomes normalizados, na ordem de entrada, porque quem chama usa isso para casar
  * gatilhos de pesquisa.
  */
 export async function recordEvents(
   workspaceId: string,
   projectId: string,
-  rawNames: string[]
+  rawNames: string[],
+  host = ""
 ): Promise<string[]> {
   const names: string[] = [];
   for (const raw of rawNames) {
@@ -50,8 +55,17 @@ export async function recordEvents(
   }
   if (names.length === 0) return [];
 
+  await Promise.all([
+    recordProjectCatalog(workspaceId, projectId, names),
+    host ? recordHostCatalog(workspaceId, projectId, host, names) : null,
+  ]);
+  return names;
+}
+
+/** Catálogo do projeto inteiro (tabela `events`), sem distinção de plataforma. */
+async function recordProjectCatalog(workspaceId: string, projectId: string, names: string[]) {
   const unknown = names.filter((n) => !isKnownEvent(projectId, n));
-  if (unknown.length === 0) return names;
+  if (unknown.length === 0) return;
 
   /*
     Filtro barato em memória primeiro: quando o projeto já está cheio, nem monta o INSERT.
@@ -101,8 +115,62 @@ export async function recordEvents(
     */
     if (insertedNames.length !== rows.length) catalogCount.delete(projectId);
   }
+}
 
-  return names;
+/**
+ * Teto do catálogo de CADA plataforma. Separado do teto do projeto de propósito: o catálogo
+ * do projeto pode estar cheio de nomes antigos (antes da normalização de rotas e rótulos),
+ * e isso não deve impedir uma plataforma de ter a sua lista de eventos.
+ */
+const MAX_EVENTS_PER_HOST = 300;
+const FULL_HOST_TTL_MS = 10 * 60 * 1000;
+// plataformas no teto, por instância: evita montar INSERT que o banco recusaria
+const fullHosts = new Map<string, number>();
+
+/** Catálogo da plataforma (tabela `event_hosts`): em qual hostname cada evento foi visto. */
+async function recordHostCatalog(workspaceId: string, projectId: string, host: string, names: string[]) {
+  const unknown = names.filter((n) => !isKnownEvent(projectId, n, host));
+  if (unknown.length === 0) return;
+  const hostKey = `${projectId}|${host}`;
+  if ((fullHosts.get(hostKey) ?? 0) > Date.now()) return;
+
+  // mesmo padrão de recordProjectCatalog: o teto vale dentro do INSERT, contra a contagem real
+  const values = sql.join(
+    unknown.map((name) => sql`(${eventHostId()}, ${name})`),
+    sql`, `
+  );
+  const inserted = await db.execute<{ name: string }>(sql`
+    insert into ${eventHosts} (id, workspace_id, project_id, host, name)
+    select v.id, ${workspaceId}, ${projectId}, ${host}, v.name
+      from (values ${values}) as v(id, name)
+     where (select count(*) from ${eventHosts}
+             where ${eventHosts.projectId} = ${projectId} and ${eventHosts.host} = ${host})
+           < ${MAX_EVENTS_PER_HOST}
+    on conflict (project_id, host, name) do nothing
+    returning name
+  `);
+  const insertedNames = ((inserted.rows ?? []) as { name: string }[]).map((r) => r.name);
+  for (const name of insertedNames) markKnownEvent(projectId, name, host);
+  if (insertedNames.length === unknown.length) return;
+
+  /*
+    Parte do lote não entrou: ou o nome já estava catalogado (cache frio desta instância), ou
+    a plataforma chegou ao teto. Só aqui vale a consulta extra para separar os dois casos —
+    marcar o que já existe como conhecido, e parar de tentar se o catálogo encheu.
+  */
+  const rest = unknown.filter((n) => !insertedNames.includes(n));
+  const [existing, [total]] = await Promise.all([
+    db
+      .select({ name: eventHosts.name })
+      .from(eventHosts)
+      .where(and(eq(eventHosts.projectId, projectId), eq(eventHosts.host, host), inArray(eventHosts.name, rest))),
+    db
+      .select({ n: count() })
+      .from(eventHosts)
+      .where(and(eq(eventHosts.projectId, projectId), eq(eventHosts.host, host))),
+  ]);
+  for (const row of existing) markKnownEvent(projectId, row.name, host);
+  if (Number(total?.n ?? 0) >= MAX_EVENTS_PER_HOST) fullHosts.set(hostKey, Date.now() + FULL_HOST_TTL_MS);
 }
 
 /** Limite de eventos distintos por projeto: o catálogo é uma lista para escolher gatilhos. */
@@ -142,7 +210,7 @@ async function catalogHeadroom(projectId: string, wanted: number): Promise<numbe
 }
 
 /**
- * Pares (projeto, evento) já gravados por esta instância. Só cresce com eventos DISTINTOS —
+ * Pares (projeto, evento) — e trios (projeto, plataforma, evento) — já gravados por esta instância. Só cresce com eventos DISTINTOS —
  * um projeto tem dezenas deles, não milhões —, e o LRU limita o pior caso (key inválida
  * gerando nomes aleatórios). Perder o cache num lambda novo custa 1 UPSERT, nada mais:
  * a unicidade real continua garantida pelo índice (project_id, name) no banco.
@@ -150,17 +218,18 @@ async function catalogHeadroom(projectId: string, wanted: number): Promise<numbe
 const KNOWN_MAX = 5000;
 const knownEvents = new Map<string, true>();
 
-function isKnownEvent(projectId: string, name: string): boolean {
-  return knownEvents.has(`${projectId}:${name}`);
+// host "" = catálogo do projeto; com host = catálogo daquela plataforma
+function isKnownEvent(projectId: string, name: string, host = ""): boolean {
+  return knownEvents.has(`${projectId}|${host}|${name}`);
 }
 
-function markKnownEvent(projectId: string, name: string) {
+function markKnownEvent(projectId: string, name: string, host = "") {
   if (knownEvents.size >= KNOWN_MAX) {
     // descarta a entrada mais antiga (Map preserva ordem de inserção)
     const oldest = knownEvents.keys().next().value;
     if (oldest !== undefined) knownEvents.delete(oldest);
   }
-  knownEvents.set(`${projectId}:${name}`, true);
+  knownEvents.set(`${projectId}|${host}|${name}`, true);
 }
 
 /** Esquece o catálogo em memória de um projeto (usar se os eventos forem apagados). */
@@ -183,8 +252,24 @@ export function invalidateEventCache() {
  *  - `known`       → nomes já catalogados: o SDK só manda o que for realmente novo.
  *
  * `limit` no teto: o que importa é saber se cabe mais, não contar além disso.
+ *
+ * Com `host`, o estado é o do catálogo DAQUELA plataforma: o SDK só manda o que ela ainda não
+ * tem, e continua mandando mesmo que o catálogo do projeto esteja cheio — senão nenhum evento
+ * de uma plataforma nova seria identificado num projeto antigo.
  */
-export async function eventCatalogForSdk(projectId: string): Promise<{ open: boolean; known: string[] }> {
+export async function eventCatalogForSdk(
+  projectId: string,
+  host = ""
+): Promise<{ open: boolean; known: string[] }> {
+  if (host) {
+    const rows = await db
+      .select({ name: eventHosts.name })
+      .from(eventHosts)
+      .where(and(eq(eventHosts.projectId, projectId), eq(eventHosts.host, host)))
+      .limit(MAX_EVENTS_PER_HOST);
+    if (rows.length >= MAX_EVENTS_PER_HOST) return { open: false, known: [] };
+    return { open: true, known: rows.map((r) => r.name) };
+  }
   const rows = await db
     .select({ name: events.name })
     .from(events)
@@ -194,17 +279,44 @@ export async function eventCatalogForSdk(projectId: string): Promise<{ open: boo
   return { open: true, known: rows.map((r) => r.name) };
 }
 
-/** Lista os eventos do projeto (mais recentes/frequentes primeiro) para o seletor de gatilho. */
-export async function listEvents(projectId: string) {
-  return db
-    .select({
-      name: events.name,
-      count: events.count,
-      lastSeenAt: events.lastSeenAt,
-    })
-    .from(events)
-    .where(eq(events.projectId, projectId))
-    .orderBy(desc(events.lastSeenAt));
+export interface ProjectEvent {
+  name: string;
+  count: number;
+  lastSeenAt: Date;
+  /** plataformas onde o evento foi visto; [] = só no catálogo do projeto (origem não identificada) */
+  hosts: string[];
+}
+
+/**
+ * Lista os eventos do projeto (mais recentes primeiro) para o seletor de gatilho, com as
+ * plataformas de cada um. Junta os dois catálogos: um evento pode existir só no do projeto
+ * (capturado antes de existir a separação por plataforma) ou só no de uma plataforma
+ * (catálogo do projeto já cheio quando ele apareceu).
+ */
+export async function listEvents(projectId: string): Promise<ProjectEvent[]> {
+  const [projectRows, hostRows] = await Promise.all([
+    db
+      .select({ name: events.name, count: events.count, lastSeenAt: events.lastSeenAt })
+      .from(events)
+      .where(eq(events.projectId, projectId)),
+    db
+      .select({ name: eventHosts.name, host: eventHosts.host, firstSeenAt: eventHosts.firstSeenAt })
+      .from(eventHosts)
+      .where(eq(eventHosts.projectId, projectId)),
+  ]);
+
+  const byName = new Map<string, ProjectEvent>();
+  for (const r of projectRows) byName.set(r.name, { ...r, hosts: [] });
+  for (const r of hostRows) {
+    const ev = byName.get(r.name);
+    if (!ev) {
+      byName.set(r.name, { name: r.name, count: 1, lastSeenAt: r.firstSeenAt, hosts: [r.host] });
+      continue;
+    }
+    if (!ev.hosts.includes(r.host)) ev.hosts.push(r.host);
+    if (r.firstSeenAt > ev.lastSeenAt) ev.lastSeenAt = r.firstSeenAt;
+  }
+  return Array.from(byName.values()).sort((a, b) => b.lastSeenAt.getTime() - a.lastSeenAt.getTime());
 }
 
 /** Verifica se um evento existe no projeto (usado ao salvar o gatilho de uma survey). */

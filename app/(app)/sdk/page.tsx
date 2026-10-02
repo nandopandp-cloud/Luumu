@@ -46,6 +46,7 @@ export default async function SdkPage() {
     events: events.map((e) => ({
       name: e.name,
       lastSeenAt: e.lastSeenAt instanceof Date ? e.lastSeenAt.toISOString() : String(e.lastSeenAt),
+      hosts: e.hosts,
     })),
   };
 

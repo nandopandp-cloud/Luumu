@@ -2,10 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Loader2, CheckCircle2, Radio } from "lucide-react";
+import { HostBadge } from "@/components/ui/HostBadge";
 
 interface EventRow {
   name: string;
   lastSeenAt: string;
+  hosts?: string[]; // plataformas onde o evento foi visto
 }
 interface Status {
   connected: boolean;
@@ -111,6 +113,8 @@ export function EventDetector({ initial, projectId }: { initial: Status; project
     };
   }, [projectId]);
 
+  const allHosts = Array.from(new Set(status.events.flatMap((e) => e.hosts ?? [])));
+
   if (!status.connected) {
     return (
       <div className="flex items-center gap-3 rounded-xl border border-line bg-bg-sunken px-4 py-3">
@@ -147,6 +151,7 @@ export function EventDetector({ initial, projectId }: { initial: Status; project
       </div>
       <ul className="flex flex-col gap-2">
         {status.events.map((e) => {
+          const hosts = e.hosts ?? [];
           const kind = eventKind(e.name);
           return (
             <li key={e.name} className="flex items-center justify-between gap-3 text-sm">
@@ -159,6 +164,9 @@ export function EventDetector({ initial, projectId }: { initial: Status; project
                 </code>
               </div>
               <div className="flex shrink-0 items-center gap-2 font-mono text-xs text-fg-mut">
+                {hosts.map((h) => (
+                  <HostBadge key={h} host={h} all={allHosts} />
+                ))}
                 <span>{timeAgo(e.lastSeenAt)}</span>
               </div>
             </li>

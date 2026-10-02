@@ -14,6 +14,7 @@ export const scheduledReportId = () => newId("sch");
 export const publicReportId = () => newId("pub");
 export const membershipProjectId = () => newId("mpr");
 export const projectHostId = () => newId("hst");
+export const eventHostId = () => newId("evh");
 
 // token secreto e longo para links públicos (não segue o padrão de ids do app)
 const nanoToken = customAlphabet("23456789abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ", 32);

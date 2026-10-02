@@ -8,7 +8,8 @@ import { Search, MoreHorizontal, Pause, Play, Square, Eye, Pencil, Type, Trash2,
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Field, Input } from "@/components/ui/Input";
+import { Field, Input, Select } from "@/components/ui/Input";
+import { HostBadge } from "@/components/ui/HostBadge";
 import { SegmentedControl } from "@/components/ui/Tabs";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils";
@@ -34,8 +35,19 @@ const statusTone: Record<SurveyStatus, "success" | "warn" | "neutral" | "brand">
 
 type Filter = "todas" | SurveyStatus;
 
-export function SurveysTable({ items, currentDate }: { items: SurveyListItem[]; currentDate: string }) {
+export function SurveysTable({
+  items,
+  currentDate,
+  hosts = [],
+}: {
+  items: SurveyListItem[];
+  currentDate: string;
+  /** plataformas (hostnames) do projeto */
+  hosts?: string[];
+}) {
   const [filter, setFilter] = useState<Filter>("todas");
+  // "" = todas as plataformas
+  const [hostFilter, setHostFilter] = useState("");
   const [q, setQ] = useState("");
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
@@ -46,8 +58,17 @@ export function SurveysTable({ items, currentDate }: { items: SurveyListItem[]; 
   const router = useRouter();
   const toast = useToast();
 
+  // plataformas do projeto + as que alguma pesquisa mira e o SDK ainda não reportou
+  const allHosts = Array.from(new Set([...hosts, ...items.flatMap((s) => s.targetHosts)]));
+  // projeto de uma plataforma só não ganha coluna nem filtro: não há o que distinguir
+  const multiHost = allHosts.length > 1 || items.some((s) => s.targetHosts.length > 0);
+
+  // filtrar por plataforma = "o que aparece lá": inclui as pesquisas válidas para todas
   const filtered = items.filter(
-    (s) => (filter === "todas" || s.status === filter) && s.name.toLowerCase().includes(q.toLowerCase())
+    (s) =>
+      (filter === "todas" || s.status === filter) &&
+      (!hostFilter || s.targetHosts.length === 0 || s.targetHosts.includes(hostFilter)) &&
+      s.name.toLowerCase().includes(q.toLowerCase())
   );
 
   function changeStatus(id: string, status: SurveyStatus, label: string) {
@@ -115,9 +136,26 @@ export function SurveysTable({ items, currentDate }: { items: SurveyListItem[]; 
             { value: "encerrada", label: "Encerradas" },
           ]}
         />
-        <div className="relative sm:w-72">
-          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-fg-mut" />
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar pesquisa…" className="pl-9" />
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          {allHosts.length > 1 && (
+            <Select
+              value={hostFilter}
+              onChange={(e) => setHostFilter(e.target.value)}
+              aria-label="Filtrar por plataforma"
+              className="sm:w-60"
+            >
+              <option value="">Todas as plataformas</option>
+              {allHosts.map((h) => (
+                <option key={h} value={h}>
+                  {h}
+                </option>
+              ))}
+            </Select>
+          )}
+          <div className="relative sm:w-72">
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-fg-mut" />
+            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar pesquisa…" className="pl-9" />
+          </div>
         </div>
       </div>
 
@@ -127,6 +165,7 @@ export function SurveysTable({ items, currentDate }: { items: SurveyListItem[]; 
             <thead>
               <tr className="border-b border-line text-left font-mono text-[11px] uppercase tracking-wide text-fg-mut">
                 <th className="px-6 py-3 font-semibold">Pesquisa</th>
+                {multiHost && <th className="px-3 py-3 font-semibold">Plataforma</th>}
                 <th className="px-3 py-3 font-semibold">Tipo</th>
                 <th className="px-3 py-3 font-semibold">Status</th>
                 <th className="px-3 py-3 font-semibold">Canal</th>
@@ -140,12 +179,20 @@ export function SurveysTable({ items, currentDate }: { items: SurveyListItem[]; 
                 <tr key={s.id} className="group border-b border-line last:border-0 transition-colors hover:bg-bg-sunken/50">
                   <td className="px-6 py-3.5">
                     <Link href={`/surveys/${s.id}/builder`} className="font-semibold hover:text-accent">{s.name}</Link>
-                    {s.targetHosts.length > 0 && (
-                      <div className="mt-0.5 truncate font-mono text-[11px] text-fg-mut" title={s.targetHosts.join(", ")}>
-                        {s.targetHosts.join(", ")}
-                      </div>
-                    )}
                   </td>
+                  {multiHost && (
+                    <td className="px-3 py-3.5">
+                      {s.targetHosts.length > 0 ? (
+                        <div className="flex max-w-[220px] flex-wrap gap-1">
+                          {s.targetHosts.map((h) => (
+                            <HostBadge key={h} host={h} all={allHosts} />
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-fg-mut">Todas</span>
+                      )}
+                    </td>
+                  )}
                   <td className="px-3 py-3.5"><Badge tone="brand" dot={false}>{s.type}</Badge></td>
                   <td className="px-3 py-3.5"><Badge tone={statusTone[s.status]}>{s.status}</Badge></td>
                   <td className="px-3 py-3.5 text-fg-soft">{s.channel}</td>
@@ -210,7 +257,7 @@ export function SurveysTable({ items, currentDate }: { items: SurveyListItem[]; 
                 </tr>
               ))}
               {filtered.length === 0 && (
-                <tr><td colSpan={7} className="px-6 py-10 text-center text-fg-mut">Nenhuma pesquisa encontrada.</td></tr>
+                <tr><td colSpan={multiHost ? 8 : 7} className="px-6 py-10 text-center text-fg-mut">Nenhuma pesquisa encontrada.</td></tr>
               )}
             </tbody>
           </table>

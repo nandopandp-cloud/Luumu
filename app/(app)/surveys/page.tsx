@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SurveysTable, type SurveyListItem } from "@/components/survey/SurveysTable";
 import { listSurveys } from "@/lib/db/surveys";
+import { listHosts } from "@/lib/db/hosts";
 import { getCurrentProjectId, getCurrentWorkspaceId } from "@/lib/auth/current";
 import { getWorkspace } from "@/lib/db/workspace";
 import { today } from "@/lib/schedule";
@@ -14,7 +15,11 @@ export const dynamic = "force-dynamic";
 
 export default async function SurveysPage() {
   const [projectId, workspaceId] = await Promise.all([getCurrentProjectId(), getCurrentWorkspaceId()]);
-  const [rows, workspace] = await Promise.all([listSurveys(projectId), getWorkspace(workspaceId)]);
+  const [rows, workspace, hosts] = await Promise.all([
+    listSurveys(projectId),
+    getWorkspace(workspaceId),
+    listHosts(projectId),
+  ]);
   // "hoje" no fuso do workspace: a vigência é uma data civil do cliente, não do relógio
   // do navegador de quem abre o painel (que pode estar em outro fuso)
   const currentDate = today(workspace?.timezone);
@@ -52,7 +57,7 @@ export default async function SurveysPage() {
           action={<Button href="/surveys/new"><Plus className="size-4" /> Nova pesquisa</Button>}
         />
       ) : (
-        <SurveysTable items={items} currentDate={currentDate} />
+        <SurveysTable items={items} currentDate={currentDate} hosts={hosts} />
       )}
     </div>
   );

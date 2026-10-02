@@ -9,7 +9,8 @@ import { Badge } from "@/components/ui/Badge";
 import { useToast } from "@/components/ui/Toast";
 import { saveSettingsAction } from "@/app/(app)/surveys/actions";
 import { scheduleLabel, scheduleState } from "@/lib/schedule";
-import { normalizeHost } from "@/lib/hosts";
+import { normalizeHost, hostLabel } from "@/lib/hosts";
+import { HostBadge } from "@/components/ui/HostBadge";
 
 export interface SettingsValues {
   id: string;
@@ -30,7 +31,14 @@ export interface WorkspaceEvent {
   name: string;
   count: number;
   lastSeenAt: Date | string;
+  /** plataformas onde o evento foi visto; [] = capturado antes da separação por plataforma */
+  hosts: string[];
 }
+
+// valor do filtro de plataforma para eventos sem plataforma identificada
+const NO_HOST = "__none__";
+// quantas plataformas cabem por linha antes de resumir em "+N"
+const MAX_ROW_HOSTS = 2;
 
 /*
   Atualização da lista de eventos disponíveis como gatilho.
@@ -62,12 +70,18 @@ function eventLabel(name: string): string {
 /** Combobox multi-seleção com busca: cliente escolhe vários eventos-gatilho. */
 function EventMultiSelect({
   events,
+  hosts,
+  targetHosts,
   selected,
   onChange,
   refreshing,
   onRefresh,
 }: {
   events: WorkspaceEvent[];
+  /** plataformas do projeto */
+  hosts: string[];
+  /** plataformas que a pesquisa mira ([] = todas) */
+  targetHosts: string[];
   selected: string[];
   onChange: (next: string[]) => void;
   refreshing: boolean;
@@ -75,7 +89,19 @@ function EventMultiSelect({
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  /*
+    Filtro de plataforma. `null` = automático: se a pesquisa mira uma plataforma só, a lista
+    já abre nos eventos dela (são os que fazem sentido como gatilho); senão, todas. Escolher
+    um chip vira escolha explícita e deixa de acompanhar a pesquisa.
+  */
+  const [hostChoice, setHostChoice] = useState<string | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
+
+  const allHosts = Array.from(new Set([...hosts, ...events.flatMap((ev) => ev.hosts ?? [])]));
+  const hasUnknown = events.some((ev) => !ev.hosts || ev.hosts.length === 0);
+  const showHostFilter = allHosts.length > 1 || (allHosts.length === 1 && hasUnknown);
+  const autoHost = targetHosts.length === 1 && allHosts.includes(targetHosts[0]) ? targetHosts[0] : "";
+  const hostFilter = showHostFilter ? hostChoice ?? autoHost : "";
 
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
@@ -89,10 +115,27 @@ function EventMultiSelect({
     onChange(selected.includes(name) ? selected.filter((n) => n !== name) : [...selected, name]);
 
   const filtered = events.filter((ev) => {
+    const evHosts = ev.hosts ?? [];
+    if (hostFilter === NO_HOST && evHosts.length > 0) return false;
+    if (hostFilter && hostFilter !== NO_HOST && !evHosts.includes(hostFilter)) return false;
     const q = query.trim().toLowerCase();
     if (!q) return true;
     return ev.name.toLowerCase().includes(q) || eventLabel(ev.name).toLowerCase().includes(q);
   });
+
+  const chip = (value: string, label: string, title?: string) => (
+    <button
+      key={value || "all"}
+      type="button"
+      title={title}
+      onClick={() => setHostChoice(value)}
+      className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
+        hostFilter === value ? "bg-accent text-white" : "bg-bg-sunken text-fg-soft hover:text-accent"
+      }`}
+    >
+      {label}
+    </button>
+  );
 
   return (
     <div ref={wrapRef} className="relative">
@@ -155,10 +198,22 @@ function EventMultiSelect({
               <RefreshCw className={`size-3.5 ${refreshing ? "animate-spin" : ""}`} />
             </button>
           </div>
+          {showHostFilter && (
+            <div className="flex gap-1.5 overflow-x-auto border-b border-line px-3 py-2">
+              {chip("", "Todas")}
+              {allHosts.map((h) => chip(h, hostLabel(h, allHosts), h))}
+              {hasUnknown &&
+                chip(NO_HOST, "Sem plataforma", "Eventos capturados antes da identificação por plataforma")}
+            </div>
+          )}
           <div className="max-h-60 overflow-y-auto py-1">
             {filtered.length === 0 ? (
               <div className="px-3 py-4 text-center text-xs text-fg-mut">
-                {events.length === 0 ? "Nenhum evento capturado ainda." : "Nenhum evento corresponde à busca."}
+                {events.length === 0
+                  ? "Nenhum evento capturado ainda."
+                  : hostFilter && hostFilter !== NO_HOST && !query.trim()
+                  ? "Nenhum evento capturado nesta plataforma ainda."
+                  : "Nenhum evento corresponde à busca."}
               </div>
             ) : (
               filtered.map((ev) => {
@@ -178,6 +233,18 @@ function EventMultiSelect({
                       {on && <Check className="size-3" />}
                     </span>
                     <span className="min-w-0 flex-1 truncate text-fg-soft">{eventLabel(ev.name)}</span>
+                    {allHosts.length > 0 && (ev.hosts ?? []).length > 0 && (
+                      <span className="flex shrink-0 items-center gap-1">
+                        {ev.hosts.slice(0, MAX_ROW_HOSTS).map((h) => (
+                          <HostBadge key={h} host={h} all={allHosts} />
+                        ))}
+                        {ev.hosts.length > MAX_ROW_HOSTS && (
+                          <span className="text-[11px] font-semibold text-fg-mut" title={ev.hosts.join(", ")}>
+                            +{ev.hosts.length - MAX_ROW_HOSTS}
+                          </span>
+                        )}
+                      </span>
+                    )}
                     <span className="shrink-0 font-mono text-[11px] text-fg-mut">{ev.count}×</span>
                   </button>
                 );
@@ -546,6 +613,8 @@ export function SurveySettingsForm({
             >
               <EventMultiSelect
                 events={events}
+                hosts={hosts}
+                targetHosts={v.targetHosts}
                 selected={v.triggerEvents}
                 onChange={(triggerEvents) => set({ triggerEvents })}
                 refreshing={refreshing}
