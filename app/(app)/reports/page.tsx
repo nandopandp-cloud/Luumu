@@ -90,8 +90,7 @@ export default async function ReportsPage({
           surveyId={scopedSurveyId}
           surveyName={scopedSurveyName}
           host={host}
-          // sem período na URL os dados não têm recorte de data: o resumo diz isso, e não "30 dias"
-          periodText={period ? periodLabel(period, from, to) : "Todo o período"}
+          periodText={periodLabel(period, from, to)}
           period={period}
           from={from}
           to={to}

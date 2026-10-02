@@ -45,6 +45,8 @@ export interface SelectProps extends NativeProps {
   children?: ReactNode;
   /** texto quando nenhuma opção corresponde ao valor */
   placeholder?: string;
+  /** ícone à esquerda do valor (ex.: filtros) */
+  icon?: ReactNode;
 }
 
 const SEARCH_FROM = 9; // a partir de quantas opções o menu mostra a busca
@@ -72,7 +74,7 @@ function collect(children: ReactNode, out: Opt[] = []): Opt[] {
 const fold = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 
 export const Select = forwardRef<HTMLButtonElement, SelectProps>(function Select(
-  { value, defaultValue, onChange, children, className, disabled, placeholder, name, id, title, ...rest },
+  { value, defaultValue, onChange, children, className, disabled, placeholder, name, id, title, icon, ...rest },
   ref
 ) {
   const options = useMemo(() => collect(children), [children]);
@@ -235,6 +237,7 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(function Select
           className
         )}
       >
+        {icon && <span className="shrink-0 text-fg-soft [&>svg]:size-4">{icon}</span>}
         <span className={cn("min-w-0 flex-1 truncate", (!selected || selected.disabled) && "text-fg-mut")}>
           {selected?.label ?? placeholder ?? "Selecione…"}
         </span>

@@ -195,7 +195,7 @@ export async function getWordCloud(scope: Scope) {
  * maior faixa encontrada, que cobre todas sem perder granularidade.
  * 1 única query (join direto com surveys.projectId em vez de buscar surveyIds antes).
  */
-async function detectScoreScale(scope: Scope): Promise<{ min: number; max: number }> {
+export async function detectScoreScale(scope: Scope): Promise<{ min: number; max: number }> {
   const qs = await db
     .select({ blockId: questions.blockId, config: questions.config })
     .from(questions)
@@ -259,50 +259,6 @@ export async function getScoreDistribution(scope: Scope) {
       tone,
     };
   });
-}
-
-/** Distribuição real de respostas por canal, em %, para o donut do dashboard. */
-export async function getChannelSplit(scope: Scope) {
-  const rows = await db
-    .select({ channel: responses.channel, n: count() })
-    .from(responses)
-    .innerJoin(surveys, eq(responses.surveyId, surveys.id))
-    .where(scopeWhere(scope))
-    .groupBy(responses.channel)
-    .orderBy(desc(count()));
-
-  const palette = [
-    "var(--luumu-roxo)", "var(--luumu-roxo-claro)", "var(--luumu-verde)", "var(--sec-ciano)",
-  ];
-  const total = rows.reduce((s, r) => s + Number(r.n), 0) || 1;
-  return rows.map((r, i) => ({
-    name: r.channel,
-    value: Math.round((Number(r.n) / total) * 100),
-    color: palette[i % palette.length],
-  }));
-}
-
-/**
- * Evolução da nota média por semana (últimas `weeks` semanas), para a área do dashboard.
- * Só considera respostas com score. Retorna [{ date: "dd/mm", csat }].
- */
-export async function getScoreTrend(scope: Scope, weeks = 8) {
-  const rows = await db
-    .select({
-      week: sql<string>`to_char(date_trunc('week', ${responses.createdAt}), 'DD/MM')`.as("week"),
-      weekStart: sql<string>`date_trunc('week', ${responses.createdAt})`.as("week_start"),
-      avgScore: avg(responses.score),
-    })
-    .from(responses)
-    .innerJoin(surveys, eq(responses.surveyId, surveys.id))
-    .where(and(scopeWhere(scope), sql`${responses.score} is not null`))
-    .groupBy(sql`date_trunc('week', ${responses.createdAt})`)
-    .orderBy(sql`date_trunc('week', ${responses.createdAt})`);
-
-  return rows.slice(-weeks).map((r) => ({
-    date: r.week,
-    csat: r.avgScore != null ? Math.round(Number(r.avgScore) * 10) / 10 : 0,
-  }));
 }
 
 export interface ExportRow {

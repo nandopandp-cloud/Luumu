@@ -10,6 +10,12 @@ export const PERIOD_OPTIONS = [
 export type PeriodValue = (typeof PERIOD_OPTIONS)[number]["value"];
 
 /**
+ * Período das telas com filtro quando a URL não diz nada. É o que o seletor mostra; antes os
+ * dados caíam em "todo o período" enquanto o seletor dizia "Últimos 30 dias".
+ */
+export const DEFAULT_PERIOD = "30d";
+
+/**
  * Converte o valor do período em uma data de início (ou undefined para "todo o período").
  * Mantida por compatibilidade com quem só precisa do início (ex: séries temporais).
  * Para "custom", use periodToRange (precisa das datas from/to explícitas).
@@ -37,7 +43,7 @@ export function periodToRange(
     const to = customTo ? new Date(`${customTo}T23:59:59.999`) : undefined;
     return { from, to };
   }
-  return { from: periodToDateFrom(period), to: undefined };
+  return { from: periodToDateFrom(period || DEFAULT_PERIOD), to: undefined };
 }
 
 /** Rótulo legível do período, incluindo o range de datas quando "custom". */
@@ -50,4 +56,35 @@ export function periodLabel(period: string | null | undefined, customFrom?: stri
     return `${fmt(customFrom)} a ${fmt(customTo)}`;
   }
   return PERIOD_OPTIONS.find((p) => p.value === period)?.label ?? "Últimos 30 dias";
+}
+
+/** "28/09/2026" */
+export function formatDayBR(d: Date): string {
+  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+}
+
+const dayKey = (d: Date) => d.toISOString().slice(0, 10);
+
+/**
+ * Completa uma série diária com zero nos dias sem dado, de `from` até `to` (ou hoje), para os
+ * minigráficos terem uma linha contínua. Sem `from` (todo o período), começa no primeiro dia
+ * com dado. Limitado aos últimos `maxDays` dias.
+ */
+export function fillDays<T extends { date: string }>(
+  series: T[],
+  empty: (date: string) => T,
+  from?: Date,
+  to?: Date,
+  maxDays = 90
+): T[] {
+  const end = to ?? new Date();
+  const first = from ?? (series[0] ? new Date(`${series[0].date}T00:00:00Z`) : end);
+  const start = new Date(Math.max(first.getTime(), end.getTime() - (maxDays - 1) * 86_400_000));
+  const byDay = new Map(series.map((p) => [p.date, p]));
+  const out: T[] = [];
+  for (let t = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate()); t <= end.getTime(); t += 86_400_000) {
+    const k = dayKey(new Date(t));
+    out.push(byDay.get(k) ?? empty(k));
+  }
+  return out;
 }

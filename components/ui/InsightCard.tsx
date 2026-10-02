@@ -54,6 +54,25 @@ function Bars({ values, tone }: { values: number[]; tone: Tone }) {
   );
 }
 
+/** Variação percentual de uma contagem (null sem base de comparação). */
+export function pctDelta(cur: number, prev: number | null | undefined): Delta | null {
+  if (!prev) return null;
+  return { value: Math.round(((cur - prev) / prev) * 1000) / 10, unit: "%" };
+}
+
+/** Diferença entre duas notas na mesma metodologia (pontos de NPS/CES, p.p. de CSAT). */
+export function scoreDelta(
+  cur: { value: number | null; methodology: string; lowerIsBetter: boolean } | null,
+  prev: { value: number | null; methodology: string } | null
+): Delta | null {
+  if (cur?.value == null || prev?.value == null || cur.methodology !== prev.methodology) return null;
+  return {
+    value: Math.round((cur.value - prev.value) * 10) / 10,
+    unit: cur.methodology === "nps" || cur.methodology === "ces" ? "pts" : "p.p.",
+    inverted: cur.lowerIsBetter,
+  };
+}
+
 export interface Delta {
   value: number; // variação (já na unidade de exibição)
   unit: "%" | "p.p." | "pts";
@@ -108,7 +127,7 @@ export function InsightCard({
                 <div className="text-fg-mut">vs. período anterior</div>
               </>
             ) : (
-              <span className="text-fg-mut">Escolha um período para comparar</span>
+              <span className="text-fg-mut">Sem dados no período anterior</span>
             )}
           </div>
         </div>

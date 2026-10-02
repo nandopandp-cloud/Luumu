@@ -1,31 +1,38 @@
 import Link from "next/link";
-import { Plus, Smile, TrendingUp, Users, Inbox } from "lucide-react";
-import { PageHeader } from "@/components/ui/PageHeader";
-import { MetricCard } from "@/components/ui/MetricCard";
-import { Card, CardHeader, CardTitle, CardSubtitle } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
-import { Mascot } from "@/components/ui/Mascot";
+import { CalendarDays, MessagesSquare, Plus, Smile, Timer } from "lucide-react";
 import { DataFilters } from "@/components/ui/DataFilters";
-import { periodToRange } from "@/lib/period";
-import { AreaTrend, DonutChart } from "@/components/charts/Charts";
+import { InsightCard, pctDelta, scoreDelta } from "@/components/ui/InsightCard";
+import { ScoreEvolutionCard } from "@/components/dashboard/ScoreEvolutionCard";
+import { DistributionBars } from "@/components/dashboard/DistributionBars";
+import { RecentSurveys, type RecentSurvey } from "@/components/dashboard/RecentSurveys";
+import { TemplatesTip } from "@/components/dashboard/TemplatesTip";
 import { listSurveys, listSurveyOptions, resolveSurveyScope } from "@/lib/db/surveys";
-import { getStats, getChannelSplit, getScoreTrend, getMainScore } from "@/lib/db/responses";
-import { formatScore } from "@/lib/scoring";
-import { requireUser, getCurrentProjectId } from "@/lib/auth/current";
+import { getScoreDistribution } from "@/lib/db/responses";
+import { getOverview, getScoreSeries, previousScope } from "@/lib/db/overview";
 import { listHosts } from "@/lib/db/hosts";
+import { requireUser, getCurrentProjectId } from "@/lib/auth/current";
+import { formatScore } from "@/lib/scoring";
 import { normalizeHost } from "@/lib/hosts";
+import { formatDayBR, periodToRange } from "@/lib/period";
 
 export const dynamic = "force-dynamic";
 
-const statusTone = {
-  ativa: "success",
-  pausada: "warn",
-  encerrada: "neutral",
-  rascunho: "brand",
-} as const;
+const MONTHS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+const shortDate = (d: Date) => `${String(d.getDate()).padStart(2, "0")} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+// "2026-09-28" → "28/09/26"
+const ymdShort = (s: string | null) => (s ? `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(2, 4)}` : "");
 
-const TREND_WEEKS_BY_PERIOD: Record<string, number> = { "7d": 1, "30d": 5, "90d": 13, "12m": 52 };
+type SurveyRow = Awaited<ReturnType<typeof listSurveys>>[number];
+
+/** A pesquisa esteve no ar em algum momento da janela [from, to]? (publicada e com vigência sobreposta) */
+function liveDuring(s: SurveyRow, from: Date, to: Date): boolean {
+  if (s.status === "rascunho" || !s.publishedAt || s.publishedAt > to) return false;
+  const fromKey = from.toISOString().slice(0, 10);
+  const toKey = to.toISOString().slice(0, 10);
+  if (s.endsAt && s.endsAt < fromKey) return false;
+  if (s.startsAt && s.startsAt > toKey) return false;
+  return true;
+}
 
 export default async function DashboardPage({
   searchParams,
@@ -40,168 +47,122 @@ export default async function DashboardPage({
   // sem filtro na URL, abre já na última pesquisa vigente/criada (da plataforma, se filtrada)
   const { surveyId: scopedSurveyId, defaultSurveyId } = await resolveSurveyScope(projectId, surveyId, host);
   const scope = { projectId, surveyId: scopedSurveyId, dateFrom, dateTo, host };
-  const trendWeeks = period ? (TREND_WEEKS_BY_PERIOD[period] ?? 8) : 8;
 
-  const [projectSurveys, surveyOptions, stats, channelSplit, csatTrend, mainScore, hosts] = await Promise.all([
+  const [projectSurveys, surveyOptions, overview, distribution, hosts] = await Promise.all([
     listSurveys(projectId),
     listSurveyOptions(projectId, host),
-    getStats(scope),
-    getChannelSplit(scope),
-    getScoreTrend(scope, trendWeeks),
-    getMainScore(scope),
+    getOverview(scope),
+    getScoreDistribution(scope),
     listHosts(projectId),
   ]);
-  // com plataforma filtrada, contagem de ativas e lista recente também são só dela
-  const allSurveys = host
-    ? projectSurveys.filter((s) => ((s.targetHosts as string[]) ?? []).includes(host))
-    : projectSurveys;
-  const activeCount = allSurveys.filter((s) => s.status === "ativa").length;
-  const recent = allSurveys.slice(0, 5);
-  const firstName = name.split(" ")[0];
+  const series = await getScoreSeries(scope, overview.mainScore);
+  const { counts, prevCounts, mainScore, prevScore, positivePct, prevPositivePct, daily } = overview;
 
-  // variação % da nota entre a primeira e a última semana com dados
-  const trendDelta =
-    csatTrend.length >= 2 && csatTrend[0].csat > 0
-      ? Math.round(((csatTrend[csatTrend.length - 1].csat - csatTrend[0].csat) / csatTrend[0].csat) * 100)
-      : null;
+  // com plataforma filtrada, contagem de ativas e lista recente também são só dela
+  const allSurveys = host ? projectSurveys.filter((s) => ((s.targetHosts as string[]) ?? []).includes(host)) : projectSurveys;
+  const activeCount = allSurveys.filter((s) => s.status === "ativa").length;
+  const prev = previousScope(scope);
+  const prevActive = prev ? allSurveys.filter((s) => liveDuring(s, prev.dateFrom!, prev.dateTo ?? new Date())).length : null;
+
+  const rangeEnd = dateTo ?? new Date();
+  const rangeText = dateFrom ? `${formatDayBR(dateFrom)} - ${formatDayBR(rangeEnd)}` : "Todo o período";
+  const firstName = name.split(" ")[0];
+  const scoreName = mainScore?.label ?? "Nota";
+  const isPct = mainScore ? mainScore.methodology !== "nps" && mainScore.methodology !== "ces" : true;
+
+  const recent: RecentSurvey[] = allSurveys.slice(0, 5).map((s) => ({
+    id: s.id,
+    name: s.name,
+    type: s.type,
+    status: s.status,
+    range: s.startsAt || s.endsAt ? `${ymdShort(s.startsAt) || "…"} a ${ymdShort(s.endsAt) || "sem fim"}` : "",
+    responses: s.responseCount,
+    score: s.score != null ? s.scoreLabel : "—",
+    createdAt: shortDate(s.createdAt),
+  }));
 
   return (
-    <div>
-      <PageHeader
-        eyebrow="Visão geral"
-        title={`Olá, ${firstName} 👋`}
-        description="Acompanhe o que está acontecendo com suas pesquisas e a voz dos seus clientes."
-        actions={
-          <Button href="/surveys/new" size="sm">
+    <div className="flex flex-col gap-4">
+      {/* Cabeçalho */}
+      <div className="mb-2 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <span className="mb-2 inline-flex items-center gap-2 font-mono text-xs font-semibold uppercase tracking-[0.18em] text-accent">
+            <span className="h-0.5 w-5 rounded-full [background:var(--grad-marca)]" />
+            Visão geral
+          </span>
+          <h1 className="font-display text-3xl font-extrabold tracking-tight">Olá, {firstName} 👋</h1>
+          <p className="mt-1.5 text-sm text-fg-mut">Acompanhe o que está acontecendo com suas pesquisas e a voz dos seus clientes.</p>
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-2 rounded-xl border border-line-strong bg-bg-elev px-3.5 py-2.5 text-sm font-semibold text-fg-soft" title="Período dos dados (altere no filtro abaixo)">
+            <CalendarDays className="size-4 text-fg-mut" />
+            {rangeText}
+          </span>
+          <Link
+            href="/surveys/new"
+            className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold text-white shadow-[var(--shadow-glow)] transition hover:-translate-y-0.5 [background:var(--grad-roxo)]"
+          >
             <Plus className="size-4" /> Nova pesquisa
-          </Button>
-        }
-      />
-
-      <div className="mb-4">
-        <DataFilters surveys={surveyOptions} defaultSurveyId={defaultSurveyId} hosts={hosts} />
+          </Link>
+        </div>
       </div>
+
+      <DataFilters surveys={surveyOptions} defaultSurveyId={defaultSurveyId} hosts={hosts} />
 
       {/* Métricas */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <MetricCard
-          label={mainScore?.surveyName ? `${mainScore.label} · ${mainScore.surveyName}` : mainScore?.label ?? "Score"}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <InsightCard
+          label={scoreName}
           value={mainScore ? formatScore(mainScore) : "—"}
-          accent="roxo"
+          tone="roxo"
           icon={<Smile className="size-5" />}
-          hint={mainScore ? mainScore.formula : undefined}
+          series={series.day.slice(-daily.length).map((p) => p.score ?? 0)}
+          delta={scoreDelta(mainScore, prevScore)}
+          hint={mainScore?.formula}
         />
-        <MetricCard label="Sentimento positivo" value={`${stats.positivePct}%`} accent="verde" icon={<TrendingUp className="size-5" />} />
-        <MetricCard label="Respostas" value={stats.total} accent="azul" icon={<Inbox className="size-5" />} />
-        <MetricCard label="Pesquisas ativas" value={activeCount} accent="laranja" icon={<Users className="size-5" />} />
+        <InsightCard
+          label="Sentimento positivo"
+          value={`${positivePct}%`}
+          tone="verde"
+          icon={<Smile className="size-5" />}
+          series={daily.map((d) => (d.total ? (d.positive / d.total) * 100 : 0))}
+          delta={prevPositivePct != null ? { value: positivePct - prevPositivePct, unit: "p.p." } : null}
+        />
+        <InsightCard
+          label="Total de respostas"
+          value={counts.all.toLocaleString("pt-BR")}
+          tone="azul"
+          icon={<MessagesSquare className="size-5" />}
+          chart="bars"
+          series={daily.map((d) => d.total)}
+          delta={pctDelta(counts.all, prevCounts?.all)}
+        />
+        <InsightCard
+          label="Pesquisas ativas"
+          value={String(activeCount)}
+          tone="laranja"
+          icon={<Timer className="size-5" />}
+          series={daily.map(() => activeCount)}
+          // sem pesquisa no ar antes, variação % não faz sentido; 0 → 0 é "estável"
+          delta={prevActive ? pctDelta(activeCount, prevActive) : prevActive === 0 && activeCount === 0 ? { value: 0, unit: "%" } : null}
+        />
       </div>
 
-      {/* Gráficos */}
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <div>
-              <CardTitle>Evolução da nota</CardTitle>
-              <CardSubtitle>Média semanal · {trendWeeks === 1 ? "última semana" : `últimas ${trendWeeks} semanas`}</CardSubtitle>
-            </div>
-            {trendDelta != null && (
-              <Badge tone={trendDelta >= 0 ? "success" : "warn"}>
-                {trendDelta >= 0 ? "↑" : "↓"} {Math.abs(trendDelta)}%
-              </Badge>
-            )}
-          </CardHeader>
-          {csatTrend.length > 0 ? (
-            <AreaTrend data={csatTrend} dataKey="csat" />
-          ) : (
-            <div className="flex h-[220px] items-center justify-center text-sm text-fg-mut">
-              Ainda sem respostas com nota para exibir a evolução.
-            </div>
-          )}
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <div>
-              <CardTitle>Respostas por canal</CardTitle>
-              <CardSubtitle>Distribuição no período</CardSubtitle>
-            </div>
-          </CardHeader>
-          {channelSplit.length > 0 ? (
-            <>
-              <DonutChart data={channelSplit} />
-              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1.5">
-                {channelSplit.map((c) => (
-                  <div key={c.name} className="flex items-center gap-1.5 text-xs text-fg-mut">
-                    <span className="size-2 rounded-full" style={{ background: c.color }} />
-                    {c.name} <span className="font-semibold text-fg">{c.value}%</span>
-                  </div>
-                ))}
-              </div>
-            </>
-          ) : (
-            <div className="flex h-[220px] items-center justify-center text-sm text-fg-mut">
-              Sem respostas no período.
-            </div>
-          )}
-        </Card>
+      {/* Evolução + distribuição */}
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
+        <ScoreEvolutionCard
+          series={series}
+          scoreLabel={scoreName}
+          scoreSuffix={isPct ? "%" : ""}
+          scoreRange={mainScore?.range ?? { min: 0, max: 100 }}
+        />
+        <DistributionBars buckets={distribution.map((b) => ({ label: b.label, value: b.value }))} total={counts.all} />
       </div>
 
       {/* Pesquisas recentes + dica */}
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2" padded={false}>
-          <div className="flex items-center justify-between p-6 pb-3">
-            <CardTitle>Pesquisas recentes</CardTitle>
-            <Button href="/surveys" variant="ghost" size="sm">
-              Ver todas
-            </Button>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-y border-line text-left font-mono text-[11px] uppercase tracking-wide text-fg-mut">
-                  <th className="px-6 py-2.5 font-semibold">Pesquisa</th>
-                  <th className="px-3 py-2.5 font-semibold">Status</th>
-                  <th className="px-3 py-2.5 font-semibold">Respostas</th>
-                  <th className="px-3 py-2.5 font-semibold">Tipo</th>
-                  <th className="px-6 py-2.5 text-right font-semibold">Score</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recent.map((s) => (
-                  <tr key={s.id} className="border-b border-line last:border-0 hover:bg-bg-sunken/50">
-                    <td className="px-6 py-3 font-semibold">
-                      <Link href={`/surveys/${s.id}/builder`} className="hover:text-accent">{s.name}</Link>
-                    </td>
-                    <td className="px-3 py-3">
-                      <Badge tone={statusTone[s.status as keyof typeof statusTone]}>{s.status}</Badge>
-                    </td>
-                    <td className="px-3 py-3 text-fg-soft">{s.responseCount}</td>
-                    <td className="px-3 py-3 text-fg-soft">{s.type}</td>
-                    <td className="px-6 py-3 text-right font-bold text-luumu-roxo">{s.score != null ? s.scoreLabel : "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-
-        <Card className="relative overflow-hidden [background:var(--grad-roxo)] text-white">
-          <div className="relative z-10">
-            <span className="font-mono text-xs font-semibold uppercase tracking-widest text-white/80">
-              Dica Luumu
-            </span>
-            <h3 className="mt-2 font-display text-xl font-bold text-white">
-              Explore nossos templates
-            </h3>
-            <p className="mt-1.5 text-sm text-white/85">
-              Pesquisas prontas de CSAT, NPS e CES para você criar mais rápido.
-            </p>
-            <Button href="/surveys/new" variant="green" size="sm" className="mt-4">
-              Ver templates
-            </Button>
-          </div>
-          <Mascot name="Comemorando" size={130} className="absolute -bottom-3 -right-3 z-0 opacity-90" />
-        </Card>
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
+        <RecentSurveys items={recent} />
+        <TemplatesTip />
       </div>
     </div>
   );

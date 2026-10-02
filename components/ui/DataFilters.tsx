@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { Calendar } from "lucide-react";
+import { BarChart3, Calendar, Layers } from "lucide-react";
 import { Select, Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { PERIOD_OPTIONS, periodLabel } from "@/lib/period";
@@ -98,7 +98,8 @@ export function DataFilters({
           // trocar de plataforma zera a pesquisa: a escolhida pode não existir na outra
           onChange={(e) => update({ host: e.target.value, surveyId: null })}
           aria-label="Plataforma"
-          className="w-auto min-w-[200px] py-1.5 text-sm"
+          icon={<Layers />}
+          className="w-auto min-w-[230px] py-2 text-sm"
         >
           <option value="">Todas as plataformas</option>
           {hosts.map((h) => (
@@ -112,7 +113,9 @@ export function DataFilters({
         <Select
           value={surveyId}
           onChange={(e) => update({ surveyId: e.target.value })}
-          className="w-auto min-w-[180px] py-1.5 text-sm"
+          aria-label="Pesquisa"
+          icon={<BarChart3 />}
+          className="w-auto min-w-[260px] max-w-[340px] py-2 text-sm"
         >
           <option value="all">Todas as pesquisas</option>
           {surveys.map((s) => (
@@ -127,7 +130,9 @@ export function DataFilters({
         <Select
           value={periodSelectValue}
           onChange={(e) => onPeriodChange(e.target.value)}
-          className="w-auto min-w-[160px] py-1.5 text-sm"
+          aria-label="Período"
+          icon={<Calendar />}
+          className="w-auto min-w-[200px] py-2 text-sm"
         >
           {PERIOD_OPTIONS.map((p) => (
             <option key={p.value} value={p.value}>

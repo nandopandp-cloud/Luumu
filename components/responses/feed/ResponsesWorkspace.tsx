@@ -2,13 +2,14 @@ import Link from "next/link";
 import { MessageSquareText, MessagesSquare, Smile, Star, ChevronDown } from "lucide-react";
 import { DataFilters } from "@/components/ui/DataFilters";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { getMainScore, getScoreDistribution, getWordCloud, type Scope } from "@/lib/db/responses";
-import { getDailySeries, getResponseFeed, getViewCounts, FEED_SORTS, FEED_VIEWS, type FeedSort, type FeedView } from "@/lib/db/response-feed";
+import { getScoreDistribution, getWordCloud, type Scope } from "@/lib/db/responses";
+import { getOverview } from "@/lib/db/overview";
+import { getResponseFeed, FEED_SORTS, FEED_VIEWS, type FeedSort, type FeedView } from "@/lib/db/response-feed";
 import { formatScore } from "@/lib/scoring";
 import { timeAgo } from "@/lib/utils";
 import { isDeviceKind } from "@/lib/device";
 import type { WordCloudItem } from "@/lib/wordcloud";
-import { InsightCard, type Delta } from "./InsightCard";
+import { InsightCard, pctDelta, scoreDelta } from "@/components/ui/InsightCard";
 import { SortMenu, ViewTabs } from "./FeedToolbar";
 import { ResponseCard, type ResponseCardData } from "./ResponseCard";
 import { ScoreDistributionCard, WordsCard } from "./SideCards";
@@ -32,19 +33,6 @@ function tagsFor(comment: string, words: WordCloudItem[]): string[] {
   return words.filter((w) => tokens.has(key(w.text))).slice(0, 3).map((w) => w.text);
 }
 
-function pctChange(cur: number, prev: number): Delta | null {
-  if (!prev) return null;
-  return { value: Math.round(((cur - prev) / prev) * 1000) / 10, unit: "%" };
-}
-
-/** Recorte imediatamente anterior, do mesmo tamanho (base da variação dos cards). */
-function previousScope(scope: Scope): Scope | null {
-  if (!scope.dateFrom) return null;
-  const end = scope.dateTo ?? new Date();
-  const span = end.getTime() - scope.dateFrom.getTime();
-  return { ...scope, dateFrom: new Date(scope.dateFrom.getTime() - span), dateTo: new Date(scope.dateFrom.getTime() - 1) };
-}
-
 /**
  * Tela de respostas completa (filtros, métricas, abas, feed e lateral). Usada em /responses e
  * em /surveys/[id]/responses. Ordenação, abas e paginação vêm da URL e rodam no banco.
@@ -66,32 +54,15 @@ export async function ResponsesWorkspace({
   const view: FeedView = (FEED_VIEWS as readonly string[]).includes(params.view ?? "") ? (params.view as FeedView) : "all";
   const sort: FeedSort = (FEED_SORTS as readonly string[]).includes(params.sort ?? "") ? (params.sort as FeedSort) : "recent";
   const limit = Math.min(300, Math.max(PAGE, Number(params.limit) || PAGE));
-  const prev = previousScope(scope);
-
-  const [feed, counts, series, distribution, words, mainScore, prevCounts, prevScore] = await Promise.all([
+  const [feed, overview, distribution, words] = await Promise.all([
     getResponseFeed(scope, { view, sort, limit }),
-    getViewCounts(scope),
-    getDailySeries(scope),
+    getOverview(scope),
     getScoreDistribution(scope),
     getWordCloud(scope),
-    getMainScore(scope),
-    prev ? getViewCounts(prev) : Promise.resolve(null),
-    prev ? getMainScore(prev) : Promise.resolve(null),
   ]);
-
-  // minigráficos: últimos 30 dias com resposta do recorte
-  const recent = series.slice(-30);
-  const positivePct = counts.all ? Math.round((counts.positive / counts.all) * 100) : 0;
-  const prevPositivePct = prevCounts?.all ? Math.round((prevCounts.positive / prevCounts.all) * 100) : null;
-
-  const scoreDelta: Delta | null =
-    mainScore?.value != null && prevScore?.value != null && prevScore.methodology === mainScore.methodology
-      ? {
-          value: Math.round((mainScore.value - prevScore.value) * 10) / 10,
-          unit: mainScore.methodology === "nps" || mainScore.methodology === "ces" ? "pts" : "p.p.",
-          inverted: mainScore.lowerIsBetter,
-        }
-      : null;
+  const { counts, prevCounts, mainScore, prevScore, positivePct, prevPositivePct } = overview;
+  // minigráficos: série diária do período, com zero nos dias sem resposta
+  const recent = overview.daily;
 
   const cards: ResponseCardData[] = feed.items.map((r) => ({
     id: r.id,
@@ -128,7 +99,7 @@ export async function ResponsesWorkspace({
           tone="roxo"
           icon={<MessagesSquare className="size-5" />}
           series={recent.map((d) => d.total)}
-          delta={prevCounts ? pctChange(counts.all, prevCounts.all) : null}
+          delta={pctDelta(counts.all, prevCounts?.all)}
         />
         <InsightCard
           label="Sentimento positivo"
@@ -145,7 +116,7 @@ export async function ResponsesWorkspace({
           icon={<Star className="size-5" />}
           chart="bars"
           series={recent.map((d) => d.avgScore ?? 0)}
-          delta={scoreDelta}
+          delta={scoreDelta(mainScore, prevScore)}
           hint={mainScore?.formula}
         />
         <InsightCard
@@ -154,7 +125,7 @@ export async function ResponsesWorkspace({
           tone="laranja"
           icon={<MessageSquareText className="size-5" />}
           series={recent.map((d) => d.comments)}
-          delta={prevCounts ? pctChange(counts.comments, prevCounts.comments) : null}
+          delta={pctDelta(counts.comments, prevCounts?.comments)}
         />
       </div>
 
