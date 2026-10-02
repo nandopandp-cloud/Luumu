@@ -423,7 +423,7 @@ function celebrate(ap: TourPayload["settings"]["appearance"]) {
   h.style.cssText = "position:fixed;inset:0;z-index:2147483001;pointer-events:none;";
   document.body.appendChild(h);
   launchConfetti(h.attachShadow({ mode: "open" }), { accent: ap.accent, fixed: true });
-  setTimeout(() => h.remove(), 3500);
+  setTimeout(() => h.remove(), 7500); // um pouco além da animação (6,5s)
 }
 
 function complete() {
