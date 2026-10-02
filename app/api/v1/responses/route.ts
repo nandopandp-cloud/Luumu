@@ -2,6 +2,7 @@ import { z } from "zod";
 import { submitResponse } from "@/lib/db/responses";
 import { getSurvey, enforceResponseLimit } from "@/lib/db/surveys";
 import { hostFromOrigin } from "@/lib/db/hosts";
+import { detectDevice, isDeviceKind } from "@/lib/device";
 import { deriveSentiment } from "@/lib/sentiment";
 import { resolveKey } from "@/lib/api/keys";
 import { checkRateLimit } from "@/lib/api/ratelimit";
@@ -24,6 +25,7 @@ const schema = z.object({
   scoreMax: z.number().nullish(),
   respondent: z.string().max(200).nullish(), // id externo (Luumu.identify)
   respondentEmail: z.string().max(200).nullish(), // email (Luumu.identify)
+  device: z.string().max(20).nullish(), // mobile | tablet | desktop (detectado no navegador)
 });
 
 /**
@@ -87,6 +89,8 @@ export async function POST(req: Request) {
     respondent: data.respondent ?? null,
     respondentEmail: data.respondentEmail ?? null,
     host: host || null,
+    // o navegador sabe mais (toque, iPad em modo desktop); SDK antigo em cache não manda → User-Agent
+    device: isDeviceKind(data.device) ? data.device : detectDevice(req.headers.get("user-agent")),
   });
   // reaproveita a linha já carregada acima em vez de reler a pesquisa
   await enforceResponseLimit(data.surveyId, survey);

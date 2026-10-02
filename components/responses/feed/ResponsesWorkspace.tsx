@@ -6,6 +6,7 @@ import { getMainScore, getScoreDistribution, getWordCloud, type Scope } from "@/
 import { getDailySeries, getResponseFeed, getViewCounts, FEED_SORTS, FEED_VIEWS, type FeedSort, type FeedView } from "@/lib/db/response-feed";
 import { formatScore } from "@/lib/scoring";
 import { timeAgo } from "@/lib/utils";
+import { isDeviceKind } from "@/lib/device";
 import type { WordCloudItem } from "@/lib/wordcloud";
 import { InsightCard, type Delta } from "./InsightCard";
 import { SortMenu, ViewTabs } from "./FeedToolbar";
@@ -98,6 +99,7 @@ export async function ResponsesWorkspace({
     surveyName: r.surveyName,
     showSurvey: !scope.surveyId,
     host: r.host,
+    device: isDeviceKind(r.device) ? r.device : null,
     when: timeAgo(r.createdAt),
     date: shortDate(r.createdAt),
     sentiment: r.sentiment,

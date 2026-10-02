@@ -6,6 +6,7 @@ import { getUserById } from "@/lib/db/users";
 import { db } from "@/lib/db/client";
 import { workspaces } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { cookies } from "next/headers";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await requireUser();
@@ -21,6 +22,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     getUserById(session.userId),
   ]);
   const ws = wsRows[0];
+  // mesmo nome de SIDEBAR_COOKIE (AppShell): a página já nasce com a bandeja do jeito salvo
+  const sidebarCollapsed = (await cookies()).get("luumu_sidebar")?.value === "collapsed";
 
   return (
     <ToastProvider>
@@ -29,6 +32,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         workspace={{ name: ws?.name ?? "Workspace", plan: ws?.plan ?? "growth", logoUrl: ws?.logoUrl ?? null }}
         projects={projectList.map((p) => ({ id: p.id, name: p.name, logoUrl: p.logoUrl }))}
         activeProjectId={activeProject?.id ?? null}
+        initialCollapsed={sidebarCollapsed}
       >
         {/*
           Membro cujo escopo não inclui nenhum projeto: as páginas do app resolvem dados a

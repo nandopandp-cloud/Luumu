@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Mascot } from "@/components/ui/Mascot";
 import { scoreBlocks, type BuilderQuestion } from "@/lib/builder";
 import { submitResponseAction } from "@/app/(app)/surveys/actions";
+import { detectDevice } from "@/lib/device";
 import { QuestionField, isVisible, normalize, type Answers } from "./fields";
 
 export function SurveyRenderer({
@@ -54,6 +55,7 @@ export function SurveyRenderer({
         scoreBlockId: scoreQ?.blockId ?? null,
         scoreMin: scoreQ?.config?.min ?? null,
         scoreMax: scoreQ?.config?.max ?? null,
+        device: detectDevice(navigator.userAgent, navigator.maxTouchPoints || 0),
       });
       setDone(true);
     } catch {

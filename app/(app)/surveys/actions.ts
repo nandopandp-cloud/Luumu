@@ -20,6 +20,8 @@ import { deriveSentiment } from "@/lib/sentiment";
 import { normalizeAppearance } from "@/lib/builder";
 import { isWithinSchedule, normalizeDate } from "@/lib/schedule";
 import { normalizeHost } from "@/lib/hosts";
+import { headers } from "next/headers";
+import { detectDevice, isDeviceKind } from "@/lib/device";
 import { getCurrentWorkspaceId, getCurrentProjectId, requireUser } from "@/lib/auth/current";
 import { getSurvey } from "@/lib/db/surveys";
 import type { SurveyType, SurveyStatus } from "@/lib/mock/surveys";
@@ -208,6 +210,7 @@ const submitSchema = z.object({
   scoreBlockId: z.string().nullish(),
   scoreMin: z.number().nullish(),
   scoreMax: z.number().nullish(),
+  device: z.string().max(20).nullish(),
 });
 
 export async function submitResponseAction(input: unknown) {
@@ -227,6 +230,7 @@ export async function submitResponseAction(input: unknown) {
       min: data.scoreMin,
       max: data.scoreMax,
     }),
+    device: isDeviceKind(data.device) ? data.device : detectDevice((await headers()).get("user-agent")),
   });
   await enforceResponseLimit(data.surveyId);
   revalidatePath("/responses");

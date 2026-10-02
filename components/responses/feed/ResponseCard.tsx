@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Copy, Frown, Loader2, Meh, MoreHorizontal, Smile, Star } from "lucide-react";
+import { Copy, Frown, Loader2, Meh, Monitor, MoreHorizontal, Smartphone, Smile, Star, Tablet } from "lucide-react";
+import { DEVICE_LABEL, isDeviceKind, type DeviceKind } from "@/lib/device";
 import { Dialog } from "@/components/ui/Dialog";
 import { HostBadge } from "@/components/ui/HostBadge";
 import { useToast } from "@/components/ui/Toast";
@@ -14,6 +15,7 @@ export interface ResponseCardData {
   surveyName: string;
   showSurvey: boolean;
   host: string | null;
+  device: DeviceKind | null; // null = resposta anterior ao registro de dispositivo
   when: string; // "há 14 min"
   date: string; // "23 nov 2026"
   sentiment: "positivo" | "neutro" | "negativo" | null;
@@ -27,6 +29,25 @@ function avatarColor(s: string) {
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
   return AVATAR[Math.abs(h) % AVATAR.length];
+}
+
+const DEVICE_ICON: Record<DeviceKind, React.ReactNode> = {
+  mobile: <Smartphone className="size-4" />,
+  tablet: <Tablet className="size-4" />,
+  desktop: <Monitor className="size-4" />,
+};
+
+/** Ícone + rótulo do dispositivo em que a pesquisa foi vista e respondida. */
+function DeviceTag({ device }: { device: DeviceKind }) {
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 rounded-lg border border-line px-2 py-1 text-xs font-semibold text-fg-soft"
+      title={`Respondida pelo ${DEVICE_LABEL[device].toLowerCase()}`}
+    >
+      <span className="text-fg-mut">{DEVICE_ICON[device]}</span>
+      {DEVICE_LABEL[device]}
+    </span>
+  );
 }
 
 const SENTIMENT = {
@@ -120,7 +141,10 @@ export function ResponseCard({ r, hosts }: { r: ResponseCardData; hosts: string[
 
         {/* ações */}
         <div className="flex items-center gap-2 md:flex-col md:items-end md:justify-between">
-          <span className="text-xs text-fg-mut md:order-first">{r.date}</span>
+          <span className="flex items-center gap-2 md:order-first">
+            <span className="text-xs text-fg-mut">{r.date}</span>
+            {r.device && <DeviceTag device={r.device} />}
+          </span>
           <div className="ml-auto flex items-center gap-2 md:ml-0">
             <button
               type="button"
@@ -172,8 +196,17 @@ export function ResponseCard({ r, hosts }: { r: ResponseCardData; hosts: string[
               <dd className="truncate font-semibold">{detail.host ?? "—"}</dd>
             </div>
             <div>
-              <dt className="text-xs text-fg-mut">Canal</dt>
-              <dd className="font-semibold">{detail.channel}</dd>
+              <dt className="text-xs text-fg-mut">Dispositivo</dt>
+              <dd className="font-semibold">
+                {isDeviceKind(detail.device) ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    {DEVICE_ICON[detail.device]}
+                    {DEVICE_LABEL[detail.device]}
+                  </span>
+                ) : (
+                  "Não registrado"
+                )}
+              </dd>
             </div>
             <div>
               <dt className="text-xs text-fg-mut">Sentimento</dt>

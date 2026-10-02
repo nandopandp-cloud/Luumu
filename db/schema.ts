@@ -281,6 +281,7 @@ export const responses = pgTable(
     respondentEmail: text("respondent_email"), // email informado via Luumu.identify() (nullable)
     channel: text("channel").notNull().default("Link"),
     host: text("host"), // plataforma (hostname) de onde a resposta veio; null = link público/legado
+    device: text("device"), // mobile | tablet | desktop; null = resposta anterior a este campo
     sentiment: text("sentiment"), // positivo|neutro|negativo (derivado)
     score: real("score"), // nota principal (nullable)
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

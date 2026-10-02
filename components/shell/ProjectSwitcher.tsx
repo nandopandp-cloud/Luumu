@@ -44,11 +44,14 @@ export function ProjectSwitcher({
   activeProjectId,
   workspaceName,
   onNavigate,
+  compact,
 }: {
   projects: ProjectOpt[];
   activeProjectId: string | null;
   workspaceName: string;
   onNavigate?: () => void;
+  /** sidebar recolhida: só o avatar do projeto */
+  compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
@@ -69,7 +72,13 @@ export function ProjectSwitcher({
     <div className="relative mb-3">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between gap-2 rounded-xl border border-line bg-bg-sunken px-3 py-2 text-left transition hover:border-line-strong"
+        title={compact ? `${active?.name ?? "Projeto"} · trocar projeto` : undefined}
+        aria-label={compact ? `Projeto ${active?.name ?? ""}: trocar projeto` : undefined}
+        className={
+          compact
+            ? "mx-auto flex items-center justify-center rounded-xl border border-line bg-bg-sunken p-1.5 transition hover:border-line-strong"
+            : "flex w-full items-center justify-between gap-2 rounded-xl border border-line bg-bg-sunken px-3 py-2 text-left transition hover:border-line-strong"
+        }
       >
         <div className="flex min-w-0 items-center gap-2.5">
           {pending ? (
@@ -79,18 +88,26 @@ export function ProjectSwitcher({
           ) : (
             <ProjectAvatar project={active} size={32} />
           )}
-          <div className="min-w-0 leading-tight">
-            <div className="truncate text-sm font-semibold">{active?.name ?? "Projeto"}</div>
-            <div className="truncate text-[11px] text-fg-mut">{workspaceName}</div>
-          </div>
+          {!compact && (
+            <div className="min-w-0 leading-tight">
+              <div className="truncate text-sm font-semibold">{active?.name ?? "Projeto"}</div>
+              <div className="truncate text-[11px] text-fg-mut">{workspaceName}</div>
+            </div>
+          )}
         </div>
-        <ChevronsUpDown className="size-4 shrink-0 text-fg-mut" />
+        {!compact && <ChevronsUpDown className="size-4 shrink-0 text-fg-mut" />}
       </button>
 
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-xl border border-line bg-bg-elev py-1 shadow-[var(--shadow-lg)]">
+          <div
+            className={
+              compact
+                ? "absolute left-full top-0 z-30 ml-2 w-64 overflow-hidden rounded-xl border border-line bg-bg-elev py-1 shadow-[var(--shadow-lg)]"
+                : "absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-xl border border-line bg-bg-elev py-1 shadow-[var(--shadow-lg)]"
+            }
+          >
             <div className="px-3 py-1.5 font-mono text-[10px] font-semibold uppercase tracking-wide text-fg-mut">
               Projetos
             </div>

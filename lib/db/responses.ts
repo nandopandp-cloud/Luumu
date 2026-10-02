@@ -361,6 +361,7 @@ export async function submitResponse(input: {
   respondent?: string | null;
   respondentEmail?: string | null;
   host?: string | null;
+  device?: string | null;
 }) {
   const rid = responseId();
   await db.insert(responses).values({
@@ -372,6 +373,7 @@ export async function submitResponse(input: {
     respondent: input.respondent ?? undefined,
     respondentEmail: input.respondentEmail ?? undefined,
     host: input.host ?? undefined,
+    device: input.device ?? undefined,
   });
   if (input.answers.length) {
     await db.insert(answers).values(

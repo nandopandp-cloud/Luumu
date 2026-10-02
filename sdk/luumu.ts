@@ -12,6 +12,7 @@
  *   Luumu.init({ key: "pk_...", surveyId?: "svy_..." })
  */
 import { canShow } from "../lib/tours/frequency";
+import { detectDevice } from "../lib/device";
 import type { TourCatalogEntry } from "../lib/tours/types";
 import type { ToursRuntime } from "./tours/runtime";
 import {
@@ -365,6 +366,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
             scoreMax,
             respondent: identity.id || null,
             respondentEmail: identity.email || null,
+            device: detectDevice(navigator.userAgent, navigator.maxTouchPoints || 0),
           }),
         });
       } catch {}

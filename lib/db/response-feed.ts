@@ -75,6 +75,7 @@ export interface FeedItem {
   respondentEmail: string | null;
   channel: string;
   host: string | null;
+  device: string | null;
   sentiment: "positivo" | "neutro" | "negativo" | null;
   score: number | null;
   comment: string;
@@ -95,6 +96,7 @@ export async function getResponseFeed(
       respondentEmail: responses.respondentEmail,
       channel: responses.channel,
       host: responses.host,
+      device: responses.device,
       sentiment: responses.sentiment,
       score: responses.score,
       comment: commentSql,
@@ -186,6 +188,7 @@ export interface ResponseDetail {
   respondentEmail: string | null;
   channel: string;
   host: string | null;
+  device: string | null;
   sentiment: string | null;
   score: number | null;
   createdAt: Date;
@@ -212,6 +215,7 @@ export async function getResponseDetail(id: string, projectId: string): Promise<
       respondentEmail: responses.respondentEmail,
       channel: responses.channel,
       host: responses.host,
+      device: responses.device,
       sentiment: responses.sentiment,
       score: responses.score,
       createdAt: responses.createdAt,
@@ -236,6 +240,7 @@ export async function getResponseDetail(id: string, projectId: string): Promise<
     respondentEmail: head.respondentEmail,
     channel: head.channel,
     host: head.host,
+    device: head.device,
     sentiment: head.sentiment,
     score: head.score,
     createdAt: head.createdAt,
