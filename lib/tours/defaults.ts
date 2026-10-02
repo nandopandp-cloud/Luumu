@@ -13,6 +13,7 @@ export const DEFAULT_APPEARANCE: TourAppearance = {
   dontShowAgain: false,
   backdropOpacity: 0.45,
   radius: 18,
+  confetti: true,
 };
 
 export function defaultSettings(startUrl = ""): TourSettings {

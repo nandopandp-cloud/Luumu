@@ -16,6 +16,7 @@ import { routeMatches } from "../../lib/tours/target";
 import { deviceConfig, deviceForWidth, normalizeSettings, normalizeSteps } from "../../lib/tours/normalize";
 import type { TourCatalogEntry, TourEventInput, TourEventType, TourPayload, TourStep } from "../../lib/tours/types";
 import { LUUMU_HOST_ATTR, waitForElement } from "../shared/dom";
+import { launchConfetti } from "../../lib/tours/confetti";
 import {
   anonymousId,
   clearActive,
@@ -414,8 +415,20 @@ function skipStep() {
   void show(cur.index + 1, 1);
 }
 
+function celebrate(ap: TourPayload["settings"]["appearance"]) {
+  if (!ap.confetti) return;
+  // host próprio: a camada do tour é removida no finish(), o confete precisa continuar
+  const h = document.createElement("div");
+  h.setAttribute(LUUMU_HOST_ATTR, "confetti");
+  h.style.cssText = "position:fixed;inset:0;z-index:2147483001;pointer-events:none;";
+  document.body.appendChild(h);
+  launchConfetti(h.attachShadow({ mode: "open" }), { accent: ap.accent, fixed: true });
+  setTimeout(() => h.remove(), 3500);
+}
+
 function complete() {
   if (!cur) return;
+  safe(() => celebrate(cur!.tour.settings.appearance));
   emit("tour_completed", null, { durationMs: Date.now() - cur.shownAt });
   if (!cur.preview) writeMemory(cur.tour.id, userKey(), { completed: Date.now() });
   finish();

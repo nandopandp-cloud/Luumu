@@ -147,6 +147,7 @@ export interface TourAppearance {
   dontShowAgain: boolean; // link "Não mostrar novamente"
   backdropOpacity: number; // 0–0.8, para modal e spotlight
   radius: number; // px
+  confetti: boolean; // confete ao concluir o tour
 }
 
 export interface TourSettings {

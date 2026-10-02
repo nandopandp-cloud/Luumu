@@ -75,9 +75,12 @@ export function tourCss(ap: TourAppearance): string {
   .lt-arrow.lt-bottom { top: -8px; border-bottom: 0; border-right: 0; }
   .lt-arrow.lt-left { right: -8px; border-bottom: 0; border-left: 0; }
   .lt-arrow.lt-right { left: -8px; border-top: 0; border-right: 0; }
-  .lt-img { display: block; width: calc(100% + 40px); margin: -20px -20px 14px; max-height: 200px; object-fit: cover;
-    border-radius: ${r}px ${r}px 0 0; }
-  .lt-modal .lt-img { width: calc(100% + 56px); margin: -28px -28px 18px; }
+  /* a imagem respeita o próprio tamanho: nunca estica além do natural, só encolhe para caber */
+  .lt-media { display: flex; align-items: center; justify-content: center; margin: 0 0 14px; padding: 12px;
+    background: ${p.sunken}; border-radius: ${Math.max(6, r - 6)}px; }
+  .lt-img { display: block; width: auto; height: auto; max-width: 100%; max-height: 120px; object-fit: contain; }
+  .lt-modal .lt-img { max-height: 180px; }
+  .lt-modal .lt-media { margin-bottom: 18px; padding: 16px; }
   .lt-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; min-height: 20px; }
   .lt-count { font-size: 12px; font-weight: 600; color: ${p.mut}; letter-spacing: .02em; }
   .lt-dots { display: flex; gap: 5px; flex: 1; max-width: 160px; }
@@ -134,7 +137,7 @@ export function renderCard(step: TourStep, ctx: CardContext): string {
   if (!isModal && ctx.arrow !== null && ctx.side !== "center") {
     parts.push(`<div class="lt-arrow lt-${ctx.side}" style="${arrowStyle(ctx.side, ctx.arrow)}"></div>`);
   }
-  if (step.imageUrl) parts.push(`<img class="lt-img" src="${esc(step.imageUrl)}" alt="" />`);
+  if (step.imageUrl) parts.push(`<div class="lt-media"><img class="lt-img" src="${esc(step.imageUrl)}" alt="" /></div>`);
 
   const progress =
     ap.progress === "count" && ctx.total > 1

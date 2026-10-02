@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { Trash2, Crosshair, MousePointerClick, AlertTriangle, Monitor, Tablet, Smartphone, Sparkles } from "lucide-react";
+import { useRef, useState } from "react";
+import { Trash2, Crosshair, MousePointerClick, AlertTriangle, Monitor, Tablet, Smartphone, Sparkles, Upload, Loader2, X } from "lucide-react";
+import { useToast } from "@/components/ui/Toast";
 import { Field, Input, Select } from "@/components/ui/Input";
 import { Switch } from "@/components/ui/Switch";
 import { SegmentedControl } from "@/components/ui/Tabs";
@@ -95,6 +96,77 @@ function PlacementPicker({ value, onChange, disabled }: { value: Placement; onCh
   );
 }
 
+/** Imagem do passo: URL colada ou upload (Vercel Blob), com miniatura do que vai aparecer. */
+function StepImageField({ value, onChange }: { value?: string; onChange: (url: string | undefined) => void }) {
+  const input = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const toast = useToast();
+
+  async function upload(file: File) {
+    setUploading(true);
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const r = await fetch("/api/tours/upload", { method: "POST", body });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) return toast("error", d.error ?? "Não foi possível enviar a imagem.");
+      onChange(d.url);
+    } finally {
+      setUploading(false);
+      if (input.current) input.current.value = "";
+    }
+  }
+
+  return (
+    <Field label="Imagem ou GIF (opcional)" hint="PNG, JPG, GIF, WEBP ou SVG até 4 MB. Ela se ajusta ao card, sem esticar.">
+      <div className="flex flex-col gap-2">
+        {value && (
+          <div className="relative flex items-center justify-center rounded-xl border border-line bg-bg-sunken p-3">
+            {/* eslint-disable-next-line @next/next/no-img-element -- URL arbitrária do cliente */}
+            <img src={value} alt="" className="max-h-28 max-w-full object-contain" />
+            <button
+              type="button"
+              onClick={() => onChange(undefined)}
+              aria-label="Remover imagem"
+              className="absolute right-2 top-2 rounded-lg bg-bg-elev p-1 text-fg-mut shadow-[var(--shadow-sm)] hover:text-erro"
+            >
+              <X className="size-3.5" />
+            </button>
+          </div>
+        )}
+        <div className="flex gap-2">
+          <Input
+            value={value ?? ""}
+            onChange={(e) => onChange(e.target.value || undefined)}
+            placeholder="https://…/onboarding.gif"
+            className="min-w-0 flex-1"
+            aria-label="Endereço da imagem"
+          />
+          <button
+            type="button"
+            onClick={() => input.current?.click()}
+            disabled={uploading}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-line-strong px-3 text-sm font-semibold text-fg-soft hover:border-accent hover:text-accent disabled:opacity-50"
+          >
+            {uploading ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
+            Enviar
+          </button>
+          <input
+            ref={input}
+            type="file"
+            accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void upload(f);
+            }}
+          />
+        </div>
+      </div>
+    </Field>
+  );
+}
+
 export function StepEditor({
   step,
   device,
@@ -177,13 +249,7 @@ export function StepEditor({
               className="w-full resize-y rounded-xl border border-line-strong bg-bg-elev px-3.5 py-2.5 text-sm text-fg outline-none transition focus:border-accent"
             />
           </Field>
-          <Field label="Imagem ou GIF (opcional)" hint="Endereço https de uma imagem. Aparece no topo do card.">
-            <Input
-              value={step.imageUrl ?? ""}
-              onChange={(e) => onChange({ imageUrl: e.target.value || undefined })}
-              placeholder="https://…/onboarding.gif"
-            />
-          </Field>
+          <StepImageField value={step.imageUrl} onChange={(imageUrl) => onChange({ imageUrl })} />
           <div className="grid grid-cols-2 gap-3">
             <Field label="Botão principal">
               <Input

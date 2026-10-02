@@ -5,6 +5,7 @@ import { Lock } from "lucide-react";
 import { computePosition } from "@/lib/tours/position";
 import { cardWidth, esc, renderCard, tourCss } from "@/lib/tours/render";
 import { deviceConfig } from "@/lib/tours/normalize";
+import { launchConfetti } from "@/lib/tours/confetti";
 import type { Device, TourAppearance, TourStep } from "@/lib/tours/types";
 
 /** Viewport virtual de cada dispositivo (px "reais", escalados para caber no painel). */
@@ -177,6 +178,7 @@ export function StepCanvas({
     }
     const onClick = (e: Event) => {
       const a = (e.target as Element).closest("[data-lt]")?.getAttribute("data-lt");
+      if (a === "next" && index >= steps.length - 1 && appearance.confetti) launchConfetti(root, { accent: appearance.accent });
       if (a === "next" || a === "back") onAction?.(a);
       else if (a) onAction?.("close");
     };

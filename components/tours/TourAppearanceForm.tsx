@@ -142,6 +142,10 @@ export function TourAppearanceForm({ tourId, settings, steps }: { tourId: string
               <Switch checked={ap.allowDismiss} onChange={(v) => set({ allowDismiss: v })} label="Permitir fechar" />
             </label>
             <label className="flex items-center justify-between gap-3 text-sm font-medium text-fg-soft">
+              Confete ao concluir o tour
+              <Switch checked={ap.confetti} onChange={(v) => set({ confetti: v })} label="Confete ao concluir" />
+            </label>
+            <label className="flex items-center justify-between gap-3 text-sm font-medium text-fg-soft">
               Link “Não mostrar novamente”
               <Switch checked={ap.dontShowAgain} onChange={(v) => set({ dontShowAgain: v })} label="Não mostrar novamente" />
             </label>

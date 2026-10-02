@@ -260,6 +260,7 @@ export function normalizeSettings(v: unknown, normalizeHost: (h: string) => stri
       dontShowAgain: bool(ap.dontShowAgain, DEFAULT_APPEARANCE.dontShowAgain),
       backdropOpacity: num(ap.backdropOpacity, 0, 0.8, DEFAULT_APPEARANCE.backdropOpacity),
       radius: num(ap.radius, 0, 28, DEFAULT_APPEARANCE.radius),
+      confetti: bool(ap.confetti, DEFAULT_APPEARANCE.confetti),
     },
   };
 }
