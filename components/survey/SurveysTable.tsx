@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Search, MoreHorizontal, Pause, Play, Square, Eye, Pencil, Type, Trash2, Loader2, AlertTriangle, Copy, CalendarRange } from "lucide-react";
 import { Card } from "@/components/ui/Card";
@@ -24,6 +25,7 @@ export interface SurveyListItem {
   status: SurveyStatus;
   channel: string;
   targetHosts: string[]; // plataformas onde aparece ([] = todas)
+  creator: { name: string; avatarUrl: string | null } | null; // null = sem registro de autor
   responseCount: number;
   score: number | null;
   updatedAtLabel: string;
@@ -34,6 +36,9 @@ const statusTone: Record<SurveyStatus, "success" | "warn" | "neutral" | "brand">
 };
 
 type Filter = "todas" | SurveyStatus;
+
+// valor do filtro de plataforma para pesquisas sem alvo (aparecem em todas as plataformas)
+const NO_TARGET = "__none__";
 
 export function SurveysTable({
   items,
@@ -63,11 +68,16 @@ export function SurveysTable({
   // projeto de uma plataforma só não ganha coluna nem filtro: não há o que distinguir
   const multiHost = allHosts.length > 1 || items.some((s) => s.targetHosts.length > 0);
 
-  // filtrar por plataforma = "o que aparece lá": inclui as pesquisas válidas para todas
+  /*
+    Filtro de plataforma: uma plataforma = pesquisas direcionadas a ela; NO_TARGET = as sem
+    plataforma definida (aparecem em todas). Incluir estas no filtro de uma plataforma fazia
+    ele parecer quebrado: as pesquisas antigas, todas sem alvo, continuavam na lista.
+  */
   const filtered = items.filter(
     (s) =>
       (filter === "todas" || s.status === filter) &&
-      (!hostFilter || s.targetHosts.length === 0 || s.targetHosts.includes(hostFilter)) &&
+      (!hostFilter ||
+        (hostFilter === NO_TARGET ? s.targetHosts.length === 0 : s.targetHosts.includes(hostFilter))) &&
       s.name.toLowerCase().includes(q.toLowerCase())
   );
 
@@ -150,6 +160,7 @@ export function SurveysTable({
                   {h}
                 </option>
               ))}
+              <option value={NO_TARGET}>Sem plataforma definida</option>
             </Select>
           )}
           <div className="relative sm:w-72">
@@ -166,6 +177,7 @@ export function SurveysTable({
               <tr className="border-b border-line text-left font-mono text-[11px] uppercase tracking-wide text-fg-mut">
                 <th className="px-6 py-3 font-semibold">Pesquisa</th>
                 {multiHost && <th className="px-3 py-3 font-semibold">Plataforma</th>}
+                <th className="px-3 py-3 font-semibold">Criada por</th>
                 <th className="px-3 py-3 font-semibold">Tipo</th>
                 <th className="px-3 py-3 font-semibold">Status</th>
                 <th className="px-3 py-3 font-semibold">Canal</th>
@@ -193,6 +205,28 @@ export function SurveysTable({
                       )}
                     </td>
                   )}
+                  <td className="px-3 py-3.5">
+                    {s.creator ? (
+                      <div className="flex items-center gap-2" title={s.creator.name}>
+                        {s.creator.avatarUrl ? (
+                          <Image
+                            src={s.creator.avatarUrl}
+                            alt=""
+                            width={24}
+                            height={24}
+                            className="size-6 shrink-0 rounded-full object-cover"
+                          />
+                        ) : (
+                          <span className="grid size-6 shrink-0 place-items-center rounded-full text-[11px] font-bold text-white [background:var(--grad-marca)]">
+                            {s.creator.name.charAt(0).toUpperCase()}
+                          </span>
+                        )}
+                        <span className="max-w-[140px] truncate text-fg-soft">{s.creator.name.split(" ")[0]}</span>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-fg-mut">—</span>
+                    )}
+                  </td>
                   <td className="px-3 py-3.5"><Badge tone="brand" dot={false}>{s.type}</Badge></td>
                   <td className="px-3 py-3.5"><Badge tone={statusTone[s.status]}>{s.status}</Badge></td>
                   <td className="px-3 py-3.5 text-fg-soft">{s.channel}</td>
@@ -257,7 +291,7 @@ export function SurveysTable({
                 </tr>
               ))}
               {filtered.length === 0 && (
-                <tr><td colSpan={multiHost ? 8 : 7} className="px-6 py-10 text-center text-fg-mut">Nenhuma pesquisa encontrada.</td></tr>
+                <tr><td colSpan={multiHost ? 9 : 8} className="px-6 py-10 text-center text-fg-mut">Nenhuma pesquisa encontrada.</td></tr>
               )}
             </tbody>
           </table>

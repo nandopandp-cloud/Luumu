@@ -28,15 +28,19 @@ export interface SurveyOption {
 export function DataFilters({
   surveys,
   defaultSurveyId,
+  hosts,
 }: {
   surveys?: SurveyOption[];
   defaultSurveyId?: string;
+  /** plataformas do projeto; o filtro só aparece com mais de uma (?host=) */
+  hosts?: string[];
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
   const surveyId = searchParams.get("surveyId") ?? defaultSurveyId ?? "";
+  const host = searchParams.get("host") ?? "";
   const period = searchParams.get("period") ?? "30d";
   const from = searchParams.get("from") ?? "";
   const to = searchParams.get("to") ?? "";
@@ -88,6 +92,22 @@ export function DataFilters({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
+      {hosts && hosts.length > 1 && (
+        <Select
+          value={host}
+          // trocar de plataforma zera a pesquisa: a escolhida pode não existir na outra
+          onChange={(e) => update({ host: e.target.value, surveyId: null })}
+          aria-label="Plataforma"
+          className="w-auto min-w-[200px] py-1.5 text-sm"
+        >
+          <option value="">Todas as plataformas</option>
+          {hosts.map((h) => (
+            <option key={h} value={h}>
+              {h}
+            </option>
+          ))}
+        </Select>
+      )}
       {surveys && (
         <Select
           value={surveyId}

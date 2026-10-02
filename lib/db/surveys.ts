@@ -2,7 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "./client";
-import { surveys, questions, responses } from "@/db/schema";
+import { surveys, questions, responses, users } from "@/db/schema";
 import { surveyId, questionId } from "./ids";
 import { questionTemplates } from "@/lib/survey-templates";
 import { defaultAppearanceFor, type Appearance } from "@/lib/builder";
@@ -13,12 +13,20 @@ import type { SurveyType, SurveyStatus } from "@/lib/mock/surveys";
 export type SurveyRow = typeof surveys.$inferSelect;
 export type QuestionRow = typeof questions.$inferSelect;
 
-/** Lista leve (id + nome) das pesquisas do projeto — usada para popular seletores/filtros. */
-export async function listSurveyOptions(projectId: string) {
+/** Condição "pesquisa direcionada a esta plataforma" (targetHosts contém o host). */
+export function targetsHostSql(host: string) {
+  return sql`${surveys.targetHosts} @> ${JSON.stringify([host])}::jsonb`;
+}
+
+/**
+ * Lista leve (id + nome) das pesquisas do projeto — usada para popular seletores/filtros.
+ * Com `host`, só as direcionadas àquela plataforma.
+ */
+export async function listSurveyOptions(projectId: string, host?: string) {
   return db
     .select({ id: surveys.id, name: surveys.name })
     .from(surveys)
-    .where(eq(surveys.projectId, projectId))
+    .where(and(eq(surveys.projectId, projectId), host ? targetsHostSql(host) : undefined))
     .orderBy(desc(surveys.updatedAt));
 }
 
@@ -28,11 +36,11 @@ export async function listSurveyOptions(projectId: string) {
  * nenhuma estiver ativa, a última criada. Sem isso, essas telas abriam sempre em
  * "Todas as pesquisas", que raramente é o que o usuário quer ver de cara.
  */
-export async function getDefaultSurveyId(projectId: string): Promise<string | undefined> {
+export async function getDefaultSurveyId(projectId: string, host?: string): Promise<string | undefined> {
   const [row] = await db
     .select({ id: surveys.id })
     .from(surveys)
-    .where(eq(surveys.projectId, projectId))
+    .where(and(eq(surveys.projectId, projectId), host ? targetsHostSql(host) : undefined))
     // ativa primeiro, depois a mais nova
     .orderBy(sql`case when ${surveys.status} = 'ativa' then 0 else 1 end`, desc(surveys.createdAt))
     .limit(1);
@@ -55,7 +63,8 @@ export async function listSurveys(projectId: string) {
   if (rows.length === 0) return [];
 
   const surveyIds = rows.map((s) => s.id);
-  const [scoreQuestions, scoreRows, countRows] = await Promise.all([
+  const creatorIds = Array.from(new Set(rows.map((s) => s.createdBy).filter((v): v is string => !!v)));
+  const [scoreQuestions, scoreRows, countRows, creators] = await Promise.all([
     db
       .select({ surveyId: questions.surveyId, blockId: questions.blockId, config: questions.config, order: questions.order })
       .from(questions)
@@ -70,7 +79,14 @@ export async function listSurveys(projectId: string) {
       .from(responses)
       .where(inArray(responses.surveyId, surveyIds))
       .groupBy(responses.surveyId),
+    creatorIds.length
+      ? db
+          .select({ id: users.id, name: users.name, avatarUrl: users.avatarUrl })
+          .from(users)
+          .where(inArray(users.id, creatorIds))
+      : Promise.resolve([]),
   ]);
+  const creatorById = new Map(creators.map((u) => [u.id, u]));
 
   // primeira pergunta de nota de cada survey (mesma regra usada na hora de gravar a resposta)
   const scoreQuestionBySurvey = new Map<string, { blockId: string; config: unknown }>();
@@ -99,6 +115,7 @@ export async function listSurveys(projectId: string) {
     return {
       ...s,
       responseCount: countBySurvey.get(s.id) ?? 0,
+      creator: s.createdBy ? creatorById.get(s.createdBy) ?? null : null,
       score: result.value,
       scoreLabel: formatScore(result),
       scoreMethodology: result.label,
@@ -186,7 +203,12 @@ async function assertOwned(id: string, scope: SurveyScope) {
 }
 
 /** Cria uma pesquisa a partir de um template de tipo, com perguntas-semente. */
-export async function createSurveyFromTemplate(workspaceId: string, projectId: string, type: SurveyType) {
+export async function createSurveyFromTemplate(
+  workspaceId: string,
+  projectId: string,
+  type: SurveyType,
+  createdBy?: string
+) {
   const tpl = questionTemplates[type] ?? questionTemplates.Personalizada;
   const id = surveyId();
   await db.insert(surveys).values({
@@ -197,6 +219,7 @@ export async function createSurveyFromTemplate(workspaceId: string, projectId: s
     type,
     status: "rascunho",
     appearance: defaultAppearanceFor(type),
+    createdBy: createdBy ?? null,
   });
   if (tpl.questions.length) {
     await db.insert(questions).values(
@@ -228,7 +251,8 @@ export async function createSurveyFromTemplate(workspaceId: string, projectId: s
 export async function duplicateSurvey(
   id: string,
   scope: SurveyScope,
-  schedule: { name?: string; startsAt: string | null; endsAt: string | null }
+  schedule: { name?: string; startsAt: string | null; endsAt: string | null },
+  createdBy?: string
 ) {
   const source = await assertOwned(id, scope);
   const sourceQuestions = await db
@@ -261,6 +285,8 @@ export async function duplicateSurvey(
     endsAt: schedule.endsAt,
     responseLimit: source.responseLimit,
     appearance: source.appearance as object,
+    // a cópia é de quem duplicou, não de quem criou a original
+    createdBy: createdBy ?? null,
   });
 
   if (sourceQuestions.length) {
@@ -491,9 +517,9 @@ export async function listActiveSurveysForSdk(projectId: string) {
  * <select> do DataFilters deve exibir, pra barra não dizer "todas" enquanto os
  * números na tela são de uma pesquisa só.
  */
-export async function resolveSurveyScope(projectId: string, surveyIdParam?: string) {
+export async function resolveSurveyScope(projectId: string, surveyIdParam?: string, host?: string) {
   if (surveyIdParam === "all") return { surveyId: undefined, defaultSurveyId: "all" };
   if (surveyIdParam) return { surveyId: surveyIdParam, defaultSurveyId: surveyIdParam };
-  const fallback = await getDefaultSurveyId(projectId);
+  const fallback = await getDefaultSurveyId(projectId, host);
   return { surveyId: fallback, defaultSurveyId: fallback };
 }

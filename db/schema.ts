@@ -242,6 +242,8 @@ export const surveys = pgTable(
     responseLimit: integer("response_limit"),
     // Aparência do widget embutido: { format, position, theme, triggerDelay, accent }
     appearance: jsonb("appearance").notNull().default({}),
+    // quem criou a pesquisa (null = criada antes deste campo existir, ou usuário removido)
+    createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     publishedAt: timestamp("published_at", { withTimezone: true }),

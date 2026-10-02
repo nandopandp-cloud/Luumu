@@ -20,14 +20,18 @@ import { deriveSentiment } from "@/lib/sentiment";
 import { normalizeAppearance } from "@/lib/builder";
 import { isWithinSchedule, normalizeDate } from "@/lib/schedule";
 import { normalizeHost } from "@/lib/hosts";
-import { getCurrentWorkspaceId, getCurrentProjectId } from "@/lib/auth/current";
+import { getCurrentWorkspaceId, getCurrentProjectId, requireUser } from "@/lib/auth/current";
 import { getSurvey } from "@/lib/db/surveys";
 import type { SurveyType, SurveyStatus } from "@/lib/mock/surveys";
 
 /* ---------- Criar (a partir de template) ---------- */
 export async function createSurveyAction(type: SurveyType) {
-  const [workspaceId, projectId] = await Promise.all([getCurrentWorkspaceId(), getCurrentProjectId()]);
-  const id = await createSurveyFromTemplate(workspaceId, projectId, type);
+  const [workspaceId, projectId, user] = await Promise.all([
+    getCurrentWorkspaceId(),
+    getCurrentProjectId(),
+    requireUser(),
+  ]);
+  const id = await createSurveyFromTemplate(workspaceId, projectId, type, user.userId);
   revalidatePath("/surveys");
   redirect(`/surveys/${id}/builder`);
 }
@@ -170,12 +174,17 @@ export async function duplicateSurveyAction(input: unknown) {
   const parsed = duplicateSchema.safeParse(input);
   if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0].message };
 
-  const projectId = await getCurrentProjectId();
-  const newId = await duplicateSurvey(parsed.data.id, { projectId }, {
-    name: parsed.data.name,
-    startsAt: normalizeDate(parsed.data.startsAt),
-    endsAt: normalizeDate(parsed.data.endsAt),
-  });
+  const [projectId, user] = await Promise.all([getCurrentProjectId(), requireUser()]);
+  const newId = await duplicateSurvey(
+    parsed.data.id,
+    { projectId },
+    {
+      name: parsed.data.name,
+      startsAt: normalizeDate(parsed.data.startsAt),
+      endsAt: normalizeDate(parsed.data.endsAt),
+    },
+    user.userId
+  );
 
   revalidatePath("/surveys");
   revalidatePath("/dashboard");

@@ -7,6 +7,8 @@ import { ExportMenu } from "@/components/responses/ExportMenu";
 import { listResponses, getStats, getScoreDistribution, getWordCloud, getMainScore } from "@/lib/db/responses";
 import { listSurveyOptions, resolveSurveyScope } from "@/lib/db/surveys";
 import { getCurrentProjectId } from "@/lib/auth/current";
+import { listHosts } from "@/lib/db/hosts";
+import { normalizeHost } from "@/lib/hosts";
 import { timeAgo } from "@/lib/utils";
 import { formatScore } from "@/lib/scoring";
 
@@ -15,22 +17,24 @@ export const dynamic = "force-dynamic";
 export default async function ResponsesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ surveyId?: string; period?: string; from?: string; to?: string }>;
+  searchParams: Promise<{ surveyId?: string; period?: string; from?: string; to?: string; host?: string }>;
 }) {
-  const { surveyId, period, from, to } = await searchParams;
+  const { surveyId, period, from, to, host: hostParam } = await searchParams;
   const projectId = await getCurrentProjectId();
+  const host = normalizeHost(hostParam) || undefined;
   const { from: dateFrom, to: dateTo } = periodToRange(period, from, to);
-  // sem filtro na URL, abre já na última pesquisa vigente/criada
-  const { surveyId: scopedSurveyId, defaultSurveyId } = await resolveSurveyScope(projectId, surveyId);
-  const scope = { projectId, surveyId: scopedSurveyId, dateFrom, dateTo };
+  // sem filtro na URL, abre já na última pesquisa vigente/criada (da plataforma, se filtrada)
+  const { surveyId: scopedSurveyId, defaultSurveyId } = await resolveSurveyScope(projectId, surveyId, host);
+  const scope = { projectId, surveyId: scopedSurveyId, dateFrom, dateTo, host };
 
-  const [rows, stats, distribution, wordCloud, surveyOptions, mainScore] = await Promise.all([
+  const [rows, stats, distribution, wordCloud, surveyOptions, mainScore, hosts] = await Promise.all([
     listResponses(scope),
     getStats(scope),
     getScoreDistribution(scope),
     getWordCloud(scope),
-    listSurveyOptions(projectId),
+    listSurveyOptions(projectId, host),
     getMainScore(scope),
+    listHosts(projectId),
   ]);
 
   const items: ResponseItem[] = rows.map((r) => ({
@@ -50,11 +54,11 @@ export default async function ResponsesPage({
         eyebrow="Respostas"
         title="Respostas"
         description="A voz dos seus clientes, agregada de todas as pesquisas, com sentimento e temas."
-        actions={<ExportMenu surveyId={scopedSurveyId} />}
+        actions={<ExportMenu surveyId={scopedSurveyId} host={host} />}
       />
 
       <div className="mb-4">
-        <DataFilters surveys={surveyOptions} defaultSurveyId={defaultSurveyId} />
+        <DataFilters surveys={surveyOptions} defaultSurveyId={defaultSurveyId} hosts={hosts} />
       </div>
 
       <div className="mb-4 grid grid-cols-2 gap-4 lg:grid-cols-4">

@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, count, avg, sql, inArray, gte, lte, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, count, avg, sql, inArray, gte, lte, or, isNull, type SQL } from "drizzle-orm";
 import { db } from "./client";
 import { responses, answers, surveys, questions } from "@/db/schema";
 import { responseId, answerId } from "./ids";
@@ -19,6 +19,7 @@ export interface Scope {
   surveyId?: string; // opcional: restringe a uma pesquisa do projeto
   dateFrom?: Date; // opcional: só respostas a partir desta data (inclusive)
   dateTo?: Date; // opcional: só respostas até esta data (inclusive)
+  host?: string; // opcional: só respostas de uma plataforma (hostname)
 }
 
 /** Filtro combinado: sempre por projeto (via join com surveys), opcionalmente por pesquisa e período. */
@@ -27,6 +28,20 @@ function scopeWhere(scope: Scope): SQL | undefined {
   if (scope.surveyId) parts.push(eq(responses.surveyId, scope.surveyId));
   if (scope.dateFrom) parts.push(gte(responses.createdAt, scope.dateFrom));
   if (scope.dateTo) parts.push(lte(responses.createdAt, scope.dateTo));
+  /*
+    Plataforma: vale o host gravado na resposta. Respostas sem host (anteriores à coluna, ou
+    do link público) contam para a plataforma só se a pesquisa for direcionada a ela —
+    pesquisa sem alvo não diz de qual produto a resposta veio.
+  */
+  if (scope.host) {
+    const host = scope.host;
+    parts.push(
+      or(
+        eq(responses.host, host),
+        and(isNull(responses.host), sql`${surveys.targetHosts} @> ${JSON.stringify([host])}::jsonb`)
+      )!
+    );
+  }
   return and(...parts);
 }
 

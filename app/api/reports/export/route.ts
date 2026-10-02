@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { normalizeHost } from "@/lib/hosts";
 import { getSession } from "@/lib/auth/session";
 import { getCurrentProject } from "@/lib/auth/current";
 import { listResponsesForExport, getStats } from "@/lib/db/responses";
@@ -34,6 +35,7 @@ export async function GET(req: Request) {
   const period = searchParams.get("period") || undefined;
   const from = searchParams.get("from") || undefined;
   const to = searchParams.get("to") || undefined;
+  const host = normalizeHost(searchParams.get("host")) || undefined;
   const { from: dateFrom, to: dateTo } = periodToRange(period, from, to);
 
   // se filtrou por pesquisa, precisa pertencer ao projeto ativo
@@ -44,7 +46,7 @@ export async function GET(req: Request) {
     scopeName = survey.name;
   }
 
-  const scope = { projectId: project.id, surveyId, dateFrom, dateTo };
+  const scope = { projectId: project.id, surveyId, dateFrom, dateTo, host };
   const rows = await listResponsesForExport(scope);
 
   const dateTag = new Date().toISOString().slice(0, 10);

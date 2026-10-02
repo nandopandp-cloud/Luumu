@@ -12,7 +12,7 @@ const FORMATS = [
 ] as const;
 
 /** Botão "Exportar" com dropdown de formato (PDF/XLSX/CSV), baixa via /api/reports/export. */
-export function ExportMenu({ surveyId }: { surveyId?: string }) {
+export function ExportMenu({ surveyId, host }: { surveyId?: string; host?: string }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -30,6 +30,7 @@ export function ExportMenu({ surveyId }: { surveyId?: string }) {
     try {
       const qs = new URLSearchParams({ format });
       if (surveyId) qs.set("surveyId", surveyId);
+      if (host) qs.set("host", host);
       const res = await fetch(`/api/reports/export?${qs.toString()}`);
       if (!res.ok) throw new Error("Falha ao gerar o arquivo.");
       const blob = await res.blob();

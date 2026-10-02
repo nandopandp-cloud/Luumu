@@ -13,6 +13,8 @@ import { listSurveys, listSurveyOptions, resolveSurveyScope } from "@/lib/db/sur
 import { getStats, getChannelSplit, getScoreTrend, getMainScore } from "@/lib/db/responses";
 import { formatScore } from "@/lib/scoring";
 import { requireUser, getCurrentProjectId } from "@/lib/auth/current";
+import { listHosts } from "@/lib/db/hosts";
+import { normalizeHost } from "@/lib/hosts";
 
 export const dynamic = "force-dynamic";
 
@@ -28,25 +30,31 @@ const TREND_WEEKS_BY_PERIOD: Record<string, number> = { "7d": 1, "30d": 5, "90d"
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ surveyId?: string; period?: string; from?: string; to?: string }>;
+  searchParams: Promise<{ surveyId?: string; period?: string; from?: string; to?: string; host?: string }>;
 }) {
   const { name } = await requireUser();
-  const { surveyId, period, from, to } = await searchParams;
+  const { surveyId, period, from, to, host: hostParam } = await searchParams;
   const projectId = await getCurrentProjectId();
+  const host = normalizeHost(hostParam) || undefined;
   const { from: dateFrom, to: dateTo } = periodToRange(period, from, to);
-  // sem filtro na URL, abre já na última pesquisa vigente/criada
-  const { surveyId: scopedSurveyId, defaultSurveyId } = await resolveSurveyScope(projectId, surveyId);
-  const scope = { projectId, surveyId: scopedSurveyId, dateFrom, dateTo };
+  // sem filtro na URL, abre já na última pesquisa vigente/criada (da plataforma, se filtrada)
+  const { surveyId: scopedSurveyId, defaultSurveyId } = await resolveSurveyScope(projectId, surveyId, host);
+  const scope = { projectId, surveyId: scopedSurveyId, dateFrom, dateTo, host };
   const trendWeeks = period ? (TREND_WEEKS_BY_PERIOD[period] ?? 8) : 8;
 
-  const [allSurveys, surveyOptions, stats, channelSplit, csatTrend, mainScore] = await Promise.all([
+  const [projectSurveys, surveyOptions, stats, channelSplit, csatTrend, mainScore, hosts] = await Promise.all([
     listSurveys(projectId),
-    listSurveyOptions(projectId),
+    listSurveyOptions(projectId, host),
     getStats(scope),
     getChannelSplit(scope),
     getScoreTrend(scope, trendWeeks),
     getMainScore(scope),
+    listHosts(projectId),
   ]);
+  // com plataforma filtrada, contagem de ativas e lista recente também são só dela
+  const allSurveys = host
+    ? projectSurveys.filter((s) => ((s.targetHosts as string[]) ?? []).includes(host))
+    : projectSurveys;
   const activeCount = allSurveys.filter((s) => s.status === "ativa").length;
   const recent = allSurveys.slice(0, 5);
   const firstName = name.split(" ")[0];
@@ -71,7 +79,7 @@ export default async function DashboardPage({
       />
 
       <div className="mb-4">
-        <DataFilters surveys={surveyOptions} defaultSurveyId={defaultSurveyId} />
+        <DataFilters surveys={surveyOptions} defaultSurveyId={defaultSurveyId} hosts={hosts} />
       </div>
 
       {/* Métricas */}
