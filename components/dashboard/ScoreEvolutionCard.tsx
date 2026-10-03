@@ -11,26 +11,41 @@ type Metric = "score" | "positive" | "total";
   Emojis do mascote para o sentimento (public/mascot/emotions). Cada ponto da linha de
   sentimento mostra o rosto da faixa em que caiu — dá para ler a evolução sem olhar o eixo.
 */
-const MOODS = [
+export const MOODS = [
   { max: 20, src: "/mascot/emotions/1-chorando.webp", label: "Muito negativo" },
   { max: 40, src: "/mascot/emotions/2-triste.webp", label: "Negativo" },
   { max: 60, src: "/mascot/emotions/3-pensativo.webp", label: "Neutro" },
   { max: 80, src: "/mascot/emotions/4-feliz.webp", label: "Positivo" },
   { max: 101, src: "/mascot/emotions/5-empolgado.webp", label: "Muito positivo" },
 ] as const;
-const moodFor = (pct: number) => MOODS.find((m) => pct < m.max) ?? MOODS[MOODS.length - 1];
+export const moodFor = (pct: number) => MOODS.find((m) => pct < m.max) ?? MOODS[MOODS.length - 1];
 
 interface DotProps {
   cx?: number;
   cy?: number;
-  value?: number | null;
+  /** no gráfico de ÁREA o Recharts entrega o par [base, valor], não o número */
+  value?: number | [number, number] | null;
+  payload?: { value?: number | null };
   index?: number;
 }
 
+/**
+ * Valor real do ponto. Ler `props.value` direto era o bug: num Area ele vem como [0, 75];
+ * Number([0, 75]) = NaN, nenhuma faixa casava e todo ponto caía no emoji "muito positivo".
+ */
+export function dotValue(p: Pick<DotProps, "value" | "payload">): number | null {
+  const fromPayload = p.payload?.value;
+  if (typeof fromPayload === "number" && Number.isFinite(fromPayload)) return fromPayload;
+  const v = p.value;
+  if (Array.isArray(v)) return Number.isFinite(v[1]) ? v[1] : null;
+  return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
+
 /** Ponto da linha de sentimento: o emoji da faixa (maior quando em foco). */
-function MoodDot({ cx, cy, value, index, size }: DotProps & { size: number }) {
-  if (cx == null || cy == null || value == null) return <g key={`m-${index}`} />;
-  const m = moodFor(value);
+function MoodDot({ cx, cy, value, payload, index, size }: DotProps & { size: number }) {
+  const pct = dotValue({ value, payload });
+  if (cx == null || cy == null || pct == null) return <g key={`m-${index}`} />;
+  const m = moodFor(pct);
   return (
     <g key={`m-${index}`}>
       <circle cx={cx} cy={cy} r={size / 2 + 2} fill="var(--bg-elev)" opacity={0.9} />
