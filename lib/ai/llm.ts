@@ -17,7 +17,9 @@ import "server-only";
 */
 
 const BASE_URL = process.env.AI_BASE_URL || "https://api.groq.com/openai/v1";
-const API_KEY = process.env.GROQ_API_KEY || process.env.AI_API_KEY || "";
+// limpa espaços e aspas das pontas: uma aspa a mais colada junto da chave (no .env ou no painel
+// da Vercel) faz o provedor recusar tudo com "Invalid API Key" (HTTP 401)
+const API_KEY = (process.env.GROQ_API_KEY || process.env.AI_API_KEY || "").trim().replace(/^["'“”]+|["'“”]+$/g, "");
 const MODEL = process.env.AI_MODEL || "openai/gpt-oss-120b";
 const FALLBACK_MODEL = process.env.AI_FALLBACK_MODEL || "openai/gpt-oss-20b";
 const TIMEOUT_MS = 20_000;
