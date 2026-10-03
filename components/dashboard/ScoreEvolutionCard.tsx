@@ -4,6 +4,9 @@ import { useMemo, useState } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Select } from "@/components/ui/Select";
 import type { Granularity, ScorePoint } from "@/lib/db/overview";
+import { MOODS, moodFor } from "@/lib/moods";
+
+export { MOODS, moodFor };
 
 type Metric = "score" | "positive" | "total";
 
@@ -11,15 +14,6 @@ type Metric = "score" | "positive" | "total";
   Emojis do mascote para o sentimento (public/mascot/emotions). Cada ponto da linha de
   sentimento mostra o rosto da faixa em que caiu — dá para ler a evolução sem olhar o eixo.
 */
-// faixas definidas pelo produto: 0–29 | 30–49 | 50–69 | 70–89 | 90–100
-export const MOODS = [
-  { max: 30, range: "0–29%", src: "/mascot/emotions/1-chorando.webp", label: "Muito negativo" },
-  { max: 50, range: "30–49%", src: "/mascot/emotions/2-triste.webp", label: "Negativo" },
-  { max: 70, range: "50–69%", src: "/mascot/emotions/3-pensativo.webp", label: "Neutro" },
-  { max: 90, range: "70–89%", src: "/mascot/emotions/4-feliz.webp", label: "Positivo" },
-  { max: 101, range: "90–100%", src: "/mascot/emotions/5-empolgado.webp", label: "Muito positivo" },
-] as const;
-export const moodFor = (pct: number) => MOODS.find((m) => pct < m.max) ?? MOODS[MOODS.length - 1];
 
 interface DotProps {
   cx?: number;

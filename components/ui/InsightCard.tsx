@@ -11,8 +11,8 @@ const TONE: Record<Tone, { text: string; stroke: string; fill: string; chip: str
 };
 
 /** Minigráfico de linha (área suave). SVG puro: renderiza no servidor, sem JS no cliente. */
-function Sparkline({ values, tone }: { values: number[]; tone: Tone }) {
-  if (values.length < 2) return <div className="h-10 w-28" />;
+export function Sparkline({ values, tone, className }: { values: number[]; tone: Tone; className?: string }) {
+  if (values.length < 2) return <div className={className ?? "h-10 w-28"} />;
   const W = 112;
   const H = 40;
   const max = Math.max(...values);
@@ -30,7 +30,7 @@ function Sparkline({ values, tone }: { values: number[]; tone: Tone }) {
   }
   const t = TONE[tone];
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="h-10 w-28 shrink-0" aria-hidden>
+    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className={cn("shrink-0 overflow-visible", className ?? "h-10 w-28")} aria-hidden>
       <path d={`${d} L${W},${H} L0,${H} Z`} fill={t.fill} />
       <path d={d} fill="none" stroke={t.stroke} strokeWidth={2} strokeLinecap="round" />
     </svg>

@@ -211,6 +211,10 @@ h1, h2, h3, h4, h5 {
 
 @keyframes spin-slow { to { transform: rotate(360deg); } }
 @keyframes shimmer { to { transform: translateX(100%); } }
+/* painel lateral (components/ui/Drawer.tsx) */
+@keyframes luumuDrawerIn { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes luumuFade { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { [class*="luumuDrawerIn"], [class*="luumuFade"] { animation: none !important; } }
 /* abertura do menu do Select (components/ui/Select.tsx) */
 @keyframes luumuSelectIn { from { opacity: 0; transform: translateY(-4px) scale(.98); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { [class*="luumuSelectIn"] { animation: none !important; } }

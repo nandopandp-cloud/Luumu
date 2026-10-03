@@ -29,7 +29,7 @@ export type FeedView = (typeof FEED_VIEWS)[number];
  * Comentário principal da resposta: o primeiro texto livre (perguntas "long"/"short" gravam
  * `{ text }`). Subconsulta correlacionada: permite filtrar e ordenar por comentário no banco.
  */
-const commentSql = sql<string | null>`(
+export const commentSql = sql<string | null>`(
   select nullif(btrim(a.value->>'text'), '')
     from ${answers} a
    where a.response_id = ${responses.id} and nullif(btrim(a.value->>'text'), '') is not null
