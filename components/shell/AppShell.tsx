@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 import { UsageProvider } from "./UsageProvider";
+import { SearchProvider } from "@/components/search/SearchProvider";
 import type { WorkspaceUsage } from "@/lib/db/workspace";
 
 export const SIDEBAR_COOKIE = "luumu_sidebar";
@@ -55,6 +56,7 @@ export function AppShell({
 
   return (
     <UsageProvider initial={usage}>
+    <SearchProvider projectName={projects.find((p) => p.id === activeProjectId)?.name ?? null}>
       <div className="flex min-h-screen">
         {/* Sidebar desktop */}
         {/*
@@ -98,6 +100,7 @@ export function AppShell({
           </main>
         </div>
       </div>
+    </SearchProvider>
     </UsageProvider>
   );
 }

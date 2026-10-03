@@ -9,6 +9,19 @@ export function ThemeScript() {
   return <script dangerouslySetInnerHTML={{ __html: code }} />;
 }
 
+const THEME_EVENT = "luumu-theme-change";
+
+/** Alterna o tema de qualquer lugar (ex.: a busca ⌘K) e avisa o botão do header. */
+export function toggleTheme() {
+  const cur = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
+  const next = cur === "dark" ? "light" : "dark";
+  document.documentElement.setAttribute("data-theme", next);
+  try {
+    localStorage.setItem("luumu-theme", next);
+  } catch {}
+  window.dispatchEvent(new CustomEvent(THEME_EVENT, { detail: next }));
+}
+
 export function ThemeToggle() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
 
@@ -19,6 +32,9 @@ export function ThemeToggle() {
       (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
     setTheme(initial);
     document.documentElement.setAttribute("data-theme", initial);
+    const onChange = (e: Event) => setTheme((e as CustomEvent<"light" | "dark">).detail);
+    window.addEventListener(THEME_EVENT, onChange);
+    return () => window.removeEventListener(THEME_EVENT, onChange);
   }, []);
 
   function toggle() {

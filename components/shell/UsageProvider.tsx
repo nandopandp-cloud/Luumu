@@ -32,7 +32,7 @@ async function fetchUsage(): Promise<WorkspaceUsage | null> {
  * e a cada minuto com a aba visível. O layout em si não renderiza de novo ao navegar, então
  * sem isto uma pesquisa publicada ou uma resposta nova só apareceria após recarregar.
  */
-export function UsageProvider({ initial, children }: { initial?: Promise<WorkspaceUsage | null>; children: React.ReactNode }) {
+export function UsageProvider({ initial, children }: { initial?: Promise<WorkspaceUsage | null>; children?: React.ReactNode }) {
   const [usage, setUsage] = useState<WorkspaceUsage | null>(null);
   const pathname = usePathname();
   const first = useRef(true);

@@ -3,9 +3,10 @@
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Bell, Menu, Search, LogOut, ChevronDown, UserRound } from "lucide-react";
+import { Bell, Menu, LogOut, ChevronDown, UserRound } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
 import { PlanUsageMenu } from "./PlanUsageMenu";
+import { SearchTrigger } from "@/components/search/SearchTrigger";
 import { logoutAction } from "@/app/(auth)/actions";
 
 export function Topbar({
@@ -28,16 +29,7 @@ export function Topbar({
         >
           <Menu className="size-5" />
         </button>
-        <div className="hidden items-center gap-2 rounded-full border border-line bg-bg-elev px-3.5 py-2 text-sm text-fg-mut sm:flex">
-          <Search className="size-4" />
-          <input
-            placeholder="Buscar pesquisas, respostas…"
-            className="w-44 bg-transparent outline-none placeholder:text-fg-mut md:w-64"
-          />
-          <kbd className="ml-auto rounded border border-line-strong px-1.5 text-[10px] text-fg-mut">
-            ⌘K
-          </kbd>
-        </div>
+        <SearchTrigger />
       </div>
 
       <div className="flex items-center gap-2">

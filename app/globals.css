@@ -234,3 +234,7 @@ h1, h2, h3, h4, h5 {
   .float { animation: none !important; }
   * { animation-duration: .001ms !important; transition-duration: .001ms !important; }
 }
+/* busca ⌘K (components/search/CommandPalette.tsx) */
+@keyframes luumuPaletteIn { from { opacity: 0; transform: translateY(-10px) scale(.975); } to { opacity: 1; transform: none; } }
+@keyframes luumuBackdropIn { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { [class*="luumuPaletteIn"], [class*="luumuBackdropIn"] { animation: none !important; } }
