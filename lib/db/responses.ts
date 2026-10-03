@@ -189,15 +189,15 @@ export async function getWordCloud(scope: Scope) {
 }
 
 /**
- * Descobre a escala real de notas do escopo (min/max), olhando as perguntas de
- * score (nps|rating|stars|csat|ces|scale) das surveys envolvidas. Quando o escopo
- * mistura escalas diferentes (ex: workspace inteiro com NPS 0-10 e CSAT 1-5), usa a
- * maior faixa encontrada, que cobre todas sem perder granularidade.
- * 1 única query (join direto com surveys.projectId em vez de buscar surveyIds antes).
+ * Descobre a escala real de notas do escopo (min/max). Usa só a PRIMEIRA pergunta de nota de
+ * cada pesquisa — é dela que sai `responses.score` (mesma regra de listSurveys/getMainScore).
+ * Antes olhava todas: uma pesquisa CSAT (1–5) com uma pergunta NPS extra (0–10) mais abaixo
+ * ganhava escala 0–10, com metade das barras sempre vazias. Quando o escopo mistura pesquisas
+ * de escalas diferentes (ex.: NPS 0–10 e CSAT 1–5), usa a maior faixa, que cobre todas.
  */
 export async function detectScoreScale(scope: Scope): Promise<{ min: number; max: number }> {
   const qs = await db
-    .select({ blockId: questions.blockId, config: questions.config })
+    .select({ surveyId: questions.surveyId, blockId: questions.blockId, config: questions.config })
     .from(questions)
     .innerJoin(surveys, eq(questions.surveyId, surveys.id))
     .where(
@@ -206,11 +206,15 @@ export async function detectScoreScale(scope: Scope): Promise<{ min: number; max
         scope.surveyId ? eq(questions.surveyId, scope.surveyId) : undefined,
         inArray(questions.blockId, SCORE_BLOCK_IDS)
       )
-    );
+    )
+    .orderBy(asc(questions.order));
+
+  const firstBySurvey = new Map<string, (typeof qs)[number]>();
+  for (const q of qs) if (!firstBySurvey.has(q.surveyId)) firstBySurvey.set(q.surveyId, q);
 
   let min = 0;
   let max = 0;
-  for (const q of qs) {
+  for (const q of firstBySurvey.values()) {
     const defaults = defaultScaleForBlock(q.blockId);
     const cfg = (q.config as { min?: number; max?: number }) ?? {};
     const qMin = cfg.min ?? defaults.min;

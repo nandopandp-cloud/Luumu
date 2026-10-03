@@ -115,7 +115,7 @@ export function DataFilters({
           onChange={(e) => update({ surveyId: e.target.value })}
           aria-label="Pesquisa"
           icon={<BarChart3 />}
-          className="w-auto min-w-[260px] max-w-[340px] py-2 text-sm"
+          className="w-auto min-w-[260px] py-2 text-sm"
         >
           <option value="all">Todas as pesquisas</option>
           {surveys.map((s) => (

@@ -7,6 +7,38 @@ import type { Granularity, ScorePoint } from "@/lib/db/overview";
 
 type Metric = "score" | "positive" | "total";
 
+/*
+  Emojis do mascote para o sentimento (public/mascot/emotions). Cada ponto da linha de
+  sentimento mostra o rosto da faixa em que caiu — dá para ler a evolução sem olhar o eixo.
+*/
+const MOODS = [
+  { max: 20, src: "/mascot/emotions/1-chorando.webp", label: "Muito negativo" },
+  { max: 40, src: "/mascot/emotions/2-triste.webp", label: "Negativo" },
+  { max: 60, src: "/mascot/emotions/3-pensativo.webp", label: "Neutro" },
+  { max: 80, src: "/mascot/emotions/4-feliz.webp", label: "Positivo" },
+  { max: 101, src: "/mascot/emotions/5-empolgado.webp", label: "Muito positivo" },
+] as const;
+const moodFor = (pct: number) => MOODS.find((m) => pct < m.max) ?? MOODS[MOODS.length - 1];
+
+interface DotProps {
+  cx?: number;
+  cy?: number;
+  value?: number | null;
+  index?: number;
+}
+
+/** Ponto da linha de sentimento: o emoji da faixa (maior quando em foco). */
+function MoodDot({ cx, cy, value, index, size }: DotProps & { size: number }) {
+  if (cx == null || cy == null || value == null) return <g key={`m-${index}`} />;
+  const m = moodFor(value);
+  return (
+    <g key={`m-${index}`}>
+      <circle cx={cx} cy={cy} r={size / 2 + 2} fill="var(--bg-elev)" opacity={0.9} />
+      <image href={m.src} x={cx - size / 2} y={cy - size / 2} width={size} height={size} />
+    </g>
+  );
+}
+
 const axis = { fontSize: 11, fill: "var(--text-mut)", fontFamily: "var(--font-mono)" };
 
 /**
@@ -69,7 +101,7 @@ export function ScoreEvolutionCard({
       </div>
       {hasData ? (
         <ResponsiveContainer width="100%" height={250}>
-          <AreaChart data={data} margin={{ top: 10, right: 12, left: -14, bottom: 0 }}>
+          <AreaChart data={data} margin={{ top: metric === "positive" ? 22 : 10, right: 18, left: -14, bottom: 0 }}>
             <defs>
               <linearGradient id="evo-fill" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="var(--luumu-roxo)" stopOpacity={0.22} />
@@ -86,9 +118,17 @@ export function ScoreEvolutionCard({
                   <div className="rounded-xl border border-line bg-bg-elev px-3 py-2 text-xs shadow-[var(--shadow-lg)]">
                     <div className="font-semibold text-fg">{label}</div>
                     <div className="mt-1 flex items-center gap-1.5 text-fg-soft">
-                      <span className="size-2 rounded-full bg-luumu-roxo" />
+                      {metric === "positive" ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- ícone decorativo no tooltip
+                        <img src={moodFor(Number(payload[0].value)).src} alt="" width={22} height={22} />
+                      ) : (
+                        <span className="size-2 rounded-full bg-luumu-roxo" />
+                      )}
                       {name}: <span className="font-bold text-fg">{`${payload[0].value}${suffix}`}</span>
                     </div>
+                    {metric === "positive" && (
+                      <div className="mt-0.5 text-[11px] font-semibold text-fg-mut">{moodFor(Number(payload[0].value)).label}</div>
+                    )}
                   </div>
                 ) : null
               }
@@ -100,13 +140,33 @@ export function ScoreEvolutionCard({
               strokeWidth={2.5}
               fill="url(#evo-fill)"
               connectNulls
-              dot={{ r: 3.5, fill: "var(--luumu-roxo)", strokeWidth: 0 }}
-              activeDot={{ r: 5.5, fill: "var(--luumu-roxo)", stroke: "var(--bg-elev)", strokeWidth: 2 }}
+              dot={
+                metric === "positive"
+                  ? (p: DotProps) => <MoodDot key={`d-${p.index}`} {...p} size={26} />
+                  : { r: 3.5, fill: "var(--luumu-roxo)", strokeWidth: 0 }
+              }
+              activeDot={
+                metric === "positive"
+                  ? (p: DotProps) => <MoodDot key={`a-${p.index}`} {...p} size={36} />
+                  : { r: 5.5, fill: "var(--luumu-roxo)", stroke: "var(--bg-elev)", strokeWidth: 2 }
+              }
             />
           </AreaChart>
         </ResponsiveContainer>
       ) : (
         <div className="flex h-[250px] items-center justify-center text-sm text-fg-mut">Ainda sem respostas no período para mostrar a evolução.</div>
+      )}
+      {metric === "positive" && hasData && (
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 border-t border-line pt-4" aria-label="Escala de sentimento">
+          {MOODS.map((m, i) => (
+            <span key={m.src} className="inline-flex items-center gap-1.5 text-xs font-semibold text-fg-soft">
+              {/* eslint-disable-next-line @next/next/no-img-element -- legenda decorativa */}
+              <img src={m.src} alt="" width={24} height={24} />
+              {m.label}
+              <span className="font-mono text-[10px] text-fg-mut">{i * 20}–{(i + 1) * 20}%</span>
+            </span>
+          ))}
+        </div>
       )}
     </section>
   );

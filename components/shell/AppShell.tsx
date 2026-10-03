@@ -51,7 +51,11 @@ export function AppShell({
   return (
     <div className="flex min-h-screen">
       {/* Sidebar desktop */}
-      <div className="sticky top-0 hidden h-screen shrink-0 lg:block">
+      {/*
+        z-40: acima da Topbar (sticky, z-30), que vem depois no HTML e cobria o botão de
+        recolher/expandir que fica na borda da sidebar.
+      */}
+      <div className="sticky top-0 z-40 hidden h-screen shrink-0 lg:block">
         <Sidebar
           workspace={workspace}
           projects={projects}

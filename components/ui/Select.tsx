@@ -111,10 +111,13 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(function Select
     const below = window.innerHeight - r.bottom - 12;
     const above = r.top - 12;
     const up = below < 240 && above > below;
-    const width = Math.min(Math.max(r.width, 220), 380, window.innerWidth - 24);
+    // pelo menos a largura do campo; pode crescer para caber opções longas sem cortar
+    const longest = Math.max(0, ...options.map((o) => o.label.length));
+    const wanted = Math.min(520, 64 + longest * 7.5);
+    const width = Math.min(Math.max(r.width, 220, wanted), window.innerWidth - 24);
     const left = Math.min(Math.max(12, r.left), window.innerWidth - width - 12);
     setPos({ left, width, up, top: up ? r.top - 6 : r.bottom + 6, maxHeight: Math.min(340, (up ? above : below) - 6) });
-  }, []);
+  }, [options]);
 
   const openMenu = () => {
     if (disabled) return;
@@ -238,7 +241,8 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(function Select
         )}
       >
         {icon && <span className="shrink-0 text-fg-soft [&>svg]:size-4">{icon}</span>}
-        <span className={cn("min-w-0 flex-1 truncate", (!selected || selected.disabled) && "text-fg-mut")}>
+        {/* texto inteiro: nomes longos (pesquisas, plataformas) quebram linha em vez de virar "…" */}
+        <span className={cn("min-w-0 flex-1 break-words leading-snug", (!selected || selected.disabled) && "text-fg-mut")}>
           {selected?.label ?? placeholder ?? "Selecione…"}
         </span>
         <ChevronDown className={cn("size-4 shrink-0 text-fg-mut transition-transform duration-200", open && "rotate-180 text-accent")} />
@@ -307,7 +311,7 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(function Select
                       o.disabled && "cursor-default text-fg-mut opacity-60"
                     )}
                   >
-                    <span className="min-w-0 flex-1 truncate">{o.label}</span>
+                    <span className="min-w-0 flex-1 break-words leading-snug">{o.label}</span>
                     {on && <Check className="size-4 shrink-0" />}
                   </div>
                 );
