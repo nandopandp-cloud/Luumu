@@ -238,3 +238,7 @@ h1, h2, h3, h4, h5 {
 @keyframes luumuPaletteIn { from { opacity: 0; transform: translateY(-10px) scale(.975); } to { opacity: 1; transform: none; } }
 @keyframes luumuBackdropIn { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { [class*="luumuPaletteIn"], [class*="luumuBackdropIn"] { animation: none !important; } }
+/* quadro do print dos heatmaps: barra de rolagem fina */
+.hm-print-scroll { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--text) 25%, transparent) transparent; }
+.hm-print-scroll::-webkit-scrollbar { width: 8px; }
+.hm-print-scroll::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--text) 22%, transparent); border-radius: 999px; }

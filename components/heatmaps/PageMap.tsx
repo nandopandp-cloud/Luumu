@@ -3,13 +3,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Camera, ImageOff, Loader2, Monitor, Smartphone, Tablet } from "lucide-react";
 import { Mascot } from "@/components/ui/Mascot";
+import { cn } from "@/lib/utils";
 import { reachAt, reachCurve, splitPath, type HeatmapDevice, type HeatmapMode, type Section } from "@/lib/heatmaps/core";
-import { boxOf, detectSections, docSize, drawHeat, drawScroll, makeLocator, sanitizeSnapshot, type HeatPoint } from "@/lib/heatmaps/draw";
+import { boxOf, detectSections, docSize, drawHeat, drawScroll, freezeLayout, makeLocator, sanitizeSnapshot, settle, type Box, type HeatPoint } from "@/lib/heatmaps/draw";
 import { relativeTime } from "@/lib/search/core";
 import type { HeatmapReport } from "@/lib/db/heatmaps";
 
 const FRAME_H = 470;
-const OVERLAY_ID = "__luumu_hm";
 
 interface Snapshot {
   html: string;
@@ -29,9 +29,25 @@ export interface MapStats {
   sections: Section[];
 }
 
+/** O que é desenhado por cima do print, em coordenadas da PÁGINA (px da página original). */
+interface Layer {
+  heat: HeatPoint[];
+  /** raio da mancha em px de TELA (não encolhe com a página) */
+  radius: number;
+  opacity: number;
+  curves: { d: string; width: number; opacity: number }[];
+  markers: { x: number; y: number; n: number }[];
+  ring: Box | null;
+}
+
 /**
- * A página do cliente (cópia sem scripts) com o mapa do modo escolhido por cima. As camadas
- * são desenhadas DENTRO do documento do iframe, então rolam junto com a página.
+ * A página do cliente como um PRINT de página inteira, com o mapa do modo escolhido por cima.
+ *
+ * A cópia (sem scripts) é carregada num iframe na largura e altura de tela de quem visitou,
+ * congelada (freezeLayout) e esticada até a altura total. A partir daí ela é só o "papel":
+ * não reage a nada (sem hover, sem links) e quem rola é o quadro do painel. As camadas
+ * (calor, faixas, caminhos, marcadores) ficam FORA do iframe, por cima dele, na resolução da
+ * tela — textos e marcadores continuam legíveis mesmo com a página reduzida.
  */
 export function PageMap({
   mode,
@@ -50,10 +66,15 @@ export function PageMap({
 }) {
   const wrap = useRef<HTMLDivElement>(null);
   const frame = useRef<HTMLIFrameElement>(null);
+  const heatCanvas = useRef<HTMLCanvasElement>(null);
   const [snap, setSnap] = useState<Snapshot | "loading" | "missing">("loading");
   const [srcDoc, setSrcDoc] = useState("");
   const [width, setWidth] = useState(0);
-  const [loaded, setLoaded] = useState(0);
+  /** altura do print (px da página); null enquanto monta */
+  const [printH, setPrintH] = useState<number | null>(null);
+  const [ready, setReady] = useState(false);
+  const [layer, setLayer] = useState<Layer | null>(null);
+  const [tip, setTip] = useState<{ x: number; y: number; text: string } | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -82,150 +103,218 @@ export function PageMap({
 
   const s = typeof snap === "object" ? snap : null;
   const k = s && width ? width / s.width : 0;
-  const frameH = k ? Math.round(FRAME_H / k) : 0;
   const curve = useMemo(() => reachCurve(report.scrollHist), [report.scrollHist]);
 
-  const draw = useCallback(() => {
+  // 1) carregou na altura de tela: espera imagens/fontes, congela e mede a página inteira
+  const onLoad = useCallback(async () => {
     const doc = frame.current?.contentDocument;
     if (!doc?.body) return;
-    doc.getElementById(OVERLAY_ID)?.remove();
-    const { w, h } = docSize(doc);
-    const root = doc.createElement("div");
-    root.id = OVERLAY_ID;
-    root.style.cssText = `position:absolute;left:0;top:0;width:${w}px;height:${h}px;pointer-events:none;z-index:2147483646;font-family:Inter,system-ui,sans-serif;`;
-    doc.documentElement.appendChild(root);
-    const locate = makeLocator(doc);
-    const scale = Math.min(0.6, 5000 / h);
-    const canvas = doc.createElement("canvas");
-    canvas.width = Math.ceil(w * scale);
-    canvas.height = Math.ceil(h * scale);
-    canvas.style.cssText = `position:absolute;left:0;top:0;width:${w}px;height:${h}px;`;
-    root.appendChild(canvas);
+    await settle(doc);
+    freezeLayout(doc);
+    setPrintH(docSize(doc).h);
+  }, []);
 
+  // 2) esticou: confere a altura final (algo pode ter crescido) e libera o desenho
+  useEffect(() => {
+    if (printH === null || ready) return;
+    const id = window.setTimeout(() => {
+      const doc = frame.current?.contentDocument;
+      if (!doc) return;
+      const h = docSize(doc).h;
+      if (h > printH + 2) setPrintH(h);
+      else setReady(true);
+    }, 60);
+    return () => window.clearTimeout(id);
+  }, [printH, ready]);
+
+  // 3) com o print pronto, calcula as camadas a partir dos elementos da página
+  useEffect(() => {
+    if (!ready) return;
+    const doc = frame.current?.contentDocument;
+    if (!doc?.body) return;
+    const locate = makeLocator(doc);
+    const box = (sel: string) => {
+      const el = locate(sel);
+      return el ? boxOf(el) : null;
+    };
     let unplaced = 0;
+    const next: Layer = { heat: [], radius: 30, opacity: 0.85, curves: [], markers: [], ring: null };
+
     if (mode === "clicks") {
-      const pts: HeatPoint[] = [];
       for (const b of report.clickBins) {
-        const el = locate(b.s);
-        const box = el && boxOf(el);
-        if (!box) {
+        const bx = box(b.s);
+        if (!bx) {
           unplaced += b.n;
           continue;
         }
-        pts.push({ x: box.x + ((b.x * 50 + 25) / 1000) * box.w, y: box.y + ((b.y * 50 + 25) / 1000) * box.h, w: b.n });
+        next.heat.push({ x: bx.x + ((b.x * 50 + 25) / 1000) * bx.w, y: bx.y + ((b.y * 50 + 25) / 1000) * bx.h, w: b.n });
       }
-      drawHeat(canvas, pts, { radius: 26, scale });
     } else if (mode === "moves") {
-      const pts: HeatPoint[] = [];
+      next.radius = 42;
+      next.opacity = 0.72;
       for (const b of report.moveBins) {
-        const box = (() => {
-          const el = locate(b.s);
-          return el && boxOf(el);
-        })();
-        if (!box) continue;
-        pts.push({ x: box.x + ((b.gx + 0.5) / 10) * box.w, y: box.y + ((b.gy + 0.5) / 10) * box.h, w: b.n });
+        const bx = box(b.s);
+        if (bx) next.heat.push({ x: bx.x + ((b.gx + 0.5) / 10) * bx.w, y: bx.y + ((b.gy + 0.5) / 10) * bx.h, w: b.n });
       }
-      drawHeat(canvas, pts, { radius: 44, scale, opacity: 0.7 });
-      drawPaths(doc, root, report, locate, w, h);
-    } else {
-      drawScroll(canvas, curve);
-      drawDepthMarkers(doc, root, h, report);
+      Object.assign(next, pathsLayer(report, box));
     }
+    if (highlight) next.ring = box(highlight);
 
-    if (highlight) {
-      const el = locate(highlight);
-      const box = el && boxOf(el);
-      if (box) {
-        const ring = doc.createElement("div");
-        ring.style.cssText = `position:absolute;left:${box.x - 6}px;top:${box.y - 6}px;width:${box.w + 12}px;height:${box.h + 12}px;border:3px solid #6B2BD9;border-radius:12px;box-shadow:0 0 0 6px rgba(107,43,217,.22),0 10px 30px rgba(107,43,217,.35);`;
-        root.appendChild(ring);
-        const win = doc.defaultView;
-        win?.scrollTo({ top: Math.max(0, box.y - (frameH || 600) / 3), behavior: "smooth" });
-      }
-    }
-
+    setLayer(next);
     onStats({ unplaced, sections: detectSections(doc) });
-  }, [mode, report, curve, highlight, onStats, frameH]);
+  }, [ready, mode, report, highlight, onStats]);
 
-  // carregou a cópia: bloqueia navegação/formulários e redesenha quando o layout assentar
-  const onLoad = useCallback(() => {
-    const doc = frame.current?.contentDocument;
-    if (!doc) return;
-    const stop = (e: Event) => e.preventDefault();
-    doc.addEventListener("click", stop, true);
-    doc.addEventListener("submit", stop, true);
-    doc.addEventListener("auxclick", stop, true);
-    setLoaded((n) => n + 1);
-    // imagens e fontes mudam a altura da página: redesenha uma vez quando tudo carregar
-    const imgs = Array.from(doc.images).filter((i) => !i.complete);
-    let pending = imgs.length;
-    const done = () => --pending === 0 && setLoaded((n) => n + 1);
-    imgs.forEach((i) => {
-      i.addEventListener("load", done, { once: true });
-      i.addEventListener("error", done, { once: true });
+  // 4) pinta o canvas por cima do print, na resolução da tela
+  useEffect(() => {
+    const c = heatCanvas.current;
+    if (!c || !layer || !s || !printH || !k) return;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    // teto de pixels: páginas muito longas ficam com um canvas mais leve
+    const scale = Math.min(k * dpr, 9000 / printH);
+    c.width = Math.ceil(s.width * scale);
+    c.height = Math.ceil(printH * scale);
+    if (mode === "scroll") {
+      c.getContext("2d")?.clearRect(0, 0, c.width, c.height);
+      drawScroll(c, curve);
+    } else {
+      drawHeat(c, layer.heat, { radius: layer.radius / k, scale, opacity: layer.opacity });
+    }
+  }, [layer, mode, curve, s, printH, k]);
+
+  // destaque: leva o quadro até o elemento
+  const ring = layer?.ring ?? null;
+  useEffect(() => {
+    if (ring && k) wrap.current?.scrollTo({ top: Math.max(0, ring.y * k - FRAME_H / 3), behavior: "smooth" });
+  }, [ring, k]);
+
+  // dica ao passar o mouse no modo scroll: quantos chegaram até aquela altura
+  const onMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (mode !== "scroll" || !ready || !k || !printH) return;
+    const r = e.currentTarget.getBoundingClientRect();
+    const y = (e.clientY - r.top) / k;
+    setTip({
+      x: e.clientX - r.left,
+      y: e.clientY - r.top,
+      text: `${Math.round(reachAt(curve, (y / printH) * 100) * 100)}% dos visitantes chegaram até aqui`,
     });
-    doc.fonts?.ready.then(() => setLoaded((n) => n + 1)).catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    if (loaded) draw();
-  }, [loaded, draw]);
-
-  // dica ao passar o mouse: no scroll, quantos chegaram até ali
-  useEffect(() => {
-    const doc = frame.current?.contentDocument;
-    if (!doc || !loaded || mode !== "scroll") return;
-    const tip = doc.createElement("div");
-    tip.style.cssText =
-      "position:absolute;left:0;z-index:2147483647;pointer-events:none;display:none;padding:6px 10px;border-radius:999px;background:#140b2e;color:#fff;font:600 13px Inter,system-ui,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.25);white-space:nowrap;";
-    doc.documentElement.appendChild(tip);
-    const { h } = docSize(doc);
-    const move = (e: MouseEvent) => {
-      const y = e.pageY;
-      tip.style.display = "block";
-      tip.style.top = `${y - 34}px`;
-      tip.style.left = `${e.pageX + 14}px`;
-      tip.textContent = `${Math.round(reachAt(curve, (y / h) * 100) * 100)}% dos visitantes chegaram até aqui`;
-    };
-    const leave = () => (tip.style.display = "none");
-    doc.addEventListener("mousemove", move);
-    doc.addEventListener("mouseleave", leave);
-    return () => {
-      doc.removeEventListener("mousemove", move);
-      doc.removeEventListener("mouseleave", leave);
-      tip.remove();
-    };
-  }, [loaded, mode, curve]);
+  };
 
   const DevIcon = s ? DEVICE_ICON[s.device] : Monitor;
+  const H = printH ?? (s?.viewportH || 800);
+  const fold = mode === "scroll" && report.avgViewportH && report.avgDocH ? (report.avgViewportH / report.avgDocH) * H * k : null;
 
   return (
     <div className="flex flex-col gap-2">
-      <div
-        ref={wrap}
-        className="relative overflow-hidden rounded-2xl border border-line bg-bg-sunken"
-        style={{ height: FRAME_H }}
-      >
-        {snap === "loading" && (
-          <div className="absolute inset-0 grid place-items-center">
+      <div className="relative overflow-hidden rounded-2xl border border-line bg-bg-sunken" style={{ height: FRAME_H }}>
+        <div ref={wrap} className="hm-print-scroll absolute inset-0 overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable]">
+          {s && k > 0 && (
+            <div className="relative select-none" style={{ height: H * k }} onMouseMove={onMove} onMouseLeave={() => setTip(null)}>
+              <iframe
+                ref={frame}
+                title="Print da página"
+                sandbox="allow-same-origin"
+                srcDoc={srcDoc}
+                onLoad={onLoad}
+                tabIndex={-1}
+                aria-hidden
+                className={cn(
+                  "pointer-events-none absolute left-0 top-0 origin-top-left border-0 bg-white transition-opacity duration-300",
+                  ready ? "opacity-100" : "opacity-0"
+                )}
+                style={{ width: s.width, height: H, transform: `scale(${k})` }}
+              />
+              {ready && (
+                <div className="pointer-events-none absolute inset-0" aria-hidden>
+                  <canvas ref={heatCanvas} className="absolute left-0 top-0 h-full w-full" />
+                  {layer && layer.curves.length > 0 && (
+                    <svg className="absolute inset-0 h-full w-full overflow-visible" viewBox={`0 0 ${s.width} ${H}`} preserveAspectRatio="none">
+                      <defs>
+                        <linearGradient id="hm-path" x1="0" y1="0" x2="1" y2="1">
+                          <stop offset="0" stopColor="#8B5CF6" />
+                          <stop offset="1" stopColor="#22D3EE" />
+                        </linearGradient>
+                        <filter id="hm-glow" x="-20%" y="-20%" width="140%" height="140%">
+                          <feGaussianBlur stdDeviation="2.5" result="b" />
+                          <feMerge>
+                            <feMergeNode in="b" />
+                            <feMergeNode in="SourceGraphic" />
+                          </feMerge>
+                        </filter>
+                      </defs>
+                      {layer.curves.map((c, i) => (
+                        <path
+                          key={i}
+                          d={c.d}
+                          fill="none"
+                          stroke="url(#hm-path)"
+                          strokeLinecap="round"
+                          strokeWidth={c.width}
+                          opacity={c.opacity}
+                          vectorEffect="non-scaling-stroke"
+                          filter="url(#hm-glow)"
+                        />
+                      ))}
+                    </svg>
+                  )}
+                  {layer?.markers.map((m) => (
+                    <span
+                      key={m.n}
+                      className="absolute grid size-7 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-[2.5px] border-white bg-[#111024] text-[13px] font-extrabold text-white shadow-[0_6px_16px_rgba(0,0,0,.35)]"
+                      style={{ left: m.x * k, top: m.y * k }}
+                    >
+                      {m.n}
+                    </span>
+                  ))}
+                  {mode === "scroll" &&
+                    [0, 25, 50, 75, 100].map((p) => {
+                      const y = (p / 100) * H * k;
+                      return (
+                        <div key={p}>
+                          {p > 0 && p < 100 && <div className="absolute inset-x-0 border-t-2 border-dashed border-[rgba(17,16,36,.45)]" style={{ top: y }} />}
+                          <span
+                            className="absolute left-2.5 rounded-full bg-[#111024] px-2.5 py-1 text-xs font-bold text-white shadow-[0_4px_12px_rgba(0,0,0,.3)]"
+                            style={{ top: p === 0 ? 10 : p === 100 ? y - 34 : y - 13 }}
+                          >
+                            {p}%
+                          </span>
+                        </div>
+                      );
+                    })}
+                  {fold !== null && fold > 40 && fold < H * k - 40 && (
+                    <div className="absolute inset-x-0 border-t-2 border-white/90" style={{ top: fold }}>
+                      <span className="absolute -top-3.5 right-3 rounded-full bg-white px-2.5 py-0.5 text-[11px] font-semibold text-[#111024] shadow">
+                        Dobra média: o que aparece sem rolar
+                      </span>
+                    </div>
+                  )}
+                  {ring && (
+                    <div
+                      className="absolute rounded-xl border-[3px] border-[#6B2BD9] shadow-[0_0_0_5px_rgba(107,43,217,.22),0_10px_30px_rgba(107,43,217,.35)] animate-[luumuFade_.2s_ease-out]"
+                      style={{ left: ring.x * k - 5, top: ring.y * k - 5, width: ring.w * k + 10, height: ring.h * k + 10 }}
+                    />
+                  )}
+                </div>
+              )}
+              {tip && (
+                <div
+                  className="pointer-events-none absolute z-10 whitespace-nowrap rounded-full bg-[#140b2e] px-3 py-1.5 text-[13px] font-semibold text-white shadow-lg"
+                  style={{ left: Math.min(tip.x + 14, width - 300), top: tip.y - 36 }}
+                >
+                  {tip.text}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        {(snap === "loading" || (s && !ready)) && (
+          <div className="absolute inset-0 grid place-items-center bg-bg-sunken">
             <div className="flex flex-col items-center gap-3 text-sm text-fg-mut">
-              <Loader2 className="size-6 animate-spin text-accent" /> Montando o mapa da página…
+              <Loader2 className="size-6 animate-spin text-accent" /> Montando o print da página…
             </div>
           </div>
         )}
         {snap === "missing" && <MissingSnapshot mode={mode} />}
-        {s && k > 0 && (
-          <iframe
-            ref={frame}
-            title="Cópia da página com o mapa de calor"
-            sandbox="allow-same-origin"
-            srcDoc={srcDoc}
-            onLoad={onLoad}
-            className="absolute left-0 top-0 origin-top-left border-0 bg-white"
-            style={{ width: s.width, height: frameH, transform: `scale(${k})` }}
-          />
-        )}
-        {mode === "clicks" && s && <Legend />}
+        {mode === "clicks" && s && ready && <Legend />}
       </div>
       {s && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-xs text-fg-mut">
@@ -235,16 +324,49 @@ export function PageMap({
           <span className="inline-flex items-center gap-1.5">
             <DevIcon className="size-3.5" /> {DEVICE_NAME[s.device]} · {s.width}px
           </span>
-          <span>Role dentro do mapa para ver a página inteira.</span>
+          <span>Role o quadro para ver a página inteira.</span>
         </div>
       )}
     </div>
   );
 }
 
+/** Curvas entre os elementos dos caminhos mais comuns + marcadores numerados (até 6). */
+function pathsLayer(report: HeatmapReport, box: (sel: string) => Box | null): Pick<Layer, "curves" | "markers"> {
+  const top = report.paths.slice(0, 5);
+  const curves: Layer["curves"] = [];
+  const order: string[] = [];
+  if (!top.length) return { curves, markers: [] };
+  const max = top[0].n;
+  const center = (sel: string) => {
+    const b = box(sel);
+    return b ? { x: b.x + b.w / 2, y: b.y + b.h / 2 } : null;
+  };
+  for (const p of top) {
+    const steps = splitPath(p.key);
+    const pts = steps.map(center);
+    for (let i = 0; i < steps.length - 1; i++) {
+      const a = pts[i];
+      const b = pts[i + 1];
+      if (!a || !b) continue;
+      const dx = b.x - a.x;
+      // arco por cima, sem sair do topo da página
+      const cy = Math.max(12, Math.min(a.y, b.y) - Math.min(160, Math.abs(dx) * 0.3 + 40));
+      curves.push({
+        d: `M${a.x},${a.y} C${a.x + dx * 0.25},${cy} ${b.x - dx * 0.25},${cy} ${b.x},${b.y}`,
+        width: 2 + 3 * (p.n / max),
+        opacity: 0.55 + 0.45 * (p.n / max),
+      });
+    }
+    for (const sel of steps) if (!order.includes(sel) && center(sel)) order.push(sel);
+  }
+  const markers = order.slice(0, 6).map((sel, i) => ({ ...center(sel)!, n: i + 1 }));
+  return { curves, markers };
+}
+
 function Legend() {
   return (
-    <div className="pointer-events-none absolute bottom-3 right-3 flex items-center gap-2 rounded-full bg-[rgba(20,11,46,.78)] px-3 py-1.5 text-[11px] font-semibold text-white backdrop-blur">
+    <div className="pointer-events-none absolute bottom-3 right-5 flex items-center gap-2 rounded-full bg-[rgba(20,11,46,.78)] px-3 py-1.5 text-[11px] font-semibold text-white backdrop-blur">
       Menos
       <span className="h-2 w-24 rounded-full" style={{ background: "linear-gradient(90deg,#283cff,#00c8ff,#28dc5a,#ffdc00,#ff2828)" }} />
       Mais
@@ -267,91 +389,4 @@ function MissingSnapshot({ mode }: { mode: HeatmapMode }) {
       </p>
     </div>
   );
-}
-
-/* ---------- caminhos (modo movimento) ---------- */
-
-const SVG_NS = "http://www.w3.org/2000/svg";
-
-function drawPaths(doc: Document, root: HTMLElement, report: HeatmapReport, locate: (s: string) => Element | null, w: number, h: number) {
-  const top = report.paths.slice(0, 5);
-  if (!top.length) return;
-  const svg = doc.createElementNS(SVG_NS, "svg");
-  svg.setAttribute("width", String(w));
-  svg.setAttribute("height", String(h));
-  svg.setAttribute("style", "position:absolute;left:0;top:0;overflow:visible;");
-  const defs = doc.createElementNS(SVG_NS, "defs");
-  defs.innerHTML =
-    '<linearGradient id="lhg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8B5CF6"/><stop offset="1" stop-color="#22D3EE"/></linearGradient><filter id="lhglow" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>';
-  svg.appendChild(defs);
-  root.appendChild(svg);
-
-  const max = top[0].n;
-  const order: string[] = [];
-  const center = (sel: string) => {
-    const el = locate(sel);
-    const b = el && boxOf(el);
-    return b ? { x: b.x + b.w / 2, y: b.y + b.h / 2 } : null;
-  };
-  for (const p of top) {
-    const steps = splitPath(p.key);
-    const pts = steps.map(center);
-    for (let i = 0; i < steps.length - 1; i++) {
-      const a = pts[i];
-      const b = pts[i + 1];
-      if (!a || !b) continue;
-      const dx = b.x - a.x;
-      const lift = Math.min(160, Math.abs(dx) * 0.35 + 40);
-      const path = doc.createElementNS(SVG_NS, "path");
-      path.setAttribute("d", `M${a.x},${a.y} C${a.x + dx * 0.25},${a.y - lift} ${b.x - dx * 0.25},${b.y - lift} ${b.x},${b.y}`);
-      path.setAttribute("fill", "none");
-      path.setAttribute("stroke", "url(#lhg)");
-      path.setAttribute("stroke-linecap", "round");
-      path.setAttribute("stroke-width", String(2 + 3 * (p.n / max)));
-      path.setAttribute("opacity", String(0.55 + 0.45 * (p.n / max)));
-      path.setAttribute("filter", "url(#lhglow)");
-      svg.appendChild(path);
-    }
-    for (const s of steps) if (!order.includes(s) && center(s)) order.push(s);
-  }
-  // marcadores numerados nos elementos dos caminhos (até 6)
-  order.slice(0, 6).forEach((sel, i) => {
-    const c = center(sel);
-    if (!c) return;
-    const m = doc.createElement("div");
-    m.textContent = String(i + 1);
-    m.style.cssText = `position:absolute;left:${c.x - 15}px;top:${c.y - 15}px;width:30px;height:30px;border-radius:50%;background:#111024;color:#fff;font:800 14px Inter,system-ui,sans-serif;display:grid;place-items:center;border:3px solid #fff;box-shadow:0 6px 16px rgba(0,0,0,.35);`;
-    root.appendChild(m);
-  });
-}
-
-/* ---------- marcadores de profundidade (modo scroll) ---------- */
-
-function drawDepthMarkers(doc: Document, root: HTMLElement, h: number, report: HeatmapReport) {
-  for (const p of [0, 25, 50, 75, 100]) {
-    const y = Math.min(h - 26, (p / 100) * h);
-    if (p > 0 && p < 100) {
-      const line = doc.createElement("div");
-      line.style.cssText = `position:absolute;left:0;right:0;top:${y}px;border-top:2px dashed rgba(17,16,36,.45);`;
-      root.appendChild(line);
-    }
-    const pill = doc.createElement("div");
-    pill.textContent = `${p}%`;
-    pill.style.cssText = `position:absolute;left:10px;top:${p === 0 ? 10 : y - 13}px;padding:4px 10px;border-radius:999px;background:#111024;color:#fff;font:700 13px Inter,system-ui,sans-serif;box-shadow:0 4px 12px rgba(0,0,0,.3);`;
-    root.appendChild(pill);
-  }
-  // dobra média: o que aparece sem rolar
-  if (report.avgViewportH && report.avgDocH) {
-    const y = (report.avgViewportH / report.avgDocH) * h;
-    if (y > 40 && y < h - 40) {
-      const fold = doc.createElement("div");
-      fold.style.cssText = `position:absolute;left:0;right:0;top:${y}px;border-top:2px solid rgba(255,255,255,.9);`;
-      const tag = doc.createElement("span");
-      tag.textContent = "Dobra média: o que aparece sem rolar";
-      tag.style.cssText =
-        "position:absolute;right:12px;top:-14px;padding:3px 10px;border-radius:999px;background:#fff;color:#111024;font:600 12px Inter,system-ui,sans-serif;box-shadow:0 4px 12px rgba(0,0,0,.2);";
-      fold.appendChild(tag);
-      root.appendChild(fold);
-    }
-  }
 }

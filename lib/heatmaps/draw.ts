@@ -22,12 +22,56 @@ export function sanitizeSnapshot(html: string): string {
   const bases = Array.from(doc.querySelectorAll("base"));
   bases.slice(1).forEach((b) => b.remove());
   if (bases[0] && !/^https?:\/\//i.test(bases[0].getAttribute("href") ?? "")) bases[0].remove();
+  // tudo carrega de uma vez: o print é da página inteira, não só do que estava na tela
+  doc.querySelectorAll("img[loading]").forEach((img) => img.setAttribute("loading", "eager"));
   // animações terminam na hora (no estado final) e nada fica "piscando" sob o mapa
   const st = doc.createElement("style");
   st.textContent =
-    "*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;animation-iteration-count:1!important;transition:none!important;caret-color:transparent!important}html{scroll-behavior:auto!important}";
+    "*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;animation-iteration-count:1!important;transition:none!important;caret-color:transparent!important}html{scroll-behavior:auto!important;scrollbar-width:none!important;overflow:hidden!important}::-webkit-scrollbar{display:none!important}";
   doc.head.appendChild(st);
   return `<!DOCTYPE html>${doc.documentElement.outerHTML}`;
+}
+
+/** Espera imagens e fontes da cópia (com teto): o print só é montado com a página pronta. */
+export function settle(doc: Document, timeoutMs = 3500): Promise<void> {
+  const imgs = Array.from(doc.images).filter((i) => !i.complete);
+  const loads = imgs.map((i) => new Promise<void>((r) => {
+    i.addEventListener("load", () => r(), { once: true });
+    i.addEventListener("error", () => r(), { once: true });
+  }));
+  const fonts = doc.fonts?.ready.then(() => undefined).catch(() => undefined) ?? Promise.resolve();
+  return Promise.race([Promise.all([...loads, fonts]).then(() => undefined), new Promise<void>((r) => setTimeout(r, timeoutMs))]);
+}
+
+/**
+ * Transforma a página num "print" de página inteira. Ela foi carregada na altura de tela de
+ * quem visitou; aqui cada elemento é travado no tamanho que tem agora, para que esticar o
+ * iframe até a altura total não mude o layout (seções de 100vh não explodem). Elementos
+ * fixos (cabeçalho, banner de cookies, chat) ficam onde estavam no topo, como num print.
+ * Lê tudo antes de escrever, para não forçar um layout por elemento.
+ */
+export function freezeLayout(doc: Document) {
+  const win = doc.defaultView;
+  if (!win || !doc.body) return;
+  const scrollY = win.scrollY;
+  const plan: { el: HTMLElement; css: string }[] = [];
+  for (const el of Array.from(doc.body.querySelectorAll<HTMLElement>("*"))) {
+    if (el.id === "__luumu_hm") continue;
+    const cs = win.getComputedStyle(el);
+    if (cs.display === "none" || cs.display === "contents" || cs.display === "inline") continue;
+    const h = parseFloat(cs.height);
+    let css = Number.isFinite(h) ? `height:${h}px!important;min-height:0!important;max-height:none!important;` : "";
+    if (cs.position === "fixed") {
+      const r = el.getBoundingClientRect();
+      css += `position:absolute!important;top:${r.top + scrollY}px!important;left:${r.left}px!important;right:auto!important;bottom:auto!important;width:${r.width}px!important;`;
+    } else if (cs.position === "sticky") {
+      css += "position:relative!important;top:auto!important;bottom:auto!important;";
+    }
+    if (css) plan.push({ el, css });
+  }
+  for (const { el, css } of plan) el.style.cssText += `;${css}`;
+  doc.documentElement.style.cssText += ";height:auto!important;min-height:0!important;";
+  doc.body.style.cssText += ";min-height:0!important;";
 }
 
 export interface Box {
@@ -113,19 +157,18 @@ export function drawHeat(canvas: HTMLCanvasElement, points: HeatPoint[], opts: {
   ctx.putImageData(img, 0, 0);
 }
 
-/** Faixas de rolagem: vermelho onde todos chegam, azul onde quase ninguém. */
-export function drawScroll(canvas: HTMLCanvasElement, curve: number[]) {
+/** Faixas de rolagem: vermelho onde todos chegam, azul onde quase ninguém (gradiente contínuo). */
+export function drawScroll(canvas: HTMLCanvasElement, curve: number[], alpha = 0.42) {
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
   const pal = heatPalette();
-  const h = canvas.height;
-  const step = 3;
-  for (let y = 0; y < h; y += step) {
-    const reach = reachAt(curve, (y / h) * 100);
-    const k = Math.round(reach * 255) * 4;
-    ctx.fillStyle = `rgba(${pal[k]},${pal[k + 1]},${pal[k + 2]},0.5)`;
-    ctx.fillRect(0, y, canvas.width, step + 0.5);
+  const g = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  for (let p = 0; p <= 100; p += 2) {
+    const k = Math.round(reachAt(curve, p) * 255) * 4;
+    g.addColorStop(p / 100, `rgba(${pal[k]},${pal[k + 1]},${pal[k + 2]},${alpha})`);
   }
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
 }
 
 /**
