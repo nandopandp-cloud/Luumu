@@ -46,7 +46,7 @@ export const NAV: NavGroup[] = [
   {
     title: "Behavior",
     items: [
-      { href: "/heatmaps", label: "Heatmaps", icon: Flame, locked: locked("/heatmaps") },
+      { href: "/heatmaps", label: "Heatmaps", icon: Flame, badge: "Novo" },
       { href: "/replay", label: "Session Replay", icon: PlayCircle, locked: locked("/replay") },
     ],
   },

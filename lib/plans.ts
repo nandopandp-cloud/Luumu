@@ -40,10 +40,9 @@ export const PLANS: Plan[] = [
     name: "Free",
     tagline: "Para experimentar o Luumu.",
     monthly: 0,
-    limits: { responses: 100, sessions: 3_000, activeSurveys: 1, members: 1, retentionDays: 30 },
+    limits: { responses: 100, sessions: 0, activeSurveys: 1, members: 1, retentionDays: 30 },
     features: [
       { label: "100 respostas/mês", included: true },
-      { label: "3.000 sessões analisadas/mês", included: true, soon: true },
       { label: "1 pesquisa ativa", included: true },
       { label: "Dashboards básicos", included: true },
       { label: "Retenção de 30 dias", included: true },
@@ -62,9 +61,10 @@ export const PLANS: Plan[] = [
     limits: { responses: 1_000, sessions: 10_000, activeSurveys: 3, members: 3, retentionDays: 90 },
     features: [
       { label: "1.000 respostas/mês", included: true },
-      { label: "10.000 sessões analisadas/mês", included: true, soon: true },
+      { label: "10.000 sessões analisadas/mês", included: true },
       { label: "3 pesquisas ativas", included: true },
-      { label: "Heatmaps e Session Replay", included: true, soon: true },
+      { label: "Heatmaps", included: true },
+      { label: "Session Replay", included: true, soon: true },
       { label: "Insights IA (básico)", included: true },
       { label: "Product Tours (básico)", included: true },
       { label: "3 membros", included: true },
@@ -81,9 +81,10 @@ export const PLANS: Plan[] = [
     limits: { responses: 10_000, sessions: 50_000, activeSurveys: UNLIMITED, members: 10, retentionDays: 365 },
     features: [
       { label: "10.000 respostas/mês", included: true },
-      { label: "50.000 sessões analisadas/mês", included: true, soon: true },
+      { label: "50.000 sessões analisadas/mês", included: true },
       { label: "Pesquisas ilimitadas", included: true },
-      { label: "Heatmaps e Session Replay", included: true, soon: true },
+      { label: "Heatmaps", included: true },
+      { label: "Session Replay", included: true, soon: true },
       { label: "Insights IA (completo)", included: true },
       { label: "Product Tours", included: true },
       { label: "10 membros", included: true },
@@ -101,9 +102,10 @@ export const PLANS: Plan[] = [
     limits: { responses: 80_000, sessions: 200_000, activeSurveys: UNLIMITED, members: 25, retentionDays: 730 },
     features: [
       { label: "80.000 respostas/mês", included: true },
-      { label: "200.000 sessões analisadas/mês", included: true, soon: true },
+      { label: "200.000 sessões analisadas/mês", included: true },
       { label: "Pesquisas ilimitadas", included: true },
-      { label: "Heatmaps e Session Replay", included: true, soon: true },
+      { label: "Heatmaps", included: true },
+      { label: "Session Replay", included: true, soon: true },
       { label: "Insights IA (avançado)", included: true },
       { label: "Product Tours", included: true },
       { label: "25 membros", included: true },
@@ -123,7 +125,8 @@ export const PLANS: Plan[] = [
     features: [
       { label: "Volume personalizado", included: true },
       { label: "Pesquisas ilimitadas", included: true },
-      { label: "Heatmaps e Session Replay", included: true, soon: true },
+      { label: "Heatmaps", included: true },
+      { label: "Session Replay", included: true, soon: true },
       { label: "Insights IA (customizado)", included: true },
       { label: "Product Tours", included: true },
       { label: "Membros ilimitados", included: true },
@@ -139,6 +142,11 @@ export const PLANS: Plan[] = [
 ];
 
 export const PLAN_BY_ID = new Map(PLANS.map((p) => [p.id, p]));
+
+/** O plano inclui heatmaps? (mesma regra da tabela de comparação) */
+export function planAllowsHeatmaps(plan: Plan): boolean {
+  return plan.limits.sessions > 0;
+}
 
 /** Plano gravado no workspace → plano do catálogo (valores antigos/desconhecidos caem no Growth). */
 export function planOf(raw: string | null | undefined): Plan {
@@ -198,9 +206,9 @@ const row = (label: string, hint: string, v: CellValue[], opts: { soon?: boolean
 
 export const COMPARE_ROWS: CompareRow[] = [
   row("Respostas/mês", "Respostas de pesquisa recebidas por mês, somando todos os projetos.", ["100", "1.000", "10.000", "80.000", "Personalizado"]),
-  row("Sessões analisadas/mês", "Visitas analisadas por heatmaps e session replay.", ["3.000", "10.000", "50.000", "200.000", "Personalizado"], { soon: true }),
+  row("Sessões analisadas/mês", "Sessões (visitas ao seu produto) registradas pelos heatmaps.", ["—", "10.000", "50.000", "200.000", "Personalizado"]),
   row("Pesquisas ativas", "Pesquisas no ar ao mesmo tempo.", ["1", "3", "Ilimitadas", "Ilimitadas", "Ilimitadas"]),
-  row("Heatmaps", "Mapas de calor de cliques e rolagem.", [false, true, true, true, true], { soon: true }),
+  row("Heatmaps", "Mapas de cliques, movimento e rolagem das suas páginas.", [false, true, true, true, true]),
   row("Session Replay", "Reprodução das sessões dos usuários.", [false, true, true, true, true], { soon: true }),
   row("Insights IA", "Temas, recomendações e conversa com seus dados.", [false, "Básico", "Completo", "Avançado", "Customizado"]),
   row("Product Tours", "Tours guiados criados sem código.", [false, "Básico", true, true, true]),
@@ -228,7 +236,7 @@ export const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "Como são contadas as respostas e sessões?",
-    a: "Cada envio de pesquisa conta como uma resposta, somando todos os projetos do workspace no mês do calendário. Sessões contam visitas analisadas por heatmaps e replay, que chegam em breve.",
+    a: "Cada envio de pesquisa conta como uma resposta, somando todos os projetos do workspace no mês do calendário. Sessões contam as visitas registradas pelos heatmaps: uma pessoa navegando pelo seu produto é uma sessão, mesmo passando por várias páginas.",
   },
   {
     q: "Os dados ficam seguros?",

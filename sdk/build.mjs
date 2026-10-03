@@ -6,6 +6,7 @@ import { readFileSync, writeFileSync } from "node:fs";
   Compila os bundles do SDK (IIFE minificado, sem dependências):
    - public/sdk-tours.js    runtime dos tours (só quando há tour elegível)
    - public/sdk-builder.js  overlay do builder (só na aba do administrador)
+   - public/sdk-heatmaps.js gravador de heatmaps (só em projetos com a coleta ativa)
    - public/sdk.js          core: pesquisas, eventos e a ponte dos tours (carregado em toda página)
 
   Versão dos bundles sob demanda = hash do CONTEÚDO deles, gravado em
@@ -18,6 +19,7 @@ const common = { bundle: true, minify: true, format: "iife", target: ["es2018"],
 const lazy = [
   ["sdk/tours/runtime.ts", "public/sdk-tours.js"],
   ["sdk/builder/builder.ts", "public/sdk-builder.js"],
+  ["sdk/heatmaps/recorder.ts", "public/sdk-heatmaps.js"],
 ];
 const lazyResults = await Promise.all(lazy.map(([entry, outfile]) => build({ ...common, entryPoints: [entry], outfile })));
 
@@ -26,7 +28,7 @@ for (const [, outfile] of lazy) hash.update(readFileSync(outfile));
 const VERSION = hash.digest("hex").slice(0, 10);
 writeFileSync(
   "lib/tours/sdk-version.ts",
-  `// Gerado por sdk/build.mjs — não editar. Hash do conteúdo de sdk-tours.js + sdk-builder.js.\nexport const SDK_BUNDLE_VERSION = "${VERSION}";\n`
+  `// Gerado por sdk/build.mjs — não editar. Hash do conteúdo de sdk-tours.js + sdk-builder.js + sdk-heatmaps.js.\nexport const SDK_BUNDLE_VERSION = "${VERSION}";\n`
 );
 
 const core = await build({

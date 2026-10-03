@@ -522,6 +522,73 @@ export const planRequests = pgTable(
 );
 
 export type PlanRequest = typeof planRequests.$inferSelect;
+
+/**
+ * Coleta de heatmaps por projeto. Sem linha = desligada: o SDK é atualizado em todos os sites
+ * dos clientes de uma vez, então a coleta de cliques/movimento só começa quando alguém ativa.
+ * (Tabela própria, e não coluna em `projects`: sem a migração aplicada, só os heatmaps param.)
+ */
+export const heatmapSettings = pgTable("heatmap_settings", {
+  projectId: text("project_id").primaryKey().references(() => projects.id, { onDelete: "cascade" }),
+  enabled: boolean("enabled").notNull().default(false),
+  updatedBy: text("updated_by").references(() => users.id, { onDelete: "set null" }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Uma visita a uma página com heatmap ativo (enviada pelo SDK ao sair da página).
+ * Cliques e movimento ficam ancorados em elementos (seletor + posição relativa); ver
+ * lib/heatmaps/core.ts. A agregação é feita no banco (jsonb), por página e período.
+ */
+export const heatmapPageviews = pgTable(
+  "heatmap_pageviews",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+    projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    host: text("host").notNull().default(""),
+    path: text("path").notNull(), // rota normalizada ("home", "cursos/:id")
+    device: text("device").notNull(), // desktop | tablet | mobile
+    sessionId: text("session_id").notNull(),
+    viewportW: integer("viewport_w").notNull().default(0),
+    viewportH: integer("viewport_h").notNull().default(0),
+    docH: integer("doc_h").notNull().default(0),
+    durationMs: integer("duration_ms").notNull().default(0),
+    maxScroll: integer("max_scroll").notNull().default(0), // 0–100
+    maxMove: integer("max_move").notNull().default(0), // 0–100
+    clicks: jsonb("clicks").notNull().default([]), // [{ s, x, y }]
+    moves: jsonb("moves").notNull().default({}), // { "sel|gx|gy": n }
+    hovers: jsonb("hovers").notNull().default({}), // { sel: ms }
+    labels: jsonb("labels").notNull().default({}), // { sel: rótulo }
+    clickPath: text("click_path"), // "a ⟶ b ⟶ c" (null com menos de 2 cliques)
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("heatmap_pv_page_idx").on(t.projectId, t.host, t.path, t.createdAt),
+    index("heatmap_pv_ws_idx").on(t.workspaceId, t.createdAt),
+  ]
+);
+
+/** Cópia da página (HTML sem scripts, com dados mascarados), gzip em base64: o fundo do mapa. */
+export const heatmapSnapshots = pgTable(
+  "heatmap_snapshots",
+  {
+    id: text("id").primaryKey(),
+    projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    host: text("host").notNull().default(""),
+    path: text("path").notNull(),
+    device: text("device").notNull(),
+    width: integer("width").notNull(),
+    height: integer("height").notNull(),
+    viewportH: integer("viewport_h").notNull().default(0),
+    html: text("html").notNull(), // gzip + base64
+    bytes: integer("bytes").notNull().default(0), // tamanho original
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("heatmap_snap_page_uq").on(t.projectId, t.host, t.path, t.device)]
+);
+
+export type HeatmapPageview = typeof heatmapPageviews.$inferSelect;
 export type Workspace = typeof workspaces.$inferSelect;
 export type Survey = typeof surveys.$inferSelect;
 export type ScheduledReport = typeof scheduledReports.$inferSelect;

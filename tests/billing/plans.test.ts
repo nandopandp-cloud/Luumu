@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { annualTotal, COMPARE_ROWS, formatLimit, monthlyPrice, monthStart, PLAN_IDS, PLANS, planOf } from "../../lib/plans";
+import { annualTotal, COMPARE_ROWS, formatLimit, monthlyPrice, monthStart, PLAN_IDS, PLANS, planAllowsHeatmaps, planOf } from "../../lib/plans";
 
 test("catálogo segue a referência: 5 planos, Growth popular, Enterprise sob consulta", () => {
   assert.deepEqual(PLANS.map((p) => p.id), [...PLAN_IDS]);
@@ -35,12 +35,19 @@ test("limites batem com os recursos exibidos e a tabela tem valor para todo plan
   assert.equal(formatLimit(Infinity), "Ilimitado");
 });
 
+test("heatmaps já existem: sem selo, e o Free não os inclui", () => {
+  assert.notEqual(COMPARE_ROWS.find((r) => r.label === "Heatmaps")?.soon, true);
+  assert.equal(planAllowsHeatmaps(planOf("free")), false);
+  assert.equal(planAllowsHeatmaps(planOf("starter")), true);
+  assert.equal(planAllowsHeatmaps(planOf("enterprise")), true);
+});
+
 test("recurso que ainda não existe é marcado como Em breve", () => {
-  for (const label of ["Heatmaps", "Session Replay", "API e Webhooks", "SSO/SAML", "Sessões analisadas/mês"]) {
+  for (const label of ["Session Replay", "API e Webhooks", "SSO/SAML"]) {
     assert.equal(COMPARE_ROWS.find((r) => r.label === label)?.soon, true, label);
   }
   for (const p of PLANS) {
-    for (const f of p.features.filter((f) => f.included && /Heatmaps|API|SSO|sessões/.test(f.label))) assert.equal(f.soon, true, `${p.id}: ${f.label}`);
+    for (const f of p.features.filter((f) => f.included && /Replay|API|SSO/.test(f.label))) assert.equal(f.soon, true, `${p.id}: ${f.label}`);
   }
 });
 

@@ -1,0 +1,100 @@
+/*
+  Gravador de heatmaps (sdk/heatmaps/recorder.ts) num navegador simulado (happy-dom): cliques
+  ancorados no elemento, seletor que acha o elemento de novo, envio por sendBeacon e a cópia
+  da página sem scripts, sem valores de campos e com dados pessoais mascarados.
+*/
+import { test, before } from "node:test";
+import assert from "node:assert/strict";
+import { installDom, sleep } from "../tours/support/dom-env";
+
+installDom("https://app.cliente.com/cursos/42");
+const g = globalThis as Record<string, unknown>;
+const beacons: { url: string; body: string }[] = [];
+let rec: { boot: (c: object) => void; route: () => void };
+let selectorOf: (el: Element) => string;
+let serializePage: (d?: Document) => string;
+
+before(async () => {
+  document.body.innerHTML = `
+    <header><nav><a href="/" id="logo">Luumu</a><a href="/precos">Preços</a></nav></header>
+    <main>
+      <h1>Bem-vindo, ana@cliente.com</h1>
+      <p>CPF 123.456.789-00</p>
+      <div data-luumu-mask><span>Saldo R$ 1.234</span></div>
+      <form><input name="email" value="ana@cliente.com" /><input type="password" value="segredo" /><textarea>texto livre</textarea>
+      <button type="submit" data-rect="200,300,160,40"><span class="ico">→</span> Começar agora</button></form>
+      <script>alert(1)</script>
+      <img src="/logo.png" onerror="alert(2)" loading="lazy" />
+    </main>`;
+  Object.defineProperty(navigator, "sendBeacon", {
+    configurable: true,
+    value: (url: string, blob: Blob) => {
+      void blob.text().then((body) => beacons.push({ url, body }));
+      return true;
+    },
+  });
+  g.fetch = async () => new Response(JSON.stringify({ need: false }), { status: 200 });
+  await import("../../sdk/heatmaps/recorder");
+  ({ selectorOf, serializePage } = await import("../../sdk/heatmaps/recorder"));
+  rec = (window as unknown as { __luumuHeatmaps: typeof rec }).__luumuHeatmaps;
+});
+
+test("seletor acha o mesmo elemento de novo (nth-of-type e id estável)", () => {
+  const btn = document.querySelector("button")!;
+  const links = document.querySelectorAll("nav a");
+  for (const el of [btn, links[0], links[1]]) {
+    const sel = selectorOf(el);
+    assert.equal(document.querySelector(sel), el, sel);
+  }
+  assert.equal(selectorOf(links[0]), "#logo");
+});
+
+test("clique no ícone conta no botão, com a posição dentro dele; envio ao ocultar a aba", async () => {
+  let path = "cursos/:id";
+  rec.boot({ api: "https://luumu.test/api/v1", key: "pk_test", host: "app.cliente.com", device: "desktop", path: () => path });
+  window.dispatchEvent(new Event("load"));
+  await sleep(10);
+
+  const icon = document.querySelector("button .ico")!;
+  // clique a 25% da largura e no meio da altura do botão (200,300,160x40)
+  icon.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 240, clientY: 320 }));
+  document.querySelector("nav a:nth-of-type(2)")!.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 110, clientY: 110 }));
+  await sleep(1100); // ao menos 1s de tempo ativo
+
+  Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
+  document.dispatchEvent(new Event("visibilitychange"));
+  await sleep(20);
+
+  assert.equal(beacons.length, 1);
+  assert.equal(beacons[0].url, "https://luumu.test/api/v1/heatmaps/collect");
+  const p = JSON.parse(beacons[0].body);
+  assert.equal(p.path, "cursos/:id");
+  assert.equal(p.c.length, 2);
+  const [sel, x, y] = p.c[0];
+  assert.equal(document.querySelector(sel), document.querySelector("button"));
+  assert.deepEqual([x, y], [250, 500]);
+  assert.equal(p.p.length, 2); // caminho: botão ⟶ Preços
+  assert.match(p.l[sel], /Começar agora/);
+  assert.ok(p.dur >= 1000);
+  assert.ok(!JSON.stringify(p).includes("segredo"));
+
+  // troca de rota numa SPA: a próxima visita é outra
+  Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
+  path = "precos";
+  rec.route();
+});
+
+test("cópia da página: sem scripts, sem valores digitados, dados pessoais mascarados", () => {
+  const html = serializePage();
+  assert.match(html, /^<!DOCTYPE html>/);
+  assert.ok(!/<script/i.test(html), "script removido");
+  assert.ok(!/onerror/i.test(html), "handler removido");
+  assert.ok(!html.includes("segredo") && !html.includes('value="ana@cliente.com"'), "valores de campo removidos");
+  assert.ok(!html.includes("texto livre"), "textarea esvaziada");
+  assert.ok(!html.includes("ana@cliente.com"), "e-mail no texto mascarado");
+  assert.ok(!html.includes("123.456.789-00"), "CPF mascarado");
+  assert.ok(!html.includes("1.234") && html.includes("•••••"), "área data-luumu-mask mascarada");
+  assert.match(html, /<head><base href="https:\/\/app\.cliente\.com\//); // URLs relativas valem a partir do site
+  assert.match(html, /loading="eager"/);
+  assert.match(html, /Começar agora/); // o resto do conteúdo continua
+});

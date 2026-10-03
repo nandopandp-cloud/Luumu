@@ -1,9 +1,10 @@
-import { Flame, Layers, MessageSquareHeart, Route, Sparkles } from "lucide-react";
+import { Flame, Layers, MessageSquareHeart, PlayCircle, Route, Sparkles } from "lucide-react";
 import { Mascot } from "@/components/ui/Mascot";
 
 const CHIPS = [
   { icon: MessageSquareHeart, label: "Pesquisas (CSAT, NPS, CES e mais)" },
-  { icon: Flame, label: "Heatmaps e Session Replay", soon: true },
+  { icon: Flame, label: "Heatmaps" },
+  { icon: PlayCircle, label: "Session Replay", soon: true },
   { icon: Sparkles, label: "Insights de IA" },
   { icon: Route, label: "Product Tours" },
   { icon: Layers, label: "Tudo em uma única plataforma" },

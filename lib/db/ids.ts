@@ -26,3 +26,5 @@ export const planRequestId = () => newId("plr");
 // token secreto e longo para links públicos (não segue o padrão de ids do app)
 const nanoToken = customAlphabet("23456789abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ", 32);
 export const publicReportToken = () => nanoToken();
+export const heatmapPageviewId = () => newId("hpv");
+export const heatmapSnapshotId = () => newId("hsn");

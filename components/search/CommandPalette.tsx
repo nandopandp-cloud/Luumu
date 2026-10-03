@@ -12,6 +12,7 @@ import {
   CornerDownLeft,
   Crown,
   FileText,
+  Flame,
   LayoutDashboard,
   Loader2,
   MessageSquare,
@@ -103,6 +104,7 @@ const COMMAND_ICON: Record<string, LucideIcon> = {
   user: UserRound,
   users: Users,
   crown: Crown,
+  flame: Flame,
 };
 
 const RECENT_ICON: Record<RecentEntry["kind"], LucideIcon> = {

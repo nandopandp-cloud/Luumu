@@ -97,6 +97,7 @@ export const COMMANDS: CommandItem[] = [
   { id: "p-dashboard", kind: "page", title: "Dashboard", subtitle: "Visão geral de notas e respostas", href: "/dashboard", keywords: ["inicio", "home", "visao geral"], icon: "dashboard" },
   { id: "p-surveys", kind: "page", title: "Pesquisas", subtitle: "Todas as pesquisas do projeto", href: "/surveys", keywords: ["survey", "formulario"], icon: "surveys" },
   { id: "p-responses", kind: "page", title: "Respostas", subtitle: "Feed de respostas e comentários", href: "/responses", keywords: ["feedback", "comentarios"], icon: "responses" },
+  { id: "p-heatmaps", kind: "page", title: "Heatmaps", subtitle: "Cliques, movimento e rolagem das suas páginas", href: "/heatmaps", keywords: ["mapa de calor", "cliques", "scroll", "rolagem", "comportamento"], icon: "flame" },
   { id: "p-tours", kind: "page", title: "Tours", subtitle: "Product tours e onboarding", href: "/tours", keywords: ["onboarding", "guia"], icon: "route" },
   { id: "p-insights", kind: "page", title: "Insights IA", subtitle: "Temas, sentimento e conversa com a Luumu", href: "/insights", keywords: ["ia", "inteligencia", "temas", "sentimento"], icon: "sparkles" },
   { id: "p-reports", kind: "page", title: "Relatórios", subtitle: "Relatórios e envios por e-mail", href: "/reports", keywords: ["exportar", "pdf", "email"], icon: "reports" },

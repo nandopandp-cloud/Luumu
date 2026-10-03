@@ -15,6 +15,7 @@ import { canShow } from "../lib/tours/frequency";
 import { detectDevice } from "../lib/device";
 import type { TourCatalogEntry } from "../lib/tours/types";
 import type { ToursRuntime } from "./tours/runtime";
+import type { HeatmapsRecorder } from "./heatmaps/recorder";
 import {
   isFirstSession,
   readActive,
@@ -155,6 +156,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     hostKnown: boolean | null;
     tours: TourCatalogEntry[];
     sdk: string | null; // versão atual dos bundles sob demanda (vem do servidor)
+    heatmaps: boolean; // coleta de heatmaps ativa no projeto
   };
   let eventsOpen: boolean | null = null;
   let serverKnown: Record<string, 1> = {};
@@ -637,6 +639,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
         hostKnown?: unknown;
         tours?: unknown;
         sdk?: unknown;
+        heatmaps?: unknown;
       };
       if (!parsed || typeof parsed.t !== "number" || !Array.isArray(parsed.surveys)) return null;
       if (Date.now() - parsed.t > CATALOG_TTL_MS) return null;
@@ -646,6 +649,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
         hostKnown: typeof parsed.hostKnown === "boolean" ? parsed.hostKnown : null,
         tours: Array.isArray(parsed.tours) ? (parsed.tours as TourCatalogEntry[]) : [],
         sdk: typeof parsed.sdk === "string" ? parsed.sdk : null,
+        heatmaps: parsed.heatmaps === true,
       };
     } catch {
       // localStorage indisponível (modo privado, storage bloqueado) ou JSON corrompido:
@@ -665,6 +669,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
           hostKnown: catalog.hostKnown,
           tours: catalog.tours,
           sdk: catalog.sdk,
+          heatmaps: catalog.heatmaps,
         })
       );
     } catch {}
@@ -688,6 +693,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
           hostKnown: d.host && typeof d.host.known === "boolean" ? d.host.known : null,
           tours: Array.isArray(d.tours) ? (d.tours as TourCatalogEntry[]) : [],
           sdk: typeof d.sdk === "string" ? d.sdk : null,
+          heatmaps: d.heatmaps === true,
         },
         status: r.status,
       };
@@ -713,6 +719,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     catalogLoaded = true;
     maybeAnnounceHost(key);
     safe(maybeLoadTours);
+    if (catalog.heatmaps) safe(() => loadHeatmaps(key));
   }
 
   /* ---------- Product Tours: ponte com o runtime carregado sob demanda ----------
@@ -780,6 +787,31 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
         });
     }
     return runtimeLoading;
+  }
+
+  /* ---------- Heatmaps: gravador baixado só quando o projeto ativou a coleta ---------- */
+  let heatmaps: HeatmapsRecorder | null = null;
+  let heatmapsLoading = false;
+
+  function loadHeatmaps(key: string) {
+    // o administrador montando tour ou vendo preview não é comportamento de usuário final
+    if (heatmaps || heatmapsLoading || builderToken || previewToken) return;
+    heatmapsLoading = true;
+    loadScript("sdk-heatmaps.js")
+      .then(() => {
+        const r = (window as unknown as { __luumuHeatmaps?: HeatmapsRecorder }).__luumuHeatmaps || null;
+        r?.boot({
+          api: API,
+          key,
+          host: HOST,
+          device: detectDevice(navigator.userAgent, navigator.maxTouchPoints || 0),
+          path: () => routePattern(location.pathname),
+        });
+        heatmaps = r;
+      })
+      .catch(() => {
+        heatmapsLoading = false;
+      });
   }
 
   function maybeLoadTours() {
@@ -1353,7 +1385,10 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     }, 5000);
 
     // navegação: load inicial + trocas de rota em SPA (pushState/replaceState/popstate)
-    const notifyRouteChange = () => trackPageView();
+    const notifyRouteChange = () => {
+      trackPageView();
+      safe(() => heatmaps?.route());
+    };
     const origPush = history.pushState;
     const origReplace = history.replaceState;
     history.pushState = function (...args: Parameters<History["pushState"]>) {
