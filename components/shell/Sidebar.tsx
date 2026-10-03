@@ -7,7 +7,6 @@ import { cn } from "@/lib/utils";
 import { LuumuLogo } from "@/components/ui/Mascot";
 import { ProjectSwitcher } from "./ProjectSwitcher";
 import { NAV } from "./nav";
-import { SidebarPlanCard } from "./SidebarPlanCard";
 
 /** Rótulo flutuante dos itens quando a sidebar está recolhida (hover e foco do teclado). */
 function Tip({ children }: { children: React.ReactNode }) {
@@ -158,9 +157,6 @@ export function Sidebar({
           ))}
         </nav>
 
-        <div className="mt-auto">
-          <SidebarPlanCard collapsed={collapsed} onNavigate={onNavigate} />
-        </div>
       </aside>
 
       {onToggle && (
