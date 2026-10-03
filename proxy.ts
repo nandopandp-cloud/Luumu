@@ -13,7 +13,7 @@ const secret = new TextEncoder().encode(secretStr);
 // rotas do app que exigem sessão
 const PROTECTED = [
   "/dashboard", "/surveys", "/responses", "/heatmaps", "/replay",
-  "/analytics", "/insights", "/reports", "/integrations", "/sdk", "/settings", "/tours",
+  "/analytics", "/insights", "/reports", "/integrations", "/sdk", "/settings", "/tours", "/billing",
 ];
 
 // páginas de credencial: quem já tem sessão não deve vê-las

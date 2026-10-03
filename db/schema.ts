@@ -500,6 +500,28 @@ export type TourStepRow = typeof tourSteps.$inferSelect;
 export type TourEvent = typeof tourEvents.$inferSelect;
 export type ProductElement = typeof productElements.$inferSelect;
 
+/**
+ * Pedido de mudança de plano feito na área Plano & Cobrança. Enquanto não há gateway de
+ * pagamento, a troca é confirmada pela equipe Luumu: o pedido fica registrado aqui (e a equipe
+ * é avisada por e-mail) até ser atendido.
+ */
+export const planRequests = pgTable(
+  "plan_requests",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+    userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+    plan: text("plan").notNull(), // PlanId pedido
+    cycle: text("cycle").notNull().default("monthly"), // monthly | annual
+    fromPlan: text("from_plan").notNull(),
+    message: text("message").notNull().default(""),
+    status: text("status").notNull().default("pending"), // pending | done | canceled
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("plan_requests_ws_idx").on(t.workspaceId)]
+);
+
+export type PlanRequest = typeof planRequests.$inferSelect;
 export type Workspace = typeof workspaces.$inferSelect;
 export type Survey = typeof surveys.$inferSelect;
 export type ScheduledReport = typeof scheduledReports.$inferSelect;

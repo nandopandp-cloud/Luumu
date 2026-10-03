@@ -8,7 +8,7 @@ const tabs = [
   { href: "/settings", label: "Workspace" },
   { href: "/settings/profile", label: "Meu perfil" },
   { href: "/settings/members", label: "Membros" },
-  { href: "/settings/billing", label: "Plano & Cobrança" },
+  { href: "/billing", label: "Plano & Cobrança" },
 ];
 
 export function SettingsNav() {

@@ -1,5 +1,6 @@
 import "server-only";
-import { and, count, eq } from "drizzle-orm";
+import { and, count, eq, gte } from "drizzle-orm";
+import { monthStart, planOf, type PlanId } from "@/lib/plans";
 import { db } from "./client";
 import { workspaces, surveys, responses, memberships } from "@/db/schema";
 
@@ -19,29 +20,21 @@ export async function updateWorkspace(
   await db.update(workspaces).set(patch).where(eq(workspaces.id, workspaceId));
 }
 
-/** Limites por plano (fonte da verdade dos planos oferecidos). */
-export const PLAN_LIMITS: Record<
-  string,
-  { label: string; responses: number; activeSurveys: number; members: number }
-> = {
-  starter: { label: "Starter", responses: 1_000, activeSurveys: 2, members: 3 },
-  growth: { label: "Growth", responses: 50_000, activeSurveys: Infinity, members: 10 },
-  enterprise: { label: "Enterprise", responses: Infinity, activeSurveys: Infinity, members: Infinity },
-};
-
 export interface WorkspaceUsage {
-  plan: string;
+  plan: PlanId;
   planLabel: string;
+  /** uso do mês do calendário atual (respostas) e atual (pesquisas ativas, membros) */
   usage: { responses: number; activeSurveys: number; members: number };
   limits: { responses: number; activeSurveys: number; members: number };
 }
 
 /**
- * Plano do workspace + uso real (respostas, pesquisas ativas, membros) vs. limites.
- * As 4 queries só dependem do workspaceId (nenhuma do resultado de outra), então rodam
- * em paralelo em vez de sequenciais.
+ * Plano do workspace + uso real vs. limites do catálogo (lib/plans.ts). Respostas contam o
+ * MÊS ATUAL — os planos são "por mês"; antes somava todo o histórico. As 4 consultas rodam
+ * em paralelo.
  */
 export async function getWorkspaceUsage(workspaceId: string): Promise<WorkspaceUsage> {
+  const since = monthStart();
   const [[ws], [{ nResponses } = { nResponses: 0 }], [{ nActive } = { nActive: 0 }], [{ nMembers } = { nMembers: 0 }]] =
     await Promise.all([
       db.select({ plan: workspaces.plan }).from(workspaces).where(eq(workspaces.id, workspaceId)).limit(1),
@@ -49,7 +42,7 @@ export async function getWorkspaceUsage(workspaceId: string): Promise<WorkspaceU
         .select({ nResponses: count() })
         .from(responses)
         .innerJoin(surveys, eq(responses.surveyId, surveys.id))
-        .where(eq(surveys.workspaceId, workspaceId)),
+        .where(and(eq(surveys.workspaceId, workspaceId), gte(responses.createdAt, since))),
       db
         .select({ nActive: count() })
         .from(surveys)
@@ -57,21 +50,15 @@ export async function getWorkspaceUsage(workspaceId: string): Promise<WorkspaceU
       db.select({ nMembers: count() }).from(memberships).where(eq(memberships.workspaceId, workspaceId)),
     ]);
 
-  const plan = (ws?.plan ?? "growth").toLowerCase();
-  const limits = PLAN_LIMITS[plan] ?? PLAN_LIMITS.growth;
-
+  const plan = planOf(ws?.plan);
   return {
-    plan,
-    planLabel: limits.label,
+    plan: plan.id,
+    planLabel: plan.name,
     usage: {
       responses: Number(nResponses) || 0,
       activeSurveys: Number(nActive) || 0,
       members: Number(nMembers) || 0,
     },
-    limits: {
-      responses: limits.responses,
-      activeSurveys: limits.activeSurveys,
-      members: limits.members,
-    },
+    limits: { responses: plan.limits.responses, activeSurveys: plan.limits.activeSurveys, members: plan.limits.members },
   };
 }

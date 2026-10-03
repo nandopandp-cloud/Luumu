@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
+import type { WorkspaceUsage } from "@/lib/db/workspace";
 
 export const SIDEBAR_COOKIE = "luumu_sidebar";
 
@@ -14,6 +15,7 @@ export function AppShell({
   projects,
   activeProjectId,
   initialCollapsed = false,
+  usage,
 }: {
   children: React.ReactNode;
   user: { name: string; email: string; avatarUrl: string | null };
@@ -22,6 +24,8 @@ export function AppShell({
   activeProjectId: string | null;
   /** preferência salva (cookie lido no servidor, para a página já nascer no tamanho certo) */
   initialCollapsed?: boolean;
+  /** uso do plano para o card da sidebar (promise: não atrasa a página) */
+  usage?: Promise<WorkspaceUsage | null>;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(initialCollapsed);
@@ -58,6 +62,7 @@ export function AppShell({
       <div className="sticky top-0 z-40 hidden h-screen shrink-0 lg:block">
         <Sidebar
           workspace={workspace}
+          usage={usage}
           projects={projects}
           activeProjectId={activeProjectId}
           collapsed={collapsed}
@@ -75,6 +80,7 @@ export function AppShell({
           <div className="absolute inset-y-0 left-0 h-full shadow-[var(--shadow-lg)]">
             <Sidebar
               workspace={workspace}
+          usage={usage}
               projects={projects}
               activeProjectId={activeProjectId}
               onNavigate={() => setMobileOpen(false)}

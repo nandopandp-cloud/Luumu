@@ -7,6 +7,7 @@ import { db } from "@/lib/db/client";
 import { workspaces } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { cookies } from "next/headers";
+import { getWorkspaceUsage } from "@/lib/db/workspace";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await requireUser();
@@ -23,6 +24,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   ]);
   const ws = wsRows[0];
   // mesmo nome de SIDEBAR_COOKIE (AppShell): a página já nasce com a bandeja do jeito salvo
+  // sem await: o card de plano da sidebar entra via Suspense quando a contagem chega
+  const usage = getWorkspaceUsage(session.workspaceId).catch(() => null);
   const sidebarCollapsed = (await cookies()).get("luumu_sidebar")?.value === "collapsed";
 
   return (
@@ -33,6 +36,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         projects={projectList.map((p) => ({ id: p.id, name: p.name, logoUrl: p.logoUrl }))}
         activeProjectId={activeProject?.id ?? null}
         initialCollapsed={sidebarCollapsed}
+        usage={usage}
       >
         {/*
           Membro cujo escopo não inclui nenhum projeto: as páginas do app resolvem dados a

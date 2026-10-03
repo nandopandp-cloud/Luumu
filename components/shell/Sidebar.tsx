@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Lock, PanelLeftClose, PanelLeftOpen } from "lucide-react";
@@ -7,6 +8,8 @@ import { cn } from "@/lib/utils";
 import { LuumuLogo } from "@/components/ui/Mascot";
 import { ProjectSwitcher } from "./ProjectSwitcher";
 import { NAV } from "./nav";
+import { SidebarPlanCard } from "./SidebarPlanCard";
+import type { WorkspaceUsage } from "@/lib/db/workspace";
 
 /** Rótulo flutuante dos itens quando a sidebar está recolhida (hover e foco do teclado). */
 function Tip({ children }: { children: React.ReactNode }) {
@@ -27,6 +30,7 @@ export function Sidebar({
   activeProjectId,
   collapsed = false,
   onToggle,
+  usage,
 }: {
   onNavigate?: () => void;
   workspace: { name: string; plan: string; logoUrl: string | null };
@@ -36,6 +40,8 @@ export function Sidebar({
   collapsed?: boolean;
   /** sem isto (gaveta do celular) não há botão de recolher */
   onToggle?: () => void;
+  /** uso do plano (promise do layout, sem bloquear a renderização) */
+  usage?: Promise<WorkspaceUsage | null>;
 }) {
   const pathname = usePathname();
 
@@ -156,6 +162,14 @@ export function Sidebar({
             </div>
           ))}
         </nav>
+
+        {usage && (
+          <div className="mt-auto">
+            <Suspense fallback={null}>
+              <SidebarPlanCard usage={usage} collapsed={collapsed} onNavigate={onNavigate} />
+            </Suspense>
+          </div>
+        )}
       </aside>
 
       {onToggle && (
