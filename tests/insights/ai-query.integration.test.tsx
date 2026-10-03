@@ -13,19 +13,28 @@ let React: typeof import("react");
 let createRoot: typeof import("react-dom/client").createRoot;
 let AiQuery: typeof import("../../components/insights/AiQuery").AiQuery;
 let insightsMock: typeof import("../../lib/insights/mock").insightsMock;
+let answerQuestion: typeof import("../../lib/insights/ask").answerQuestion;
 
 before(async () => {
   React = await import("react");
   ({ createRoot } = await import("react-dom/client"));
   ({ AiQuery } = await import("../../components/insights/AiQuery"));
   ({ insightsMock } = await import("../../lib/insights/mock"));
+  ({ answerQuestion } = await import("../../lib/insights/ask"));
 });
 
-test("sugestão preenche sem enviar; Enter responde com os dados; pergunta livre não é inventada", () => {
+const flush = () => React.act(async () => await new Promise((r) => setTimeout(r, 0)));
+
+test("sugestão preenche sem enviar; Enter responde com os dados; pergunta livre não é inventada", async () => {
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
-  React.act(() => root.render(React.createElement(AiQuery, { data: insightsMock })));
+  const asked: string[] = [];
+  const ask = async (q: string) => {
+    asked.push(q);
+    return answerQuestion(q, insightsMock);
+  };
+  React.act(() => root.render(React.createElement(AiQuery, { ask })));
 
   const input = host.querySelector("input[aria-label='Pergunte algo sobre seus dados']") as HTMLInputElement;
   const chip = Array.from(host.querySelectorAll("button")).find((b) => b.textContent?.includes("Quais são os principais problemas?"))!;
@@ -35,6 +44,8 @@ test("sugestão preenche sem enviar; Enter responde com os dados; pergunta livre
 
   const form = host.querySelector("form")!;
   React.act(() => void form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+  await flush();
+  assert.deepEqual(asked, ["Quais são os principais problemas?"]);
   const answer = host.querySelector("[role=status]")!;
   assert.match(answer.textContent ?? "", /performance/i);
   assert.ok(host.querySelector("a[href='#recommendations']"), "leva à seção que aprofunda");
@@ -45,6 +56,7 @@ test("sugestão preenche sem enviar; Enter responde com os dados; pergunta livre
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
   React.act(() => void form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+  await flush();
   assert.match(host.querySelector("[role=status]")!.textContent ?? "", /Ainda não consigo responder perguntas livres/);
   React.act(() => root.unmount());
 });

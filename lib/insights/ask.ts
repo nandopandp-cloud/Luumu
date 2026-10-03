@@ -28,7 +28,7 @@ export function detectIntent(question: string): Intent | null {
 }
 
 export function answerQuestion(question: string, d: InsightsData): InsightAnswer {
-  const base = { question };
+  const base = { question, source: "rules" as const };
   if (d.totalResponses === 0) {
     return { ...base, answered: true, text: `Ainda não há respostas em ${d.periodLabel} para responder a isso.`, bullets: [] };
   }

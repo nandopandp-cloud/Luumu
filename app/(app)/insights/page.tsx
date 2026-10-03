@@ -1,7 +1,7 @@
 import { Info } from "lucide-react";
 import { DataFilters } from "@/components/ui/DataFilters";
 import { InsightsHeader } from "@/components/insights/InsightsHeader";
-import { AiQuery } from "@/components/insights/AiQuery";
+import { AiQueryConnected } from "@/components/insights/AiQueryConnected";
 import { InsightsSummary } from "@/components/insights/InsightsSummary";
 import { SatisfactionCard } from "@/components/insights/SatisfactionCard";
 import { SentimentEvolution } from "@/components/insights/SentimentEvolution";
@@ -49,7 +49,7 @@ export default async function InsightsPage({
         <InsightEmptyState />
       ) : (
         <>
-          <AiQuery data={data} />
+          <AiQueryConnected filters={{ period: sp.period, from: sp.from, to: sp.to, surveyId: sp.surveyId, host }} />
 
           <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
             <InsightsSummary summary={data.summary} periodLabel={label} />

@@ -118,6 +118,8 @@ export interface InsightAnswer {
   bullets: string[];
   /** seção da página que aprofunda a resposta */
   anchor?: "summary" | "evolution" | "topics" | "changes" | "recommendations" | "comments";
+  /** quem respondeu: o modelo de IA ou as regras locais (plano B) */
+  source?: "ai" | "rules";
 }
 
 export const LEVEL_LABEL: Record<SentimentLevel, string> = {

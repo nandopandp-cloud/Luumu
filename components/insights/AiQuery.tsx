@@ -1,25 +1,40 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { ArrowRight, CornerDownLeft, Info, Search, Sparkles, X } from "lucide-react";
+import { useRef, useState, useTransition } from "react";
+import { ArrowRight, CornerDownLeft, Info, Loader2, Search, Sparkles, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { answerQuestion, SUGGESTED_QUESTIONS } from "@/lib/insights/ask";
-import type { InsightAnswer, InsightsData } from "@/lib/insights/types";
+import { SUGGESTED_QUESTIONS } from "@/lib/insights/ask";
+import type { InsightAnswer } from "@/lib/insights/types";
+
+export type AskFn = (question: string) => Promise<InsightAnswer | { error: string }>;
 
 /**
- * "Pergunte algo sobre seus dados". A resposta sai dos mesmos dados da página
- * (lib/insights/ask.ts); perguntas que esses dados não respondem são assumidas como tal.
- * Trocar por um motor de IA = trocar `answerQuestion` por uma chamada de API.
+ * "Pergunte algo sobre seus dados". Quem responde é `ask` (na página: a ação de servidor que
+ * usa a IA e, sem ela, as regras locais). Recebido por parâmetro para a interface não depender
+ * do provedor — e para ser testada sem banco nem chave de IA.
  */
-export function AiQuery({ data }: { data: InsightsData }) {
+export function AiQuery({ ask: askFn }: { ask: AskFn }) {
   const [q, setQ] = useState("");
   const [answer, setAnswer] = useState<InsightAnswer | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
   const input = useRef<HTMLInputElement>(null);
 
   function ask() {
     const text = q.trim();
     if (!text) return input.current?.focus();
-    setAnswer(answerQuestion(text, data));
+    setError(null);
+    start(async () => {
+      try {
+        const res = await askFn(text);
+        if ("error" in res) {
+          setAnswer(null);
+          setError(res.error);
+        } else setAnswer(res);
+      } catch {
+        setError("Não foi possível analisar agora. Tente de novo em instantes.");
+      }
+    });
   }
 
   return (
@@ -64,9 +79,10 @@ export function AiQuery({ data }: { data: InsightsData }) {
         <button
           type="submit"
           aria-label="Perguntar"
+          disabled={pending}
           className="grid size-11 shrink-0 place-items-center rounded-full text-white shadow-[var(--shadow-glow)] transition hover:-translate-y-0.5 [background:var(--grad-roxo)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent/25"
         >
-          <ArrowRight className="size-5" />
+          {pending ? <Loader2 className="size-5 animate-spin" /> : <ArrowRight className="size-5" />}
         </button>
       </form>
 
@@ -93,14 +109,25 @@ export function AiQuery({ data }: { data: InsightsData }) {
             </button>
           ))}
         </div>
-        {q && !answer && (
+        {q && !answer && !pending && (
           <span className="inline-flex items-center gap-1.5 text-[11px] text-fg-mut">
             <CornerDownLeft className="size-3" /> Pressione Enter para perguntar
           </span>
         )}
       </div>
 
-      {answer && (
+      {pending && (
+        <div role="status" aria-live="polite" className="flex items-center gap-3 rounded-2xl border border-accent/20 bg-surface-brand/40 p-5 text-sm text-fg-soft">
+          <Loader2 className="size-4 animate-spin text-accent" /> Analisando seus dados…
+        </div>
+      )}
+      {error && !pending && (
+        <div role="alert" className="rounded-2xl border border-line bg-bg-sunken p-4 text-sm text-fg-soft">
+          {error}
+        </div>
+      )}
+
+      {answer && !pending && (
         <div
           role="status"
           aria-live="polite"
@@ -129,7 +156,11 @@ export function AiQuery({ data }: { data: InsightsData }) {
                     Ver na página →
                   </a>
                 )}
-                <span className="text-fg-mut">Resposta montada a partir das respostas e comentários deste período.</span>
+                <span className="text-fg-mut">
+                  {answer.source === "ai"
+                    ? "Resposta gerada pela IA da Luumu a partir das respostas e comentários deste período."
+                    : "Resposta montada automaticamente a partir dos números deste período."}
+                </span>
               </div>
             </div>
           </div>
