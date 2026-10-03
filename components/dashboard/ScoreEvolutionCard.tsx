@@ -11,12 +11,13 @@ type Metric = "score" | "positive" | "total";
   Emojis do mascote para o sentimento (public/mascot/emotions). Cada ponto da linha de
   sentimento mostra o rosto da faixa em que caiu — dá para ler a evolução sem olhar o eixo.
 */
+// faixas definidas pelo produto: 0–29 | 30–49 | 50–69 | 70–89 | 90–100
 export const MOODS = [
-  { max: 20, src: "/mascot/emotions/1-chorando.webp", label: "Muito negativo" },
-  { max: 40, src: "/mascot/emotions/2-triste.webp", label: "Negativo" },
-  { max: 60, src: "/mascot/emotions/3-pensativo.webp", label: "Neutro" },
-  { max: 80, src: "/mascot/emotions/4-feliz.webp", label: "Positivo" },
-  { max: 101, src: "/mascot/emotions/5-empolgado.webp", label: "Muito positivo" },
+  { max: 30, range: "0–29%", src: "/mascot/emotions/1-chorando.webp", label: "Muito negativo" },
+  { max: 50, range: "30–49%", src: "/mascot/emotions/2-triste.webp", label: "Negativo" },
+  { max: 70, range: "50–69%", src: "/mascot/emotions/3-pensativo.webp", label: "Neutro" },
+  { max: 90, range: "70–89%", src: "/mascot/emotions/4-feliz.webp", label: "Positivo" },
+  { max: 101, range: "90–100%", src: "/mascot/emotions/5-empolgado.webp", label: "Muito positivo" },
 ] as const;
 export const moodFor = (pct: number) => MOODS.find((m) => pct < m.max) ?? MOODS[MOODS.length - 1];
 
@@ -33,6 +34,38 @@ interface DotProps {
  * Valor real do ponto. Ler `props.value` direto era o bug: num Area ele vem como [0, 75];
  * Number([0, 75]) = NaN, nenhuma faixa casava e todo ponto caía no emoji "muito positivo".
  */
+/**
+ * Eixo vertical focado nos dados: em vez de 0–100 fixo, vai de um pouco abaixo do menor
+ * valor a um pouco acima do maior, em passos "redondos" (5, 10, 20, 25, 50). Valores entre
+ * 60 e 78 viram um eixo 55–85 marcado de 5 em 5. `bounds` limita ao que a métrica permite
+ * (ex.: 0–100 para %); `zeroBased` mantém o zero (contagens: cortar o zero distorce).
+ */
+export function axisTicks(
+  values: number[],
+  bounds: { min: number; max: number },
+  zeroBased = false
+): { domain: [number, number]; ticks: number[] } {
+  const STEPS = [1, 2, 5, 10, 20, 25, 50, 100, 200, 500, 1000];
+  const vals = values.filter((v) => Number.isFinite(v));
+  if (!vals.length) return { domain: [bounds.min, bounds.max], ticks: [] };
+  let lo = zeroBased ? 0 : Math.min(...vals);
+  let hi = Math.max(...vals);
+  if (hi - lo < 10) {
+    // série quase plana: abre ao menos 10 unidades em volta dela
+    const mid = (hi + lo) / 2;
+    lo = zeroBased ? 0 : mid - 5;
+    hi = mid + 5;
+  }
+  // passo que dá até ~8 marcações
+  const step = STEPS.find((s) => (hi - lo) / s <= 7) ?? 1000;
+  lo = Math.max(bounds.min, Math.floor((lo - step / 2) / step) * step);
+  hi = Math.min(bounds.max, Math.ceil((hi + step / 2) / step) * step);
+  if (zeroBased) lo = Math.max(bounds.min, 0);
+  const ticks: number[] = [];
+  for (let t = lo; t <= hi + 1e-9; t += step) ticks.push(Math.round(t * 100) / 100);
+  return { domain: [lo, hi], ticks };
+}
+
 export function dotValue(p: Pick<DotProps, "value" | "payload">): number | null {
   const fromPayload = p.payload?.value;
   if (typeof fromPayload === "number" && Number.isFinite(fromPayload)) return fromPayload;
@@ -87,8 +120,15 @@ export function ScoreEvolutionCard({
   const hasData = data.some((d) => d.value != null && (metric !== "total" || d.value > 0));
   const name = metric === "score" ? scoreLabel : metric === "positive" ? "Sentimento positivo" : "Respostas";
   const suffix = metric === "score" ? scoreSuffix : metric === "positive" ? "%" : "";
-  const domain: [number | "auto", number | "auto"] =
-    metric === "score" ? [scoreRange.min, scoreRange.max] : metric === "positive" ? [0, 100] : [0, "auto"];
+  const axisY = useMemo(
+    () =>
+      axisTicks(
+        data.map((d) => d.value).filter((v): v is number => v != null),
+        metric === "score" ? scoreRange : metric === "positive" ? { min: 0, max: 100 } : { min: 0, max: Number.MAX_SAFE_INTEGER },
+        metric === "total"
+      ),
+    [data, metric, scoreRange]
+  );
   const n = points.length;
   const subtitle =
     g === "week"
@@ -115,7 +155,7 @@ export function ScoreEvolutionCard({
         </div>
       </div>
       {hasData ? (
-        <ResponsiveContainer width="100%" height={250}>
+        <ResponsiveContainer width="100%" height={280}>
           <AreaChart data={data} margin={{ top: metric === "positive" ? 22 : 10, right: 18, left: -14, bottom: 0 }}>
             <defs>
               <linearGradient id="evo-fill" x1="0" y1="0" x2="0" y2="1">
@@ -124,8 +164,18 @@ export function ScoreEvolutionCard({
               </linearGradient>
             </defs>
             <CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="0" />
-            <XAxis dataKey="label" tick={axis} axisLine={false} tickLine={false} dy={8} interval="preserveStartEnd" minTickGap={18} />
-            <YAxis tick={axis} axisLine={false} tickLine={false} width={44} domain={domain} allowDecimals={false} />
+            {/* respiro nas pontas: o emoji do 1º/último ponto não encosta nos números do eixo */}
+            <XAxis
+              dataKey="label"
+              tick={axis}
+              axisLine={false}
+              tickLine={false}
+              dy={8}
+              interval="preserveStartEnd"
+              minTickGap={18}
+              padding={metric === "positive" ? { left: 24, right: 24 } : { left: 8, right: 8 }}
+            />
+            <YAxis tick={axis} axisLine={false} tickLine={false} width={44} domain={axisY.domain} ticks={axisY.ticks} interval={0} allowDecimals={false} />
             <Tooltip
               cursor={{ stroke: "var(--text-mut)", strokeDasharray: "4 4" }}
               content={({ active, payload, label }) =>
@@ -173,12 +223,12 @@ export function ScoreEvolutionCard({
       )}
       {metric === "positive" && hasData && (
         <div className="mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 border-t border-line pt-4" aria-label="Escala de sentimento">
-          {MOODS.map((m, i) => (
+          {MOODS.map((m) => (
             <span key={m.src} className="inline-flex items-center gap-1.5 text-xs font-semibold text-fg-soft">
               {/* eslint-disable-next-line @next/next/no-img-element -- legenda decorativa */}
               <img src={m.src} alt="" width={24} height={24} />
               {m.label}
-              <span className="font-mono text-[10px] text-fg-mut">{i * 20}–{(i + 1) * 20}%</span>
+              <span className="font-mono text-[10px] text-fg-mut">{m.range}</span>
             </span>
           ))}
         </div>
