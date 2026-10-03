@@ -4,11 +4,11 @@
 */
 // faixas definidas pelo produto: 0–29 | 30–49 | 50–69 | 70–89 | 90–100
 export const MOODS = [
-  { max: 30, range: "0–29%", src: "/mascot/emotions/1-chorando.webp", label: "Muito negativo" },
-  { max: 50, range: "30–49%", src: "/mascot/emotions/2-triste.webp", label: "Negativo" },
-  { max: 70, range: "50–69%", src: "/mascot/emotions/3-pensativo.webp", label: "Neutro" },
-  { max: 90, range: "70–89%", src: "/mascot/emotions/4-feliz.webp", label: "Positivo" },
-  { max: 101, range: "90–100%", src: "/mascot/emotions/5-empolgado.webp", label: "Muito positivo" },
+  { max: 30, range: "0–29%", src: "/mascot/emotions/1-chorando.webp", label: "Muito negativo", level: "very_negative" },
+  { max: 50, range: "30–49%", src: "/mascot/emotions/2-triste.webp", label: "Negativo", level: "negative" },
+  { max: 70, range: "50–69%", src: "/mascot/emotions/3-pensativo.webp", label: "Neutro", level: "neutral" },
+  { max: 90, range: "70–89%", src: "/mascot/emotions/4-feliz.webp", label: "Positivo", level: "positive" },
+  { max: 101, range: "90–100%", src: "/mascot/emotions/5-empolgado.webp", label: "Muito positivo", level: "very_positive" },
 ] as const;
 export const moodFor = (pct: number) => MOODS.find((m) => pct < m.max) ?? MOODS[MOODS.length - 1];
 

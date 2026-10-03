@@ -4,7 +4,9 @@ import { useMemo, useState } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Select } from "@/components/ui/Select";
 import type { Granularity, ScorePoint } from "@/lib/db/overview";
+import { LEVEL_BOX, LEVEL_COLOR } from "@/components/insights/SentimentLegend";
 import { MOODS, moodFor } from "@/lib/moods";
+import { cn } from "@/lib/utils";
 
 export { MOODS, moodFor };
 
@@ -216,16 +218,22 @@ export function ScoreEvolutionCard({
         <div className="flex h-[250px] items-center justify-center text-sm text-fg-mut">Ainda sem respostas no período para mostrar a evolução.</div>
       )}
       {metric === "positive" && hasData && (
-        <div className="mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 border-t border-line pt-4" aria-label="Escala de sentimento">
+        <ul className="mt-4 grid grid-cols-2 gap-2.5 border-t border-line pt-4 sm:grid-cols-3 lg:grid-cols-5" aria-label="Escala de sentimento">
           {MOODS.map((m) => (
-            <span key={m.src} className="inline-flex items-center gap-1.5 text-xs font-semibold text-fg-soft">
+            <li key={m.src} className={cn("flex items-center gap-2.5 rounded-2xl px-3 py-2.5", LEVEL_BOX[m.level])}>
               {/* eslint-disable-next-line @next/next/no-img-element -- legenda decorativa */}
-              <img src={m.src} alt="" width={24} height={24} />
-              {m.label}
-              <span className="font-mono text-[10px] text-fg-mut">{m.range}</span>
-            </span>
+              <img src={m.src} alt="" width={38} height={38} className="size-[38px] shrink-0" />
+              <div className="min-w-0 leading-tight">
+                <div className="font-display text-base font-extrabold tabular-nums" style={{ color: LEVEL_COLOR[m.level] }}>
+                  {m.range}
+                </div>
+                <div className="truncate text-xs text-fg-mut" title={m.label}>
+                  {m.label}
+                </div>
+              </div>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
     </section>
   );
