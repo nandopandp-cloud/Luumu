@@ -78,10 +78,28 @@ test("perguntas: responde com os dados da tela e não inventa", () => {
   assert.equal(detectIntent("Quais funcionalidades os clientes pedem?"), "requests");
 
   const drop = answerQuestion("Por que o CSAT caiu este mês?", insightsMock);
-  assert.ok(drop.answered && /não piorou/.test(drop.text), drop.text); // mock: CSAT subiu 4 p.p.
+  assert.ok(drop.answered && /não caiu/.test(drop.title), drop.title); // mock: CSAT subiu 4 p.p.
+  assert.equal(drop.visual, "satisfaction");
   const problems = answerQuestion("Quais são os principais problemas?", insightsMock);
-  assert.ok(problems.text.includes("performance"));
+  assert.ok(problems.title.includes("performance"));
+  assert.ok(problems.points.every((p) => p.trend === "down"));
   const free = answerQuestion("Qual a previsão do tempo para amanhã?", insightsMock);
   assert.equal(free.answered, false);
-  assert.equal(free.bullets.length, 0);
+  assert.equal(free.points.length, 0);
+  assert.ok(free.suggestions.length > 0, "sugere o que consegue responder");
+});
+
+test("conversa: 'sim' responde à última pergunta da Luumu", () => {
+  const improved = answerQuestion("O que melhorou no último período?", insightsMock);
+  assert.equal(improved.title, "O CSAT subiu 4 p.p., para 75%.");
+  assert.ok(improved.points.every((p) => p.trend === "up"));
+  assert.match(improved.followUp, /temas/);
+  const history = [
+    { role: "user" as const, content: "O que melhorou no último período?" },
+    { role: "assistant" as const, content: `${improved.title} ${improved.followUp}` },
+  ];
+  const yes = answerQuestion("sim", insightsMock, history);
+  assert.equal(yes.visual, "topics");
+  // sem contexto, "sim" sozinho não é uma pergunta que dê para responder
+  assert.equal(answerQuestion("sim", insightsMock).answered, false);
 });

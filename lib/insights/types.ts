@@ -109,17 +109,42 @@ export interface InsightsData {
   featuredComments: FeedbackComment[];
 }
 
-/** Resposta do "Pergunte algo sobre seus dados". */
+/** Um ponto da resposta: o fato, um detalhe opcional e a direção (seta verde/vermelha). */
+export interface AnswerPoint {
+  text: string;
+  detail?: string;
+  trend?: "up" | "down" | "neutral";
+}
+
+/** Bloco visual que acompanha a resposta, sempre desenhado com os dados reais da página. */
+export const ANSWER_VISUALS = ["satisfaction", "sentiment", "topics", "changes", "recommendations", "comments", "none"] as const;
+export type AnswerVisual = (typeof ANSWER_VISUALS)[number];
+
+/** Resposta da Luumu na conversa ("Pergunte algo sobre seus dados"). */
 export interface InsightAnswer {
   question: string;
   /** false = pergunta fora do que os dados desta tela respondem (não inventamos resposta) */
   answered: boolean;
+  /** frase de destaque (ex.: "O CSAT subiu 4 p.p., para 75%.") */
+  title: string;
+  /** explicação em até 2–3 frases */
   text: string;
-  bullets: string[];
+  points: AnswerPoint[];
+  visual: AnswerVisual;
+  /** pergunta de continuação da Luumu ("Quer que eu mostre...?"); "" = nenhuma */
+  followUp: string;
+  /** respostas rápidas para o usuário clicar */
+  suggestions: string[];
   /** seção da página que aprofunda a resposta */
   anchor?: "summary" | "evolution" | "topics" | "changes" | "recommendations" | "comments";
   /** quem respondeu: o modelo de IA ou as regras locais (plano B) */
   source?: "ai" | "rules";
+}
+
+/** Uma mensagem anterior da conversa, enviada como contexto. */
+export interface ChatTurn {
+  role: "user" | "assistant";
+  content: string;
 }
 
 export const LEVEL_LABEL: Record<SentimentLevel, string> = {

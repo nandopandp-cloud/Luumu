@@ -48,19 +48,49 @@ test("contexto: números da página, comentários marcados como dados e dentro d
 });
 
 test("valida a saída do modelo", () => {
-  assert.equal(parseAnswer("q", { text: "" }), null);
-  const a = parseAnswer("q", { answered: true, text: "ok", bullets: ["a", 3, ""], anchor: "inventada" })!;
-  assert.deepEqual(a.bullets, ["a"]);
+  assert.equal(parseAnswer("q", { title: "" }), null);
+  const a = parseAnswer("q", {
+    answered: true,
+    title: "ok",
+    text: "",
+    points: [{ text: "a", detail: "", trend: "subindo" }, { text: "" }, 3],
+    visual: "grafico-inventado",
+    follow_up: "Quer ver?",
+    suggestions: ["Sim", 2, "", "b", "c", "d"],
+    anchor: "inventada",
+  })!;
+  assert.deepEqual(a.points, [{ text: "a", detail: undefined, trend: "neutral" }]);
+  assert.equal(a.visual, "none");
   assert.equal(a.anchor, undefined);
+  assert.deepEqual(a.suggestions, ["Sim", "b", "c"]);
+  assert.equal(a.followUp, "Quer ver?");
   assert.equal(a.source, "ai");
 });
 
 test("IA responde: modelo principal, JSON estrito, raciocínio curto", async () => {
   calls.length = 0;
-  respond = () => ok({ answered: true, text: "O CSAT subiu 4 p.p.", bullets: ["Facilidade de uso: +18%"], anchor: "changes" });
-  const a = await askInsights("O que melhorou?", insightsMock);
+  respond = () =>
+    ok({
+      answered: true,
+      title: "O CSAT subiu 4 p.p., para 75%.",
+      text: "A melhora veio da facilidade de uso.",
+      points: [{ text: "Facilidade de uso: +18%", detail: "", trend: "up" }],
+      visual: "satisfaction",
+      follow_up: "Quer ver os temas?",
+      suggestions: ["Sim, mostre os temas"],
+      anchor: "changes",
+    });
+  const a = await askInsights("O que melhorou?", insightsMock, [
+    { role: "user", content: "oi, meu email é fulano@x.com" },
+    { role: "assistant", content: "Olá!" },
+  ]);
   assert.equal(a.source, "ai");
-  assert.equal(a.text, "O CSAT subiu 4 p.p.");
+  assert.equal(a.title, "O CSAT subiu 4 p.p., para 75%.");
+  assert.equal(a.visual, "satisfaction");
+  // o histórico vai junto (para entender "sim"), anonimizado
+  const sent = (calls[0].body.messages as { content: string }[])[1].content;
+  assert.match(sent, /HISTÓRICO DA CONVERSA/);
+  assert.ok(!sent.includes("fulano@x.com"));
   assert.equal(calls[0].model, "openai/gpt-oss-120b");
   const rf = calls[0].body.response_format as { type: string; json_schema: { strict: boolean } };
   assert.equal(rf.type, "json_schema");
@@ -70,12 +100,15 @@ test("IA responde: modelo principal, JSON estrito, raciocínio curto", async () 
 
 test("cota estourada no principal → modelo reserva; os dois fora → regras locais", async () => {
   calls.length = 0;
-  respond = (m) => (m === "openai/gpt-oss-120b" ? new Response("{}", { status: 429 }) : ok({ answered: true, text: "Resposta do reserva", bullets: [], anchor: "none" }));
-  assert.equal((await askInsights("O que melhorou?", insightsMock)).text, "Resposta do reserva");
+  respond = (m) =>
+    m === "openai/gpt-oss-120b"
+      ? new Response("{}", { status: 429 })
+      : ok({ answered: true, title: "Resposta do reserva", text: "", points: [], visual: "none", follow_up: "", suggestions: [], anchor: "none" });
+  assert.equal((await askInsights("O que melhorou?", insightsMock)).title, "Resposta do reserva");
   assert.deepEqual(calls.map((c) => c.model), ["openai/gpt-oss-120b", "openai/gpt-oss-20b"]);
 
   respond = () => new Response("{}", { status: 503 });
   const fallback = await askInsights("Quais são os principais problemas?", insightsMock);
   assert.equal(fallback.source, "rules");
-  assert.match(fallback.text, /performance/i);
+  assert.match(fallback.title, /performance/i);
 });
