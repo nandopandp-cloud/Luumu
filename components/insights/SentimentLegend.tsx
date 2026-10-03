@@ -18,11 +18,15 @@ const BOX = {
   very_negative: "bg-erro/[.09]",
 } as const;
 
+/** Ordem de leitura da legenda: do pior para o melhor, da esquerda para a direita. */
+const ORDER: SentimentCategory["level"][] = ["very_negative", "negative", "neutral", "positive", "very_positive"];
+
 /** Os cinco níveis do período, cada um com o emoji do mascote. */
 export function SentimentLegend({ items }: { items: SentimentCategory[] }) {
+  const sorted = [...items].sort((a, b) => ORDER.indexOf(a.level) - ORDER.indexOf(b.level));
   return (
     <ul className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5" aria-label="Distribuição de sentimento no período">
-      {items.map((c) => (
+      {sorted.map((c) => (
         <li key={c.level} className={cn("flex items-center gap-2.5 rounded-2xl px-3 py-2.5", BOX[c.level])}>
           {/* eslint-disable-next-line @next/next/no-img-element -- emoji decorativo */}
           <img src={LEVEL_EMOJI[c.level]} alt="" width={38} height={38} className="size-[38px] shrink-0" />
