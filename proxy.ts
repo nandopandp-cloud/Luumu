@@ -17,7 +17,7 @@ const PROTECTED = [
 ];
 
 // páginas de credencial: quem já tem sessão não deve vê-las
-const AUTH_PAGES = ["/login", "/signup"];
+const AUTH_PAGES = ["/login"];
 
 /**
  * Valida o destino pós-login vindo da URL (`?next=`). Só aceita caminho interno de rota
@@ -33,6 +33,8 @@ function safeNext(next: string | null): string | null {
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  // o cadastro aberto foi removido (acesso só por convite): links antigos vão para o login
+  if (pathname === "/signup") return NextResponse.redirect(new URL("/login", req.url), 308);
   const needsAuth = PROTECTED.some((p) => pathname === p || pathname.startsWith(p + "/"));
   const isAuthPage = AUTH_PAGES.includes(pathname);
   if (!needsAuth && !isAuthPage) return NextResponse.next();
@@ -47,7 +49,7 @@ export async function proxy(req: NextRequest) {
       valid = false;
     }
   }
-  // já autenticado em /login ou /signup: manda para o app em vez de reexibir o formulário.
+  // já autenticado em /login: manda para o app em vez de reexibir o formulário.
   // Sem isto, quem volta ao site com sessão válida cai na tela de login e parece "travado
   // fora" da plataforma. Respeita o ?next= que este mesmo proxy adicionou no redirect.
   if (isAuthPage) {

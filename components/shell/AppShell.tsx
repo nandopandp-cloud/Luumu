@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
+import { UsageProvider } from "./UsageProvider";
 import type { WorkspaceUsage } from "@/lib/db/workspace";
 
 export const SIDEBAR_COOKIE = "luumu_sidebar";
@@ -53,50 +54,50 @@ export function AppShell({
   }, [toggle]);
 
   return (
-    <div className="flex min-h-screen">
-      {/* Sidebar desktop */}
-      {/*
-        z-40: acima da Topbar (sticky, z-30), que vem depois no HTML e cobria o botão de
-        recolher/expandir que fica na borda da sidebar.
-      */}
-      <div className="sticky top-0 z-40 hidden h-screen shrink-0 lg:block">
-        <Sidebar
-          workspace={workspace}
-          usage={usage}
-          projects={projects}
-          activeProjectId={activeProjectId}
-          collapsed={collapsed}
-          onToggle={toggle}
-        />
-      </div>
-
-      {/* Sidebar mobile (drawer) */}
-      {mobileOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <div
-            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-            onClick={() => setMobileOpen(false)}
+    <UsageProvider initial={usage}>
+      <div className="flex min-h-screen">
+        {/* Sidebar desktop */}
+        {/*
+          z-40: acima da Topbar (sticky, z-30), que vem depois no HTML e cobria o botão de
+          recolher/expandir que fica na borda da sidebar.
+        */}
+        <div className="sticky top-0 z-40 hidden h-screen shrink-0 lg:block">
+          <Sidebar
+            workspace={workspace}
+            projects={projects}
+            activeProjectId={activeProjectId}
+            collapsed={collapsed}
+            onToggle={toggle}
           />
-          <div className="absolute inset-y-0 left-0 h-full shadow-[var(--shadow-lg)]">
-            <Sidebar
-              workspace={workspace}
-          usage={usage}
-              projects={projects}
-              activeProjectId={activeProjectId}
-              onNavigate={() => setMobileOpen(false)}
-            />
-          </div>
         </div>
-      )}
 
-      {/* Conteúdo */}
-      <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar onMenu={() => setMobileOpen(true)} user={user} />
-        {/* com a bandeja recolhida, o conteúdo ganha o espaço de volta */}
-        <main className={cn("mx-auto w-full flex-1 px-4 py-7 md:px-8", collapsed ? "max-w-[1480px]" : "max-w-[1280px]")}>
-          {children}
-        </main>
+        {/* Sidebar mobile (drawer) */}
+        {mobileOpen && (
+          <div className="fixed inset-0 z-50 lg:hidden">
+            <div
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+              onClick={() => setMobileOpen(false)}
+            />
+            <div className="absolute inset-y-0 left-0 h-full shadow-[var(--shadow-lg)]">
+              <Sidebar
+                workspace={workspace}
+                projects={projects}
+                activeProjectId={activeProjectId}
+                onNavigate={() => setMobileOpen(false)}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Conteúdo */}
+        <div className="flex min-w-0 flex-1 flex-col">
+          <Topbar onMenu={() => setMobileOpen(true)} user={user} />
+          {/* com a bandeja recolhida, o conteúdo ganha o espaço de volta */}
+          <main className={cn("mx-auto w-full flex-1 px-4 py-7 md:px-8", collapsed ? "max-w-[1480px]" : "max-w-[1280px]")}>
+            {children}
+          </main>
+        </div>
       </div>
-    </div>
+    </UsageProvider>
   );
 }

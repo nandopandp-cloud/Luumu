@@ -5,7 +5,7 @@ import { useFormStatus } from "react-dom";
 import { ArrowRight, Loader2, AlertTriangle, Mail } from "lucide-react";
 import { Field, Input } from "@/components/ui/Input";
 import { PasswordInput } from "@/components/ui/PasswordInput";
-import { loginAction, signupAction, type AuthResult } from "./actions";
+import { loginAction, type AuthResult } from "./actions";
 
 function SubmitButton({ label }: { label: string }) {
   const { pending } = useFormStatus();
@@ -21,19 +21,14 @@ function SubmitButton({ label }: { label: string }) {
   );
 }
 
-export function AuthForm({ mode, next }: { mode: "login" | "signup"; next?: string }) {
-  const action = mode === "login" ? loginAction : signupAction;
-  const [state, formAction] = useActionState<AuthResult, FormData>(action, {});
+/** Formulário de login. Contas novas não se cadastram sozinhas: entram por convite de um workspace. */
+export function AuthForm({ next }: { next?: string }) {
+  const [state, formAction] = useActionState<AuthResult, FormData>(loginAction, {});
 
   return (
     <form action={formAction} className="mt-8 flex flex-col gap-4">
       {/* destino pretendido antes do login; a action revalida antes de redirecionar */}
       {next ? <input type="hidden" name="next" value={next} /> : null}
-      {mode === "signup" && (
-        <Field label="Nome">
-          <Input name="name" placeholder="Seu nome" required />
-        </Field>
-      )}
       <Field label="E-mail de trabalho">
         <div className="relative">
           <Mail className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-fg-mut" />
@@ -49,8 +44,8 @@ export function AuthForm({ mode, next }: { mode: "login" | "signup"; next?: stri
       <Field label="Senha">
         <PasswordInput
           name="password"
-          placeholder={mode === "signup" ? "Crie uma senha" : "••••••••"}
-          autoComplete={mode === "signup" ? "new-password" : "current-password"}
+          placeholder="••••••••"
+          autoComplete="current-password"
           required
         />
       </Field>
@@ -61,7 +56,7 @@ export function AuthForm({ mode, next }: { mode: "login" | "signup"; next?: stri
         </div>
       )}
 
-      <SubmitButton label={mode === "login" ? "Entrar" : "Criar conta"} />
+      <SubmitButton label="Entrar" />
     </form>
   );
 }

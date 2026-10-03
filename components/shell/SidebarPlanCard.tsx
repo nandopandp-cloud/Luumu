@@ -1,46 +1,15 @@
 "use client";
 
-import { use } from "react";
 import Link from "next/link";
-import { Crown } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { formatLimit } from "@/lib/plans";
-import type { WorkspaceUsage } from "@/lib/db/workspace";
-
-function Bar({ label, used, limit }: { label: string; used: number; limit: number }) {
-  const pct = limit === Infinity ? 0 : Math.min(100, Math.round((used / limit) * 100));
-  return (
-    <div>
-      <div className="mb-1 flex justify-between gap-2 text-[11px]">
-        <span className="text-fg-mut">{label}</span>
-        <span className={cn("font-semibold text-fg-soft", pct >= 80 && "text-aviso", pct >= 100 && "text-erro")}>
-          {used.toLocaleString("pt-BR")}/{formatLimit(limit)}
-        </span>
-      </div>
-      <div className="h-1.5 overflow-hidden rounded-full bg-bg-elev">
-        <div
-          className={cn("h-full rounded-full", pct >= 100 ? "bg-erro" : pct >= 80 ? "bg-aviso" : "[background:var(--grad-roxo)]")}
-          style={{ width: `${limit === Infinity ? 4 : Math.max(3, pct)}%` }}
-        />
-      </div>
-    </div>
-  );
-}
+import { ChevronRight, Crown } from "lucide-react";
+import { useWorkspaceUsage } from "./UsageProvider";
 
 /**
- * "Seu plano atual" no rodapé da sidebar. O uso chega como promise (o layout não espera por
- * ele), então o menu aparece na hora e o card entra quando os números chegam.
+ * "Seu plano atual" no rodapé da sidebar. Os números de uso ficam no header (UsageMeters);
+ * aqui só o plano e o atalho para Plano & Cobrança.
  */
-export function SidebarPlanCard({
-  usage,
-  collapsed,
-  onNavigate,
-}: {
-  usage: Promise<WorkspaceUsage | null>;
-  collapsed: boolean;
-  onNavigate?: () => void;
-}) {
-  const u = use(usage);
+export function SidebarPlanCard({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: () => void }) {
+  const u = useWorkspaceUsage();
   if (!u) return null;
 
   if (collapsed) {
@@ -58,27 +27,22 @@ export function SidebarPlanCard({
   }
 
   return (
-    <section aria-label="Seu plano" className="mt-4 rounded-2xl bg-surface-brand/70 p-3.5">
-      <div className="flex items-center gap-2.5">
-        <span className="grid size-8 place-items-center rounded-lg text-white [background:var(--grad-roxo)]">
-          <Crown className="size-4" aria-hidden />
-        </span>
-        <div className="min-w-0 leading-tight">
-          <span className="block text-[11px] text-fg-mut">Seu plano atual</span>
-          <span className="block font-display text-sm font-bold text-accent">{u.planLabel}</span>
-        </div>
-      </div>
-      <div className="mt-3 flex flex-col gap-2">
-        <Bar label="Respostas no mês" used={u.usage.responses} limit={u.limits.responses} />
-        <Bar label="Pesquisas ativas" used={u.usage.activeSurveys} limit={u.limits.activeSurveys} />
-      </div>
-      <Link
-        href="/billing"
-        onClick={onNavigate}
-        className="mt-3 block rounded-lg bg-bg-elev py-1.5 text-center text-xs font-bold text-accent transition hover:shadow-[var(--shadow-sm)]"
-      >
+    <Link
+      href="/billing"
+      onClick={onNavigate}
+      className="group mt-4 flex items-center gap-2.5 rounded-2xl bg-surface-brand/70 p-3 transition hover:bg-surface-brand"
+    >
+      <span className="grid size-8 shrink-0 place-items-center rounded-lg text-white [background:var(--grad-roxo)]">
+        <Crown className="size-4" aria-hidden />
+      </span>
+      <span className="min-w-0 flex-1 leading-tight">
+        <span className="block text-[11px] text-fg-mut">Seu plano atual</span>
+        <span className="block font-display text-sm font-bold text-accent">{u.planLabel}</span>
+      </span>
+      <span className="flex items-center text-xs font-bold text-accent">
         Ver plano
-      </Link>
-    </section>
+        <ChevronRight className="size-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden />
+      </span>
+    </Link>
   );
 }

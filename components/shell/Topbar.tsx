@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Bell, Menu, Search, LogOut, ChevronDown, UserRound } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
+import { UsageMeters } from "./UsageMeters";
 import { logoutAction } from "@/app/(auth)/actions";
 
 export function Topbar({
@@ -40,6 +41,8 @@ export function Topbar({
       </div>
 
       <div className="flex items-center gap-2">
+        <UsageMeters />
+        <span className="mx-1 hidden h-7 w-px bg-line xl:block" aria-hidden />
         <button
           aria-label="Notificações"
           className="relative grid size-10 place-items-center rounded-full border border-line-strong bg-bg-elev text-fg-soft transition hover:text-accent"

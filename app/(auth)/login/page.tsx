@@ -25,13 +25,10 @@ export default async function LoginPage({
             Entre para ouvir, entender e melhorar.
           </p>
 
-          <AuthForm mode="login" next={next} />
+          <AuthForm next={next} />
 
           <p className="mt-6 text-center text-sm text-fg-mut">
-            Não tem conta?{" "}
-            <Link href="/signup" className="font-semibold text-accent">
-              Comece grátis
-            </Link>
+            O acesso é feito por convite. Peça a quem administra o seu workspace.
           </p>
         </div>
       </div>
