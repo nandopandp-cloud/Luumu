@@ -119,7 +119,7 @@ export function WaitingForData({ canManage, hosts, sdkKey }: { canManage: boolea
           <span className="text-xs font-bold text-accent">1</span>
           <p className="mt-1 font-semibold">SDK instalado</p>
           <p className="mt-0.5 text-xs text-fg-mut">
-            {hosts.length ? `Visto em ${hosts.slice(0, 2).join(", ")}${hosts.length > 2 ? "…" : ""}` : sdkKey ? "Ainda não vimos o SDK rodar." : "Crie uma chave em SDK & Eventos."}
+            {hosts.length ? `Visto em ${hosts.slice(0, 2).join(", ")}${hosts.length > 2 ? "…" : ""}` : sdkKey ? "Ainda não vimos o SDK rodar." : "Crie uma chave em Configurações → SDK & Eventos."}
           </p>
         </li>
         <li className="rounded-2xl border border-line p-4 text-sm">
@@ -134,7 +134,7 @@ export function WaitingForData({ canManage, hosts, sdkKey }: { canManage: boolea
         </li>
       </ol>
       <div className="mt-6 flex flex-wrap justify-center gap-3">
-        <Link href="/sdk" className="rounded-xl border border-line-strong px-4 py-2.5 text-sm font-semibold text-fg-soft transition hover:border-accent hover:text-accent">
+        <Link href="/settings/sdk" className="rounded-xl border border-line-strong px-4 py-2.5 text-sm font-semibold text-fg-soft transition hover:border-accent hover:text-accent">
           Ver instalação do SDK
         </Link>
         {canManage && <PauseButton />}

@@ -8,7 +8,6 @@ import {
   Sparkles,
   FileText,
   Plug,
-  Code2,
   Settings,
   Route,
   Crown,
@@ -63,7 +62,6 @@ export const NAV: NavGroup[] = [
     title: "Configuração",
     items: [
       { href: "/integrations", label: "Integrações", icon: Plug, locked: locked("/integrations") },
-      { href: "/sdk", label: "SDK & Eventos", icon: Code2 },
       { href: "/settings", label: "Configurações", icon: Settings },
       { href: "/billing", label: "Plano & Cobrança", icon: Crown },
     ],

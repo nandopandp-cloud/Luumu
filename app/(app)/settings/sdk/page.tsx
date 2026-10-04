@@ -1,5 +1,6 @@
 import { Key, Zap, MonitorSmartphone, ArrowUpRight, MousePointerClick, Sparkles, Code2, UserCheck, Globe, Route } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { SettingsNav } from "@/components/settings/SettingsNav";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -88,6 +89,7 @@ async function handleLoginSuccess(user) {
           </Button>
         }
       />
+      <SettingsNav />
 
       {!sdkKey && (
         <Card className="mb-4 border-aviso/40 bg-aviso/10">

@@ -101,7 +101,7 @@ export const COMMANDS: CommandItem[] = [
   { id: "p-tours", kind: "page", title: "Tours", subtitle: "Product tours e onboarding", href: "/tours", keywords: ["onboarding", "guia"], icon: "route" },
   { id: "p-insights", kind: "page", title: "Insights IA", subtitle: "Temas, sentimento e conversa com a Luumu", href: "/insights", keywords: ["ia", "inteligencia", "temas", "sentimento"], icon: "sparkles" },
   { id: "p-reports", kind: "page", title: "Relatórios", subtitle: "Relatórios e envios por e-mail", href: "/reports", keywords: ["exportar", "pdf", "email"], icon: "reports" },
-  { id: "p-sdk", kind: "page", title: "SDK & Eventos", subtitle: "Instalação, chave e eventos rastreados", href: "/sdk", keywords: ["instalar", "script", "api", "eventos", "chave"], icon: "code" },
+  { id: "p-sdk", kind: "page", title: "SDK & Eventos", subtitle: "Configurações: instalação, chave e eventos rastreados", href: "/settings/sdk", keywords: ["instalar", "script", "api", "eventos", "chave"], icon: "code" },
   { id: "p-settings", kind: "page", title: "Configurações", subtitle: "Workspace, projetos e plataformas", href: "/settings", keywords: ["ajustes", "workspace", "projeto", "logo"], icon: "settings" },
   { id: "p-profile", kind: "page", title: "Meu perfil", subtitle: "Nome, foto e senha", href: "/settings/profile", keywords: ["conta", "senha", "foto", "avatar"], icon: "user" },
   { id: "p-members", kind: "page", title: "Membros", subtitle: "Pessoas e permissões do workspace", href: "/settings/members", keywords: ["equipe", "permissoes", "time"], icon: "users" },

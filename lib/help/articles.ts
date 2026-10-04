@@ -47,8 +47,8 @@ export const HELP: HelpCategory[] = [
       {
         id: "instalar",
         q: "Preciso instalar algo no meu produto?",
-        a: "Para pesquisas dentro do produto, tours e heatmaps, sim: um script (o SDK) com a chave pública do projeto. É uma linha de código, e a página SDK & Eventos mostra o trecho pronto para copiar.\n\nSe quiser só coletar por link, não precisa instalar nada: cada pesquisa tem um link público.",
-        link: { label: "Ver a instalação do SDK", href: "/sdk" },
+        a: "Para pesquisas dentro do produto, tours e heatmaps, sim: um script (o SDK) com a chave pública do projeto. É uma linha de código, e a aba Configurações → SDK & Eventos mostra o trecho pronto para copiar.\n\nSe quiser só coletar por link, não precisa instalar nada: cada pesquisa tem um link público.",
+        link: { label: "Ver a instalação do SDK", href: "/settings/sdk" },
         keywords: ["script", "código", "sdk"],
       },
       {
@@ -378,8 +378,8 @@ export const HELP: HelpCategory[] = [
       {
         id: "instalar-sdk",
         q: "Como instalo o SDK?",
-        a: "Copie o trecho da página SDK & Eventos e cole antes do fechamento do </body> do seu produto. Ele carrega o script da Luumu com a chave pública do projeto (pk_…).",
-        link: { label: "Abrir SDK & Eventos", href: "/sdk" },
+        a: "Copie o trecho da aba Configurações → SDK & Eventos e cole antes do fechamento do </body> do seu produto. Ele carrega o script da Luumu com a chave pública do projeto (pk_…).",
+        link: { label: "Abrir SDK & Eventos", href: "/settings/sdk" },
         keywords: ["script", "instalação", "integrar", "integração", "instalar"],
       },
       {
@@ -407,7 +407,7 @@ export const HELP: HelpCategory[] = [
       {
         id: "dominios",
         q: "Como restrinjo a chave a alguns domínios?",
-        a: "Em SDK & Eventos, defina a lista de domínios permitidos da chave. Chamadas de outros endereços são recusadas.",
+        a: "Em Configurações → SDK & Eventos, defina a lista de domínios permitidos da chave. Chamadas de outros endereços são recusadas.",
         keywords: ["segurança", "domínio", "chave"],
       },
       {
@@ -567,7 +567,7 @@ export const HELP: HelpCategory[] = [
       {
         id: "eventos-nao-aparecem",
         q: "Meus eventos não aparecem na lista.",
-        a: "O nome do evento aparece depois que ele acontece pela primeira vez numa plataforma conhecida do projeto. Recarregue a página SDK & Eventos alguns minutos depois de disparar o evento.",
+        a: "O nome do evento aparece depois que ele acontece pela primeira vez numa plataforma conhecida do projeto. Recarregue a aba Configurações → SDK & Eventos alguns minutos depois de disparar o evento.",
       },
       {
         id: "plataforma-nova",
