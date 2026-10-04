@@ -10,7 +10,6 @@ import {
   ChevronRight,
   LayoutGrid,
   Loader2,
-  Monitor,
   Pencil,
   Plus,
   Radio,
@@ -85,12 +84,6 @@ export function AnalyticsShell({
   const [dialog, setDialog] = useState<null | "save" | "metrics" | "widgets" | { edit: SavedView }>(null);
   const meta = TAB_META[config.tab];
 
-  function setParam(k: string, v: string | null) {
-    const p = new URLSearchParams(sp.toString());
-    if (v) p.set(k, v);
-    else p.delete(k);
-    router.push(`${pathname}?${p.toString()}`, { scroll: false });
-  }
 
   const ctx: WidgetCtx = {
     dense: false,
@@ -162,12 +155,6 @@ export function AnalyticsShell({
       {/* filtros */}
       <div className="flex flex-wrap items-center gap-3">
         <DataFilters hosts={hosts} />
-        <Select value={config.device ?? ""} onChange={(e) => setParam("device", e.target.value || null)} aria-label="Dispositivo" icon={<Monitor />} className="w-auto min-w-[200px] py-2 text-sm">
-          <option value="">Todos os dispositivos</option>
-          <option value="desktop">Desktop</option>
-          <option value="mobile">Celular</option>
-          <option value="tablet">Tablet</option>
-        </Select>
         <div className="ml-auto flex items-center gap-2">
           {canConfigure && (
             <button type="button" onClick={() => setDialog("metrics")} className="inline-flex items-center gap-2 rounded-xl border border-line-strong bg-bg-elev px-3.5 py-2.5 text-sm font-semibold text-fg-soft transition hover:border-accent hover:text-accent">
@@ -413,7 +400,7 @@ function SaveViewDialog({ config, edit, onClose }: { config: ViewConfig; edit: S
     TAB_META[cfg.tab].label,
     cfg.period === "custom" && cfg.from && cfg.to ? `${cfg.from} a ${cfg.to}` : { "7d": "7 dias", "30d": "30 dias", "90d": "90 dias", "12m": "12 meses", all: "todo o período" }[cfg.period ?? "30d"] ?? "30 dias",
     cfg.host ?? "todas as plataformas",
-    cfg.device ? { desktop: "desktop", mobile: "celular", tablet: "tablet" }[cfg.device] : "todos os dispositivos",
+    cfg.device ? { desktop: "desktop", mobile: "celular", tablet: "tablet" }[cfg.device] : null,
     cfg.tab === "custom" ? `${cfg.widgets?.length ?? 0} blocos` : null,
   ].filter(Boolean);
 

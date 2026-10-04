@@ -37,7 +37,8 @@ export default async function HeatmapsPage({
   }
 
   const canManage = await canManageWorkspace();
-  const { from, to } = periodToRange(sp.period, sp.from, sp.to);
+  // heatmap acumula: por padrão, todas as visitas registradas
+  const { from, to } = periodToRange(sp.period ?? "all", sp.from, sp.to);
   const [pages, anyData, hosts, quota] = await Promise.all([
     listHeatmapPages(project.id, from, to),
     hasAnyPageview(project.id),

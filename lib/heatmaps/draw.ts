@@ -142,6 +142,29 @@ export interface HeatPoint {
   x: number;
   y: number;
   w: number;
+  /** elemento de origem (para a dica ao passar o mouse) */
+  s?: string;
+}
+
+/**
+ * Soma dos pontos dentro de um raio (em px da página) e o elemento que mais pesa ali — o que
+ * a dica mostra ao passar o mouse sobre uma mancha. O raio é o mesmo da mancha desenhada.
+ */
+export function spotAt(points: HeatPoint[], x: number, y: number, radius: number) {
+  const r2 = radius * radius;
+  let total = 0;
+  const bySel = new Map<string, number>();
+  for (const p of points) {
+    const dx = p.x - x;
+    const dy = p.y - y;
+    if (dx * dx + dy * dy > r2) continue;
+    total += p.w;
+    if (p.s) bySel.set(p.s, (bySel.get(p.s) ?? 0) + p.w);
+  }
+  let top: string | null = null;
+  let best = 0;
+  for (const [s, w] of bySel) if (w > best) [top, best] = [s, w];
+  return { total, top };
 }
 
 /**

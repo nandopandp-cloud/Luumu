@@ -29,11 +29,14 @@ export function DataFilters({
   surveys,
   defaultSurveyId,
   hosts,
+  defaultPeriod = "30d",
 }: {
   surveys?: SurveyOption[];
   defaultSurveyId?: string;
   /** plataformas do projeto; o filtro só aparece com mais de uma (?host=) */
   hosts?: string[];
+  /** período quando a URL não diz nada (deve ser o MESMO que o servidor usa nesta página) */
+  defaultPeriod?: string;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -41,7 +44,7 @@ export function DataFilters({
 
   const surveyId = searchParams.get("surveyId") ?? defaultSurveyId ?? "";
   const host = searchParams.get("host") ?? "";
-  const period = searchParams.get("period") ?? "30d";
+  const period = searchParams.get("period") ?? defaultPeriod;
   const from = searchParams.get("from") ?? "";
   const to = searchParams.get("to") ?? "";
 
@@ -88,7 +91,7 @@ export function DataFilters({
     setPickerOpen(false);
   }
 
-  const periodSelectValue = period === "custom" && (!from || !to) ? "30d" : period;
+  const periodSelectValue = period === "custom" && (!from || !to) ? defaultPeriod : period;
 
   return (
     <div className="flex flex-wrap items-center gap-2">

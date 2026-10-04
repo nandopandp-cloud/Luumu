@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowRight, BarChart3, ChevronDown, ClipboardList, Crown, Info, MessageSquare, type LucideIcon } from "lucide-react";
+import { Activity, ArrowRight, BarChart3, ChevronDown, ClipboardList, Crown, Info, MessageSquare, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatLimit } from "@/lib/plans";
 import { useWorkspaceUsage } from "./UsageProvider";
@@ -180,6 +180,13 @@ export function PlanUsageMenu() {
               hint="Pesquisas no ar agora, somando todos os projetos da workspace."
               used={u.usage.activeSurveys}
               limit={u.limits.activeSurveys}
+            />
+            <UsageRow
+              icon={Activity}
+              label="Eventos rastreados"
+              hint="Tipos de evento detectados pelo SDK (cliques, formulários e Luumu.track), somando todos os projetos da workspace."
+              used={u.usage.events ?? 0}
+              limit={u.limits.events ?? Infinity}
             />
           </div>
 

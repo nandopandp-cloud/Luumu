@@ -26,8 +26,8 @@ before(async () => {
 const usage = {
   plan: "growth" as const,
   planLabel: "Growth",
-  usage: { responses: 8, activeSurveys: 1, members: 3 },
-  limits: { responses: 10_000, activeSurveys: Infinity, members: 10 },
+  usage: { responses: 8, activeSurveys: 1, members: 3, events: 1234 },
+  limits: { responses: 10_000, activeSurveys: Infinity, members: 10, events: Infinity },
 };
 
 async function mount() {
@@ -56,6 +56,8 @@ test("mostra o selo do plano e abre o painel com o uso da workspace", async () =
   assert.match(text, /<1%/); // 8 de 10 mil: não arredonda para "0%" com uso existente
   assert.match(text, /1 \/ ilimitado/);
   assert.match(text, /–/);
+  assert.match(text, /Eventos rastreados/);
+  assert.match(text, /1\.234 \/ ilimitado/);
   assert.match(text, /Ir para Plano & Cobrança/);
 
   await React.act(async () => void document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })));

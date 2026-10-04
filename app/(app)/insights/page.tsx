@@ -21,6 +21,8 @@ import { periodLabel } from "@/lib/period";
 
 export const dynamic = "force-dynamic";
 
+const INSIGHTS_DEFAULT_PERIOD = "all";
+
 /** Mínimo de respostas para a análise ter algo a dizer. */
 const MIN_RESPONSES = 5;
 
@@ -30,19 +32,21 @@ export default async function InsightsPage({
   searchParams: Promise<{ period?: string; from?: string; to?: string; surveyId?: string; host?: string }>;
 }) {
   const sp = await searchParams;
+  // Insights olha TODO o histórico por padrão: temas e padrões pedem volume
+  const period = sp.period ?? INSIGHTS_DEFAULT_PERIOD;
   const [projectId, session] = await Promise.all([getCurrentProjectId(), requireUser()]);
   const host = normalizeHost(sp.host) || undefined;
   // padrões de tema pedem volume: por padrão a análise olha TODAS as pesquisas do projeto
   const surveyId = sp.surveyId && sp.surveyId !== "all" ? sp.surveyId : undefined;
 
   const [data, surveyOptions, hosts, me] = await Promise.all([
-    getInsights({ projectId, surveyId, host, period: sp.period, from: sp.from, to: sp.to }),
+    getInsights({ projectId, surveyId, host, period, from: sp.from, to: sp.to }),
     listSurveyOptions(projectId, host),
     listHosts(projectId),
     getUserById(session.userId),
   ]);
-  const label = periodLabel(sp.period, sp.from, sp.to).toLowerCase();
-  const filtersSlot = <DataFilters surveys={surveyOptions} defaultSurveyId="all" hosts={hosts} />;
+  const label = periodLabel(period, sp.from, sp.to).toLowerCase();
+  const filtersSlot = <DataFilters surveys={surveyOptions} defaultSurveyId="all" hosts={hosts} defaultPeriod={INSIGHTS_DEFAULT_PERIOD} />;
 
   if (data.totalResponses < MIN_RESPONSES) {
     return (
@@ -60,7 +64,7 @@ export default async function InsightsPage({
       key={JSON.stringify(sp)}
       data={data}
       user={{ name: session.name, avatarUrl: me?.avatarUrl ?? null }}
-      filters={{ period: sp.period, from: sp.from, to: sp.to, surveyId: sp.surveyId, host }}
+      filters={{ period, from: sp.from, to: sp.to, surveyId: sp.surveyId, host }}
       filtersSlot={filtersSlot}
       ask={askInsightsAction}
     >

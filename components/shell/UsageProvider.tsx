@@ -22,7 +22,14 @@ async function fetchUsage(): Promise<WorkspaceUsage | null> {
     const d = await res.json();
     return {
       ...d,
-      limits: { responses: unlimited(d.limits.responses), activeSurveys: unlimited(d.limits.activeSurveys), members: unlimited(d.limits.members) },
+      limits: {
+        responses: unlimited(d.limits.responses),
+        activeSurveys: unlimited(d.limits.activeSurveys),
+        members: unlimited(d.limits.members),
+        events: unlimited(d.limits.events ?? null),
+      },
+      // resposta de uma versão anterior da rota (sem eventos) durante o deploy
+      usage: { ...d.usage, events: d.usage?.events ?? 0 },
     };
   } catch {
     return null;

@@ -2,7 +2,7 @@ import "server-only";
 import { and, count, eq, gte } from "drizzle-orm";
 import { monthStart, planOf, type PlanId } from "@/lib/plans";
 import { db } from "./client";
-import { workspaces, surveys, responses, memberships } from "@/db/schema";
+import { workspaces, surveys, responses, memberships, events } from "@/db/schema";
 
 export type WorkspaceRow = typeof workspaces.$inferSelect;
 
@@ -24,8 +24,9 @@ export interface WorkspaceUsage {
   plan: PlanId;
   planLabel: string;
   /** uso do mês do calendário atual (respostas) e atual (pesquisas ativas, membros) */
-  usage: { responses: number; activeSurveys: number; members: number };
-  limits: { responses: number; activeSurveys: number; members: number };
+  /** events = tipos de evento rastreados pelo SDK (catálogo), somando os projetos */
+  usage: { responses: number; activeSurveys: number; members: number; events: number };
+  limits: { responses: number; activeSurveys: number; members: number; events: number };
 }
 
 /**
@@ -35,7 +36,7 @@ export interface WorkspaceUsage {
  */
 export async function getWorkspaceUsage(workspaceId: string): Promise<WorkspaceUsage> {
   const since = monthStart();
-  const [[ws], [{ nResponses } = { nResponses: 0 }], [{ nActive } = { nActive: 0 }], [{ nMembers } = { nMembers: 0 }]] =
+  const [[ws], [{ nResponses } = { nResponses: 0 }], [{ nActive } = { nActive: 0 }], [{ nMembers } = { nMembers: 0 }], [{ nEvents } = { nEvents: 0 }]] =
     await Promise.all([
       db.select({ plan: workspaces.plan }).from(workspaces).where(eq(workspaces.id, workspaceId)).limit(1),
       db
@@ -48,6 +49,7 @@ export async function getWorkspaceUsage(workspaceId: string): Promise<WorkspaceU
         .from(surveys)
         .where(and(eq(surveys.workspaceId, workspaceId), eq(surveys.status, "ativa"))),
       db.select({ nMembers: count() }).from(memberships).where(eq(memberships.workspaceId, workspaceId)),
+      db.select({ nEvents: count() }).from(events).where(eq(events.workspaceId, workspaceId)),
     ]);
 
   const plan = planOf(ws?.plan);
@@ -58,7 +60,8 @@ export async function getWorkspaceUsage(workspaceId: string): Promise<WorkspaceU
       responses: Number(nResponses) || 0,
       activeSurveys: Number(nActive) || 0,
       members: Number(nMembers) || 0,
+      events: Number(nEvents) || 0,
     },
-    limits: { responses: plan.limits.responses, activeSurveys: plan.limits.activeSurveys, members: plan.limits.members },
+    limits: { responses: plan.limits.responses, activeSurveys: plan.limits.activeSurveys, members: plan.limits.members, events: Infinity },
   };
 }

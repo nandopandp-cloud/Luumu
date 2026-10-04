@@ -23,7 +23,12 @@ export async function GET() {
   return NextResponse.json(
     {
       ...usage,
-      limits: { responses: lim(usage.limits.responses), activeSurveys: lim(usage.limits.activeSurveys), members: lim(usage.limits.members) },
+      limits: {
+        responses: lim(usage.limits.responses),
+        activeSurveys: lim(usage.limits.activeSurveys),
+        members: lim(usage.limits.members),
+        events: lim(usage.limits.events),
+      },
     },
     { headers: { "Cache-Control": "private, max-age=60" } }
   );

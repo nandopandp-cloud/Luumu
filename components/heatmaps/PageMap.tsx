@@ -7,7 +7,9 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { Mascot } from "@/components/ui/Mascot";
 import { cn } from "@/lib/utils";
 import { reachAt, reachCurve, splitPath, type HeatmapDevice, type HeatmapMode, type Section } from "@/lib/heatmaps/core";
-import { boxOf, detectSections, docSize, drawHeat, drawScroll, expandScrollers, freezeLayout, makeLocator, sanitizeSnapshot, settle, type Box, type HeatPoint } from "@/lib/heatmaps/draw";
+import { boxOf, detectSections, docSize, drawHeat, drawScroll, expandScrollers, freezeLayout, makeLocator, sanitizeSnapshot, settle, spotAt, type Box, type HeatPoint } from "@/lib/heatmaps/draw";
+import { formatDuration } from "@/lib/heatmaps/core";
+import { elementName } from "./Panels";
 import { relativeTime } from "@/lib/search/core";
 import type { HeatmapReport } from "@/lib/db/heatmaps";
 
@@ -81,7 +83,7 @@ export function PageMap({
   const [printH, setPrintH] = useState<number | null>(null);
   const [ready, setReady] = useState(false);
   const [layer, setLayer] = useState<Layer | null>(null);
-  const [tip, setTip] = useState<{ x: number; y: number; text: string } | null>(null);
+  const [tip, setTip] = useState<{ x: number; y: number; text: string; sub?: string; ring?: number } | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -162,14 +164,14 @@ export function PageMap({
           unplaced += b.n;
           continue;
         }
-        next.heat.push({ x: bx.x + ((b.x * 50 + 25) / 1000) * bx.w, y: bx.y + ((b.y * 50 + 25) / 1000) * bx.h, w: b.n });
+        next.heat.push({ x: bx.x + ((b.x * 50 + 25) / 1000) * bx.w, y: bx.y + ((b.y * 50 + 25) / 1000) * bx.h, w: b.n, s: b.s });
       }
     } else if (mode === "moves") {
       next.radius = 42;
       next.opacity = 0.72;
       for (const b of report.moveBins) {
         const bx = box(b.s);
-        if (bx) next.heat.push({ x: bx.x + ((b.gx + 0.5) / 10) * bx.w, y: bx.y + ((b.gy + 0.5) / 10) * bx.h, w: b.n });
+        if (bx) next.heat.push({ x: bx.x + ((b.gx + 0.5) / 10) * bx.w, y: bx.y + ((b.gy + 0.5) / 10) * bx.h, w: b.n, s: b.s });
       }
       Object.assign(next, pathsLayer(report, box));
     }
@@ -202,16 +204,50 @@ export function PageMap({
     if (ring && k) wrap.current?.scrollTo({ top: Math.max(0, ring.y * k - FRAME_H / 3), behavior: "smooth" });
   }, [ring, k]);
 
-  // dica ao passar o mouse no modo scroll: quantos chegaram até aquela altura
+  const heatTotal = useMemo(() => (layer?.heat ?? []).reduce((a, p) => a + p.w, 0), [layer]);
+
+  /*
+    Dica ao passar o mouse:
+     - scroll: quantos chegaram até aquela altura;
+     - cliques/movimento: o que a mancha sob o cursor representa (soma no MESMO raio usado
+       para desenhá-la) e o elemento que mais pesa nela.
+  */
   const onMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (mode !== "scroll" || !ready || !k || !printH) return;
+    if (!ready || !k || !printH) return;
     const r = e.currentTarget.getBoundingClientRect();
-    const y = (e.clientY - r.top) / k;
-    setTip({
-      x: e.clientX - r.left,
-      y: e.clientY - r.top,
-      text: `${Math.round(reachAt(curve, (y / printH) * 100) * 100)}% dos visitantes chegaram até aqui`,
-    });
+    const sx = e.clientX - r.left;
+    const sy = e.clientY - r.top;
+    if (mode === "scroll") {
+      setTip({ x: sx, y: sy, text: `${Math.round(reachAt(curve, (sy / k / printH) * 100) * 100)}% dos visitantes chegaram até aqui` });
+      return;
+    }
+    if (!layer?.heat.length) return setTip(null);
+    const { total, top } = spotAt(layer.heat, sx / k, sy / k, layer.radius / k);
+    if (!total) return setTip(null);
+    // sem rótulo gravado (movimento é registrado no elemento mais interno): usa o texto
+    // visível dele na própria cópia da página
+    const label = top ? report.labels[top] || textOf(frame.current?.contentDocument, top) : "";
+    const name = top ? elementName(top, label) : undefined;
+    if (mode === "clicks") {
+      const share = heatTotal ? Math.round((total / heatTotal) * 1000) / 10 : 0;
+      setTip({
+        x: sx,
+        y: sy,
+        text: `${total.toLocaleString("pt-BR")} ${total === 1 ? "clique" : "cliques"} nesta área · ${share.toLocaleString("pt-BR")}% do total`,
+        sub: name,
+        ring: layer.radius,
+      });
+    } else {
+      // cada amostra de movimento = 100 ms de cursor parado/passando ali
+      const time = total * 100 >= 1000 ? `~${formatDuration(total * 100)}` : "menos de 1s";
+      setTip({
+        x: sx,
+        y: sy,
+        text: `${total.toLocaleString("pt-BR")} ${total === 1 ? "passagem" : "passagens"} do cursor · ${time}`,
+        sub: name,
+        ring: layer.radius,
+      });
+    }
   };
 
   const DevIcon = s ? DEVICE_ICON[s.device] : Monitor;
@@ -340,12 +376,24 @@ export function PageMap({
                   )}
                 </div>
               )}
+              {tip?.ring && (
+                <span
+                  className="pointer-events-none absolute z-10 rounded-full border-2 border-white/90 shadow-[0_0_0_2px_rgba(20,11,46,.45)]"
+                  style={{ left: tip.x - tip.ring, top: tip.y - tip.ring, width: tip.ring * 2, height: tip.ring * 2 }}
+                  aria-hidden
+                />
+              )}
               {tip && (
                 <div
-                  className="pointer-events-none absolute z-10 whitespace-nowrap rounded-full bg-[#140b2e] px-3 py-1.5 text-[13px] font-semibold text-white shadow-lg"
-                  style={{ left: Math.max(8, Math.min(tip.x + 14, dispW - 290)), top: tip.y - 36 }}
+                  role="tooltip"
+                  className={cn(
+                    "pointer-events-none absolute z-20 max-w-[300px] bg-[#140b2e] px-3 py-1.5 text-white shadow-lg animate-[luumuFade_.12s_ease-out]",
+                    tip.sub ? "rounded-xl" : "whitespace-nowrap rounded-full"
+                  )}
+                  style={{ left: Math.max(8, Math.min(tip.x + 16, dispW - 300)), top: Math.max(6, tip.y - (tip.sub ? 58 : 38)) }}
                 >
-                  {tip.text}
+                  <span className="block text-[13px] font-semibold">{tip.text}</span>
+                  {tip.sub && <span className="mt-0.5 block truncate text-[11px] text-white/70">{tip.sub}</span>}
                 </div>
               )}
             </div>
@@ -377,6 +425,18 @@ export function PageMap({
       )}
     </div>
   );
+}
+
+/** Texto visível curto de um elemento da cópia (para nomear manchas sem rótulo). */
+function textOf(doc: Document | null | undefined, sel: string): string {
+  if (!doc) return "";
+  try {
+    const el = doc.querySelector(sel);
+    const t = (el?.getAttribute("aria-label") || el?.textContent || el?.querySelector("img[alt]")?.getAttribute("alt") || "").replace(/\s+/g, " ").trim();
+    return t.length > 40 ? `${t.slice(0, 38).trimEnd()}…` : t;
+  } catch {
+    return "";
+  }
 }
 
 /** Curvas entre os elementos dos caminhos mais comuns + marcadores numerados (até 6). */

@@ -36,3 +36,16 @@ test("tipo do elemento pelo seletor", () => {
   assert.equal(draw.kindOfSelector("#logo"), "Elemento");
   assert.equal(draw.kindOfSelector("body>nav>a"), "Link");
 });
+
+test("dica da mancha: soma os pontos no raio desenhado e aponta o elemento que mais pesa", () => {
+  const pts = [
+    { x: 100, y: 100, w: 30, s: "#comprar" },
+    { x: 110, y: 104, w: 12, s: "#comprar" },
+    { x: 96, y: 92, w: 5, s: "#preco" },
+    { x: 400, y: 400, w: 99, s: "#longe" },
+  ];
+  const r = draw.spotAt(pts, 102, 100, 20);
+  assert.equal(r.total, 47);
+  assert.equal(r.top, "#comprar");
+  assert.deepEqual(draw.spotAt(pts, 700, 700, 20), { total: 0, top: null });
+});
