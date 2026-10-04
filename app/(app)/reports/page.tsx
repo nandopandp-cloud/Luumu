@@ -13,6 +13,9 @@ import { periodLabel, periodToRange } from "@/lib/period";
 
 export const dynamic = "force-dynamic";
 
+/** Relatórios abrem em "Todo o período" (o resumo completo), não em "Hoje". */
+const REPORTS_DEFAULT_PERIOD = "all";
+
 export default async function ReportsPage({
   searchParams,
 }: {
@@ -21,7 +24,7 @@ export default async function ReportsPage({
   const { surveyId, period, from, to, host: hostParam } = await searchParams;
   const projectId = await getCurrentProjectId();
   const host = normalizeHost(hostParam) || undefined;
-  const { from: dateFrom, to: dateTo } = periodToRange(period, from, to);
+  const { from: dateFrom, to: dateTo } = periodToRange(period ?? REPORTS_DEFAULT_PERIOD, from, to);
   // sem filtro na URL, abre já na última pesquisa vigente/criada (da plataforma, se filtrada)
   const { surveyId: scopedSurveyId, defaultSurveyId } = await resolveSurveyScope(projectId, surveyId, host);
 
@@ -80,7 +83,7 @@ export default async function ReportsPage({
       />
 
       <div className="mb-4">
-        <DataFilters surveys={filterOptions} defaultSurveyId={defaultSurveyId} hosts={hosts} />
+        <DataFilters surveys={filterOptions} defaultSurveyId={defaultSurveyId} hosts={hosts} defaultPeriod={REPORTS_DEFAULT_PERIOD} />
       </div>
 
       {/* Export manual */}
@@ -90,8 +93,8 @@ export default async function ReportsPage({
           surveyId={scopedSurveyId}
           surveyName={scopedSurveyName}
           host={host}
-          periodText={periodLabel(period, from, to)}
-          period={period}
+          periodText={periodLabel(period ?? REPORTS_DEFAULT_PERIOD, from, to)}
+          period={period ?? REPORTS_DEFAULT_PERIOD}
           from={from}
           to={to}
         />

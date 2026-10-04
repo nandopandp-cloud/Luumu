@@ -36,7 +36,7 @@ export async function GET(req: Request) {
   const from = searchParams.get("from") || undefined;
   const to = searchParams.get("to") || undefined;
   const host = normalizeHost(searchParams.get("host")) || undefined;
-  const { from: dateFrom, to: dateTo } = periodToRange(period, from, to);
+  const { from: dateFrom, to: dateTo } = periodToRange(period ?? "all", from, to);
 
   // se filtrou por pesquisa, precisa pertencer ao projeto ativo
   let scopeName = "Todas as pesquisas";

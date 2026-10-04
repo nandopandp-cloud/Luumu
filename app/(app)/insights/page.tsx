@@ -17,11 +17,11 @@ import { listHosts } from "@/lib/db/hosts";
 import { getCurrentProjectId, requireUser } from "@/lib/auth/current";
 import { getUserById } from "@/lib/db/users";
 import { normalizeHost } from "@/lib/hosts";
-import { DEFAULT_PERIOD, periodLabel } from "@/lib/period";
+import { periodLabel } from "@/lib/period";
 
 export const dynamic = "force-dynamic";
 
-const INSIGHTS_DEFAULT_PERIOD = DEFAULT_PERIOD;
+const INSIGHTS_DEFAULT_PERIOD = "all";
 
 /** Mínimo de respostas para a análise ter algo a dizer. */
 const MIN_RESPONSES = 5;

@@ -184,7 +184,7 @@ export function PlanUsageMenu() {
             <UsageRow
               icon={Activity}
               label="Eventos rastreados"
-              hint="Tipos de evento detectados pelo SDK (cliques, formulários e Luumu.track), somando todos os projetos da workspace."
+              hint="Eventos registrados neste mês (cliques, formulários e Luumu.track), somando todos os projetos da workspace."
               used={u.usage.events ?? 0}
               limit={u.limits.events ?? Infinity}
             />

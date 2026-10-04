@@ -1,5 +1,5 @@
 import "server-only";
-import { and, count, eq, gte } from "drizzle-orm";
+import { and, count, eq, gte, sql } from "drizzle-orm";
 import { monthStart, planOf, type PlanId } from "@/lib/plans";
 import { db } from "./client";
 import { workspaces, surveys, responses, memberships, events } from "@/db/schema";
@@ -30,13 +30,31 @@ export interface WorkspaceUsage {
 }
 
 /**
+ * Eventos rastreados NO MÊS: ocorrências reais (cada clique/ação por tela) registradas pelo
+ * Analytics nos projetos da workspace. O catálogo de tipos de evento tem teto e para de crescer
+ * (era o número "fixo" do painel); sem a tabela do Analytics, cai para o tamanho do catálogo.
+ */
+async function trackedEventsThisMonth(workspaceId: string, since: Date): Promise<number> {
+  try {
+    const r = (await db.execute(sql`
+      select coalesce(sum(cardinality(p.events)), 0)::bigint n
+        from analytics_pageviews p join projects pr on pr.id = p.project_id
+       where pr.workspace_id = ${workspaceId} and p.created_at >= ${since.toISOString()}::timestamptz`)) as unknown as { rows?: { n: string }[] };
+    return Number((r.rows ?? (r as unknown as { n: string }[]))[0]?.n) || 0;
+  } catch {
+    const [{ n } = { n: 0 }] = await db.select({ n: count() }).from(events).where(eq(events.workspaceId, workspaceId));
+    return Number(n) || 0;
+  }
+}
+
+/**
  * Plano do workspace + uso real vs. limites do catálogo (lib/plans.ts). Respostas contam o
  * MÊS ATUAL — os planos são "por mês"; antes somava todo o histórico. As 4 consultas rodam
  * em paralelo.
  */
 export async function getWorkspaceUsage(workspaceId: string): Promise<WorkspaceUsage> {
   const since = monthStart();
-  const [[ws], [{ nResponses } = { nResponses: 0 }], [{ nActive } = { nActive: 0 }], [{ nMembers } = { nMembers: 0 }], [{ nEvents } = { nEvents: 0 }]] =
+  const [[ws], [{ nResponses } = { nResponses: 0 }], [{ nActive } = { nActive: 0 }], [{ nMembers } = { nMembers: 0 }], nEvents] =
     await Promise.all([
       db.select({ plan: workspaces.plan }).from(workspaces).where(eq(workspaces.id, workspaceId)).limit(1),
       db
@@ -49,7 +67,7 @@ export async function getWorkspaceUsage(workspaceId: string): Promise<WorkspaceU
         .from(surveys)
         .where(and(eq(surveys.workspaceId, workspaceId), eq(surveys.status, "ativa"))),
       db.select({ nMembers: count() }).from(memberships).where(eq(memberships.workspaceId, workspaceId)),
-      db.select({ nEvents: count() }).from(events).where(eq(events.workspaceId, workspaceId)),
+      trackedEventsThisMonth(workspaceId, since),
     ]);
 
   const plan = planOf(ws?.plan);
@@ -60,7 +78,7 @@ export async function getWorkspaceUsage(workspaceId: string): Promise<WorkspaceU
       responses: Number(nResponses) || 0,
       activeSurveys: Number(nActive) || 0,
       members: Number(nMembers) || 0,
-      events: Number(nEvents) || 0,
+      events: nEvents,
     },
     limits: { responses: plan.limits.responses, activeSurveys: plan.limits.activeSurveys, members: plan.limits.members, events: Infinity },
   };
