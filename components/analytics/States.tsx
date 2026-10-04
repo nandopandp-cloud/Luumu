@@ -123,12 +123,12 @@ export function WaitingAnalytics({ canManage }: { canManage: boolean }) {
   );
 }
 
-export function AnalyticsUnavailable() {
+export function AnalyticsUnavailable({ migration = "0020_analytics.sql" }: { migration?: string }) {
   return (
     <section className="flex flex-col items-center rounded-3xl border border-line bg-bg-elev px-6 py-14 text-center">
       <Mascot name="Preocupado" size={110} />
       <h2 className="mt-4 font-display text-xl font-bold">O Analytics ainda não foi configurado neste ambiente</h2>
-      <p className="mt-2 max-w-md text-sm text-fg-mut">Falta aplicar a migração do banco (db/migrations/0020_analytics.sql).</p>
+      <p className="mt-2 max-w-md text-sm text-fg-mut">Falta aplicar a migração do banco (db/migrations/{migration}).</p>
     </section>
   );
 }

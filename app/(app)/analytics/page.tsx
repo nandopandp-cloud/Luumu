@@ -70,16 +70,24 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
   let users: UsersData | null = null;
   if (config.tab === "users") {
     const scope = { projectId, from, to, host: config.host, device: config.device };
-    const [list, kpi] = await Promise.all([
-      listAnalyticsUsers(scope, {
-        q: sp.q,
-        segment: (USER_SEGMENTS as readonly string[]).includes(sp.seg ?? "") ? (sp.seg as UserSegment) : "all",
-        sort: (USER_SORTS as readonly string[]).includes(sp.sort ?? "") ? (sp.sort as UserSort) : "recent",
-        dir: sp.dir === "asc" ? "asc" : "desc",
-        page: Math.max(1, Number(sp.pg) || 1),
-      }),
-      getAnalytics(scope, settings, new Set(["totals", "newUsers"])),
-    ]);
+    let list: Awaited<ReturnType<typeof listAnalyticsUsers>>;
+    let kpi: Awaited<ReturnType<typeof getAnalytics>>;
+    try {
+      [list, kpi] = await Promise.all([
+        listAnalyticsUsers(scope, {
+          q: sp.q,
+          segment: (USER_SEGMENTS as readonly string[]).includes(sp.seg ?? "") ? (sp.seg as UserSegment) : "all",
+          sort: (USER_SORTS as readonly string[]).includes(sp.sort ?? "") ? (sp.sort as UserSort) : "recent",
+          dir: sp.dir === "asc" ? "asc" : "desc",
+          page: Math.max(1, Number(sp.pg) || 1),
+        }),
+        getAnalytics(scope, settings, new Set(["totals", "newUsers"])),
+      ]);
+    } catch (e) {
+      // sem a 0021 as colunas de e-mail/nome não existem: avisa qual migração falta em vez de quebrar
+      console.error("[analytics] aba Usuários", e);
+      return <AnalyticsUnavailable migration="0021_analytics_users_identity.sql" />;
+    }
     users = {
       ...list,
       kpis: { active: kpi.totals?.users ?? 0, identified: kpi.totals?.identified ?? 0, newUsers: kpi.newUsers?.cur ?? 0, activePrev: kpi.totals?.users_prev || null },
