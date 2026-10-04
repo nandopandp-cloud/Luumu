@@ -88,7 +88,7 @@ export async function ResponsesWorkspace({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <DataFilters surveys={surveyFilter?.options} defaultSurveyId={surveyFilter?.defaultSurveyId} hosts={hosts} />
+        <DataFilters surveys={surveyFilter?.options} defaultSurveyId={surveyFilter?.defaultSurveyId} hosts={hosts} defaultPeriod="all" />
         <SortMenu value={sort} />
       </div>
 

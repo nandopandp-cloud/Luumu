@@ -26,7 +26,7 @@ export default async function SurveyResponsesPage({
   const [survey, hosts] = await Promise.all([getSurvey(id, { projectId }), listHosts(projectId)]);
   if (!survey) notFound();
   const host = normalizeHost(sp.host) || undefined;
-  const { from: dateFrom, to: dateTo } = periodToRange(sp.period, sp.from, sp.to);
+  const { from: dateFrom, to: dateTo } = periodToRange(sp.period ?? "all", sp.from, sp.to);
 
   return (
     <div>

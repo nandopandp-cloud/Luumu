@@ -26,10 +26,10 @@ export default async function ResponsesPage({
   const sp = await searchParams;
   const projectId = await getCurrentProjectId();
   const host = normalizeHost(sp.host) || undefined;
-  const { from: dateFrom, to: dateTo } = periodToRange(sp.period, sp.from, sp.to);
-  // sem filtro na URL, abre já na última pesquisa vigente/criada (da plataforma, se filtrada)
+  const { from: dateFrom, to: dateTo } = periodToRange(sp.period ?? "all", sp.from, sp.to);
+  // sem filtro na URL, abre em "Todas as pesquisas" e "Todo o período"
   const [{ surveyId, defaultSurveyId }, surveyOptions, hosts] = await Promise.all([
-    resolveSurveyScope(projectId, sp.surveyId, host),
+    resolveSurveyScope(projectId, sp.surveyId ?? "all", host),
     listSurveyOptions(projectId, host),
     listHosts(projectId),
   ]);

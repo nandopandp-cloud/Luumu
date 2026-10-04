@@ -49,7 +49,7 @@ export default async function DashboardPage({
   const host = normalizeHost(hostParam) || undefined;
   const { from: dateFrom, to: dateTo } = periodToRange(period, from, to);
   // sem filtro na URL, abre já na última pesquisa vigente/criada (da plataforma, se filtrada)
-  const { surveyId: scopedSurveyId, defaultSurveyId } = await resolveSurveyScope(projectId, surveyId, host);
+  const { surveyId: scopedSurveyId, defaultSurveyId } = await resolveSurveyScope(projectId, surveyId ?? "all", host);
   const scope = { projectId, surveyId: scopedSurveyId, dateFrom, dateTo, host };
 
   const [projectSurveys, surveyOptions, overview, distribution, hosts] = await Promise.all([
