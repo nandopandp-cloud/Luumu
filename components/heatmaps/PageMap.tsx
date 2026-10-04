@@ -24,6 +24,8 @@ interface Snapshot {
 
 const DEVICE_ICON = { desktop: Monitor, tablet: Tablet, mobile: Smartphone } as const;
 const DEVICE_NAME = { desktop: "Desktop", tablet: "Tablet", mobile: "Celular" } as const;
+/** largura máxima de exibição do print por aparelho (px de tela) */
+const DEVICE_MAX_W = { desktop: Infinity, tablet: 580, mobile: 340 } as const;
 
 export interface MapStats {
   /** cliques que não acharam o elemento na cópia (a página mudou) */
@@ -107,7 +109,14 @@ export function PageMap({
   }, []);
 
   const s = typeof snap === "object" ? snap : null;
-  const k = s && width ? width / s.width : 0;
+  /*
+    Escala do print: desktop ocupa a largura do quadro; celular e tablet aparecem num aparelho
+    centralizado, no máximo do tamanho real (esticar um celular até 850px deixava tudo
+    gigante e ilegível). Nunca amplia além de 100%.
+  */
+  const framed = !!s && s.device !== "desktop";
+  const dispW = s && width ? Math.min(width - (framed ? 48 : 0), DEVICE_MAX_W[s.device], s.width) : 0;
+  const k = s && dispW > 0 ? dispW / s.width : 0;
   const curve = useMemo(() => reachCurve(report.scrollHist), [report.scrollHist]);
 
   // 1) carregou na altura de tela: espera imagens/fontes, congela e mede a página inteira
@@ -212,9 +221,27 @@ export function PageMap({
   return (
     <div className="flex flex-col gap-2">
       <div className="relative overflow-hidden rounded-2xl border border-line bg-bg-sunken" style={{ height: FRAME_H }}>
-        <div ref={wrap} className="hm-print-scroll absolute inset-0 overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable]">
+        <div
+          ref={wrap}
+          className={cn(
+            "hm-print-scroll absolute inset-0 overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable]",
+            framed && "bg-[radial-gradient(circle,rgba(107,43,217,.10)_1px,transparent_1px)] [background-size:18px_18px]"
+          )}
+        >
           {s && k > 0 && (
-            <div className="relative select-none" style={{ height: H * k }} onMouseMove={onMove} onMouseLeave={() => setTip(null)}>
+            <div className={cn(framed && "flex justify-center px-6 py-6")}>
+            <div
+              className={cn(
+                "relative shrink-0 select-none",
+                framed && "overflow-hidden rounded-[30px] bg-white ring-[7px] ring-[#17122b] shadow-[0_24px_60px_rgba(20,10,50,.35)]"
+              )}
+              style={{ width: dispW, height: H * k }}
+              onMouseMove={onMove}
+              onMouseLeave={() => setTip(null)}
+            >
+              {framed && s.device === "mobile" && (
+                <span className="pointer-events-none absolute left-1/2 top-2 z-20 h-[18px] w-[86px] -translate-x-1/2 rounded-full bg-[#17122b]" aria-hidden />
+              )}
               <iframe
                 ref={frame}
                 title="Print da página"
@@ -286,10 +313,22 @@ export function PageMap({
                         </div>
                       );
                     })}
+                  {/* régua: % EXATO de visitantes que chegaram a cada 10% da página */}
+                  {mode === "scroll" &&
+                    [10, 20, 30, 40, 50, 60, 70, 80, 90].map((p) => (
+                      <span
+                        key={`r${p}`}
+                        className="absolute right-2 -translate-y-1/2 rounded-md bg-white/90 px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-[#111024] shadow-sm"
+                        style={{ top: (p / 100) * H * k }}
+                        title={`${Math.round(reachAt(curve, p) * 100)}% dos visitantes chegaram a ${p}% da página`}
+                      >
+                        {Math.round(reachAt(curve, p) * 100)}%
+                      </span>
+                    ))}
                   {fold !== null && fold > 40 && fold < H * k - 40 && (
                     <div className="absolute inset-x-0 border-t-2 border-white/90" style={{ top: fold }}>
-                      <span className="absolute -top-3.5 right-3 rounded-full bg-white px-2.5 py-0.5 text-[11px] font-semibold text-[#111024] shadow">
-                        Dobra média: o que aparece sem rolar
+                      <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-white px-2.5 py-0.5 text-[11px] font-semibold text-[#111024] shadow">
+                        {framed ? "Dobra média" : "Dobra média: o que aparece sem rolar"}
                       </span>
                     </div>
                   )}
@@ -304,11 +343,12 @@ export function PageMap({
               {tip && (
                 <div
                   className="pointer-events-none absolute z-10 whitespace-nowrap rounded-full bg-[#140b2e] px-3 py-1.5 text-[13px] font-semibold text-white shadow-lg"
-                  style={{ left: Math.min(tip.x + 14, width - 300), top: tip.y - 36 }}
+                  style={{ left: Math.max(8, Math.min(tip.x + 14, dispW - 290)), top: tip.y - 36 }}
                 >
                   {tip.text}
                 </div>
               )}
+            </div>
             </div>
           )}
         </div>
@@ -320,7 +360,7 @@ export function PageMap({
           </div>
         )}
         {snap === "missing" && <MissingSnapshot mode={mode} />}
-        {mode === "clicks" && s && ready && <Legend />}
+
       </div>
       {s && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-xs text-fg-mut">
@@ -331,6 +371,7 @@ export function PageMap({
             <DevIcon className="size-3.5" /> {DEVICE_NAME[s.device]} · {s.width}px
           </span>
           <span>Role o quadro para ver a página inteira.</span>
+          {ready && (mode === "scroll" ? <ScrollLegend /> : <Legend />)}
           {devices.length > 1 && <DeviceSwitch current={s.device} devices={devices} />}
         </div>
       )}
@@ -400,13 +441,23 @@ function DeviceSwitch({ current, devices }: { current: HeatmapDevice; devices: H
   );
 }
 
+function ScrollLegend() {
+  return (
+    <span className="inline-flex items-center gap-1.5 font-semibold">
+      Chegaram: todos
+      <span className="h-1.5 w-16 rounded-full" style={{ background: "linear-gradient(90deg,#ff2828,#ffdc00,#28dc5a,#00c8ff,#283cff)" }} />
+      quase ninguém
+    </span>
+  );
+}
+
 function Legend() {
   return (
-    <div className="pointer-events-none absolute bottom-3 right-5 flex items-center gap-2 rounded-full bg-[rgba(20,11,46,.78)] px-3 py-1.5 text-[11px] font-semibold text-white backdrop-blur">
+    <span className="inline-flex items-center gap-1.5 font-semibold">
       Menos
-      <span className="h-2 w-24 rounded-full" style={{ background: "linear-gradient(90deg,#283cff,#00c8ff,#28dc5a,#ffdc00,#ff2828)" }} />
+      <span className="h-1.5 w-16 rounded-full" style={{ background: "linear-gradient(90deg,#283cff,#00c8ff,#28dc5a,#ffdc00,#ff2828)" }} />
       Mais
-    </div>
+    </span>
   );
 }
 

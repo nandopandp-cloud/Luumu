@@ -187,7 +187,7 @@ export function drawHeat(canvas: HTMLCanvasElement, points: HeatPoint[], opts: {
 }
 
 /** Faixas de rolagem: vermelho onde todos chegam, azul onde quase ninguém (gradiente contínuo). */
-export function drawScroll(canvas: HTMLCanvasElement, curve: number[], alpha = 0.42) {
+export function drawScroll(canvas: HTMLCanvasElement, curve: number[], alpha = 0.5) {
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
   const pal = heatPalette();
