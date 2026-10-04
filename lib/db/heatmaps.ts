@@ -173,6 +173,15 @@ export async function hasAnyPageview(projectId: string) {
   return !!row;
 }
 
+/** Dispositivos que têm cópia desta página. */
+export async function snapshotDevices(projectId: string, host: string, path: string): Promise<HeatmapDevice[]> {
+  const rows = await db
+    .select({ device: heatmapSnapshots.device })
+    .from(heatmapSnapshots)
+    .where(and(eq(heatmapSnapshots.projectId, projectId), eq(heatmapSnapshots.host, host), eq(heatmapSnapshots.path, path)));
+  return rows.map((r) => r.device as HeatmapDevice);
+}
+
 /** Cópia da página para o dispositivo pedido (ou a mais recente de qualquer dispositivo). */
 export async function getSnapshot(projectId: string, host: string, path: string, device?: HeatmapDevice) {
   const rows = await db

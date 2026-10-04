@@ -2,10 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Camera, ImageOff, Loader2, Monitor, Smartphone, Tablet } from "lucide-react";
+import Link from "next/link";
+import { usePathname, useSearchParams } from "next/navigation";
 import { Mascot } from "@/components/ui/Mascot";
 import { cn } from "@/lib/utils";
 import { reachAt, reachCurve, splitPath, type HeatmapDevice, type HeatmapMode, type Section } from "@/lib/heatmaps/core";
-import { boxOf, detectSections, docSize, drawHeat, drawScroll, freezeLayout, makeLocator, sanitizeSnapshot, settle, type Box, type HeatPoint } from "@/lib/heatmaps/draw";
+import { boxOf, detectSections, docSize, drawHeat, drawScroll, expandScrollers, freezeLayout, makeLocator, sanitizeSnapshot, settle, type Box, type HeatPoint } from "@/lib/heatmaps/draw";
 import { relativeTime } from "@/lib/search/core";
 import type { HeatmapReport } from "@/lib/db/heatmaps";
 
@@ -53,6 +55,7 @@ export function PageMap({
   mode,
   page,
   device,
+  devices = [],
   report,
   highlight,
   onStats,
@@ -60,6 +63,8 @@ export function PageMap({
   mode: HeatmapMode;
   page: { host: string; path: string };
   device: HeatmapDevice | null;
+  /** com "Todos os dispositivos": os que têm visitas, para trocar o mapa */
+  devices?: HeatmapDevice[];
   report: HeatmapReport;
   highlight: string | null;
   onStats: (s: MapStats) => void;
@@ -110,6 +115,7 @@ export function PageMap({
     const doc = frame.current?.contentDocument;
     if (!doc?.body) return;
     await settle(doc);
+    expandScrollers(doc);
     freezeLayout(doc);
     setPrintH(docSize(doc).h);
   }, []);
@@ -325,6 +331,7 @@ export function PageMap({
             <DevIcon className="size-3.5" /> {DEVICE_NAME[s.device]} · {s.width}px
           </span>
           <span>Role o quadro para ver a página inteira.</span>
+          {devices.length > 1 && <DeviceSwitch current={s.device} devices={devices} />}
         </div>
       )}
     </div>
@@ -362,6 +369,35 @@ function pathsLayer(report: HeatmapReport, box: (sel: string) => Box | null): Pi
   }
   const markers = order.slice(0, 6).map((sel, i) => ({ ...center(sel)!, n: i + 1 }));
   return { curves, markers };
+}
+
+/** Troca o dispositivo do mapa (vira o filtro de dispositivo da página). */
+function DeviceSwitch({ current, devices }: { current: HeatmapDevice; devices: HeatmapDevice[] }) {
+  const sp = useSearchParams();
+  const pathname = usePathname();
+  return (
+    <span className="ml-auto inline-flex items-center gap-1.5">
+      Mapa do
+      {devices.map((d) => {
+        const Icon = DEVICE_ICON[d];
+        const q = new URLSearchParams(sp.toString());
+        q.set("device", d);
+        return (
+          <Link
+            key={d}
+            href={`${pathname}?${q.toString()}`}
+            scroll={false}
+            className={cn(
+              "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-semibold transition",
+              d === current ? "border-accent bg-surface-brand text-accent" : "border-line text-fg-mut hover:border-accent/50 hover:text-accent"
+            )}
+          >
+            <Icon className="size-3" /> {DEVICE_NAME[d]}
+          </Link>
+        );
+      })}
+    </span>
+  );
 }
 
 function Legend() {

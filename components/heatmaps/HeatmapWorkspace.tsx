@@ -34,13 +34,22 @@ export function HeatmapWorkspace({
   mode,
   page,
   device,
+  mapDevice,
+  mapDevices,
   report,
+  mapReport,
   compare,
 }: {
   mode: HeatmapMode;
   page: { host: string; path: string } | null;
   device: HeatmapDevice | null;
+  /** dispositivo cuja cópia e cujos dados desenham o mapa */
+  mapDevice: HeatmapDevice | null;
+  /** dispositivos com visitas nesta página (mais visitado primeiro) */
+  mapDevices: HeatmapDevice[];
   report: HeatmapReport | null;
+  /** dados só do mapDevice (as camadas do mapa) */
+  mapReport: HeatmapReport | null;
   compare: boolean;
 }) {
   const pathname = usePathname();
@@ -49,7 +58,8 @@ export function HeatmapWorkspace({
   const [stats, setStats] = useState<MapStats | null>(null);
   const onStats = useCallback((s: MapStats) => setStats(s), []);
 
-  const curve = useMemo(() => reachCurve(report?.scrollHist ?? []), [report]);
+  // rolagem e seções medidas no MESMO layout do mapa
+  const curve = useMemo(() => reachCurve((mapReport ?? report)?.scrollHist ?? []), [mapReport, report]);
   const moveCurve = useMemo(() => reachCurve(report?.moveHist ?? []), [report]);
   const secStats = useMemo(() => sectionStats(stats?.sections ?? ([] as Section[]), curve), [stats, curve]);
   const tab = TABS.find((t) => t.id === mode)!;
@@ -100,7 +110,15 @@ export function HeatmapWorkspace({
               ))}
             </nav>
           </div>
-          <PageMap mode={mode} page={page} device={device} report={report} highlight={highlight} onStats={onStats} />
+          <PageMap
+            mode={mode}
+            page={page}
+            device={mapDevice}
+            devices={device ? [] : mapDevices}
+            report={mapReport ?? report}
+            highlight={highlight}
+            onStats={onStats}
+          />
           {unplacedShare > 0.15 && (
             <p className="mt-2 flex items-center gap-1.5 text-xs text-aviso">
               <AlertCircle className="size-3.5" /> {Math.round(unplacedShare * 100)}% dos cliques foram em elementos que não existem na imagem atual (a página mudou ou o conteúdo varia por usuário).

@@ -44,6 +44,35 @@ export function settle(doc: Document, timeoutMs = 3500): Promise<void> {
 }
 
 /**
+ * Apps de página única costumam rolar DENTRO de um painel (a página tem a altura da tela e
+ * quem rola é um div com overflow). Num print, esse conteúdo ficaria cortado: aqui os painéis
+ * grandes com rolagem são abertos (e seus ancestrais deixam de cortar) antes de congelar.
+ */
+export function expandScrollers(doc: Document) {
+  const win = doc.defaultView;
+  if (!win || !doc.body) return;
+  const vh = win.innerHeight;
+  const open = "overflow:visible!important;height:auto!important;max-height:none!important;";
+  // o próprio <body> (ou <html>) pode ser o painel que rola: abre os dois sempre
+  doc.documentElement.style.cssText += `;${open}min-height:0!important;`;
+  doc.body.style.cssText += `;${open}min-height:0!important;`;
+  const targets = Array.from(doc.body.querySelectorAll<HTMLElement>("*")).filter((el) => {
+    if (el.scrollHeight <= el.clientHeight + 24 || el.clientHeight < vh * 0.35) return false;
+    const oy = win.getComputedStyle(el).overflowY;
+    return oy === "auto" || oy === "scroll" || oy === "overlay";
+  });
+  for (const el of targets) {
+    el.style.cssText += `;${open}`;
+    for (let p = el.parentElement; p && p !== doc.documentElement; p = p.parentElement) {
+      const cs = win.getComputedStyle(p);
+      if (cs.overflowY !== "visible" || cs.maxHeight !== "none" || /vh|%/.test(p.style.height) || p.clientHeight <= vh + 2) {
+        p.style.cssText += `;${open}`;
+      }
+    }
+  }
+}
+
+/**
  * Transforma a página num "print" de página inteira. Ela foi carregada na altura de tela de
  * quem visitou; aqui cada elemento é travado no tamanho que tem agora, para que esticar o
  * iframe até a altura total não mude o layout (seções de 100vh não explodem). Elementos

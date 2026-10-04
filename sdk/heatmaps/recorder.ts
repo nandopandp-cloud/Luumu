@@ -106,7 +106,55 @@ function anchorOf(target: Element): Element {
 }
 
 const isOurs = (el: Element) => !!el.closest(`[${LUUMU_HOST_ATTR}],#luumu-root`);
-const docHeight = () => Math.max(document.documentElement.scrollHeight, document.body?.scrollHeight ?? 0, 1);
+/*
+  Altura rolável da JANELA (scrollingElement = <html> no modo padrão). Não usar o maior entre
+  html e body: quando é o <body> que rola por dentro, body.scrollHeight é o conteúdo do painel
+  e faria parecer que a janela rola.
+*/
+const docHeight = () => Math.max((document.scrollingElement ?? document.documentElement).scrollHeight, 1);
+/** a JANELA rola? (apps de página única costumam ter a página do tamanho da tela) */
+const docScrolls = () => docHeight() > window.innerHeight + 4;
+
+/*
+  Painel principal com rolagem interna (o div que rola quando a janela não rola). Descoberto
+  no primeiro scroll dentro dele ou, se ninguém rolou, por uma varredura única ao enviar.
+*/
+let scroller: HTMLElement | null = null;
+const isScroller = (el: Element): el is HTMLElement =>
+  el instanceof HTMLElement && el.scrollHeight > el.clientHeight + 24 && el.clientHeight >= window.innerHeight * 0.35;
+
+function findScroller(): HTMLElement | null {
+  if (scroller?.isConnected) return scroller;
+  let best: HTMLElement | null = null;
+  // o próprio <body> pode ser o painel que rola (html com a altura da tela, body com overflow)
+  const body = document.body;
+  if (body && isScroller(body) && /auto|scroll/.test(getComputedStyle(body).overflowY)) best = body;
+  const all = document.body?.querySelectorAll("*") ?? [];
+  for (let i = 0; i < all.length && i < 4000; i++) {
+    const el = all[i];
+    if (!isScroller(el)) continue;
+    const oy = getComputedStyle(el).overflowY;
+    if ((oy === "auto" || oy === "scroll") && (!best || el.scrollHeight > best.scrollHeight)) best = el;
+  }
+  return (scroller = best);
+}
+
+/**
+ * Profundidade (0–100) vista: da janela ou, se ela não rola, do painel interno. Janela parada
+ * sem painel conhecido = ainda não sabemos (0); o envio resolve (flush).
+ */
+function viewDepth(): number {
+  if (docScrolls()) return Math.min(100, Math.round(((window.scrollY + window.innerHeight) / docHeight()) * 100));
+  if (!scroller) return 0;
+  return Math.min(100, Math.round(((scroller.scrollTop + scroller.clientHeight) / scroller.scrollHeight) * 100));
+}
+
+/** Profundidade (0–100) de um ponto da tela na página (ou no painel interno). */
+function pointDepth(clientY: number, pageY: number): number {
+  if (docScrolls() || !scroller) return Math.min(100, Math.round((pageY / Math.max(docHeight(), window.innerHeight)) * 100));
+  const r = scroller.getBoundingClientRect();
+  return Math.min(100, Math.max(0, Math.round(((clientY - r.top + scroller.scrollTop) / scroller.scrollHeight) * 100)));
+}
 
 /* ---------- visita atual ---------- */
 
@@ -188,18 +236,20 @@ function onMove(e: MouseEvent) {
     else if (Object.keys(v.hovers).length < LIMITS.hovers) v.hovers[as] = MOVE_SAMPLE_MS;
     remember(v, a, as);
   }
-  v.md = Math.max(v.md, Math.min(100, Math.round((e.pageY / docHeight()) * 100)));
+  v.md = Math.max(v.md, pointDepth(e.clientY, e.pageY));
 }
 
 let scrollQueued = false;
 function measureScroll() {
   scrollQueued = false;
   if (!visit) return;
-  const depth = Math.min(100, Math.round(((window.scrollY + window.innerHeight) / docHeight()) * 100));
-  visit.sd = Math.max(visit.sd, depth);
+  visit.sd = Math.max(visit.sd, viewDepth());
 }
-function onScroll() {
+function onScroll(e: Event) {
   lastInput = Date.now();
+  // scroll dentro de um painel grande: ele passa a ser a referência de profundidade
+  const t = e.target;
+  if (t instanceof Element && t !== document.documentElement && !docScrolls() && isScroller(t) && (!scroller || t.scrollHeight >= scroller.scrollHeight)) scroller = t;
   if (scrollQueued) return;
   scrollQueued = true;
   requestAnimationFrame(measureScroll);
@@ -211,6 +261,13 @@ function flush() {
   v.sent = true;
   // abriu e saiu sem ficar (pré-carregamento, aba em segundo plano): não é visita
   if (v.activeMs < 800 && !v.clicks.length) return;
+  if (docScrolls()) measureScroll();
+  else {
+    // a janela não rola: vale o painel interno (achado agora se ninguém o rolou); sem painel,
+    // a página inteira cabia na tela e foi vista toda
+    findScroller();
+    v.sd = scroller ? Math.max(v.sd, viewDepth()) : 100;
+  }
   const payload: PageviewPayload = {
     key: cfg.key,
     host: cfg.host,
@@ -219,7 +276,8 @@ function flush() {
     sid,
     vw: window.innerWidth,
     vh: window.innerHeight,
-    dh: docHeight(),
+    // altura do conteúdo: a do painel interno quando é ele que rola
+    dh: !docScrolls() && scroller ? Math.round(scroller.scrollHeight + scroller.getBoundingClientRect().top + window.scrollY) : docHeight(),
     dur: v.activeMs,
     sd: v.sd,
     md: v.md,
@@ -358,8 +416,13 @@ async function maybeSnapshot() {
 
 function startVisit() {
   visit = newVisit();
+  scroller = null;
   measureScroll();
-  idle(() => void maybeSnapshot(), 2500);
+  // a janela não rola? procura o painel interno uma vez, com a página já montada
+  idle(() => {
+    if (!docScrolls()) findScroller();
+    void maybeSnapshot();
+  }, 2500);
 }
 
 const recorder: HeatmapsRecorder = {
@@ -369,7 +432,8 @@ const recorder: HeatmapsRecorder = {
     const opts = { capture: true, passive: true } as const;
     document.addEventListener("click", onClick, opts);
     document.addEventListener("mousemove", onMove, opts);
-    window.addEventListener("scroll", onScroll, { passive: true });
+    // captura: scroll não borbulha, e o de painéis internos só chega assim
+    document.addEventListener("scroll", onScroll, { capture: true, passive: true });
     for (const ev of ["keydown", "touchstart", "pointerdown"]) document.addEventListener(ev, () => (lastInput = Date.now()), opts);
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "hidden") flush();

@@ -3,7 +3,7 @@ import { HeatmapFilters } from "@/components/heatmaps/HeatmapFilters";
 import { HeatmapWorkspace } from "@/components/heatmaps/HeatmapWorkspace";
 import { EnableHeatmaps, WaitingForData, HeatmapsUnavailable } from "@/components/heatmaps/HeatmapStates";
 import { canManageWorkspace, getCurrentProject } from "@/lib/auth/current";
-import { getHeatmapReport, hasAnyPageview, heatmapQuota, isHeatmapsEnabled, listHeatmapPages } from "@/lib/db/heatmaps";
+import { getHeatmapReport, hasAnyPageview, heatmapQuota, isHeatmapsEnabled, listHeatmapPages, snapshotDevices } from "@/lib/db/heatmaps";
 import { listHosts } from "@/lib/db/hosts";
 import { getPrimaryPublicKey } from "@/lib/db/keys";
 import { HEATMAP_DEVICES, type HeatmapDevice, type HeatmapMode } from "@/lib/heatmaps/core";
@@ -64,7 +64,22 @@ export default async function HeatmapsPage({
   }
 
   const selected = pages.find((p) => `${p.host}|${p.path}` === sp.page) ?? pages[0] ?? null;
-  const report = selected ? await getHeatmapReport({ projectId: project.id, host: selected.host, path: selected.path, device, from, to }) : null;
+  const scope = selected ? { projectId: project.id, host: selected.host, path: selected.path, from, to } : null;
+  const [report, snapDevices] = scope
+    ? await Promise.all([getHeatmapReport({ ...scope, device }), snapshotDevices(project.id, scope.host, scope.path)])
+    : [null, [] as HeatmapDevice[]];
+
+  /*
+    O mapa é desenhado sobre a cópia de UM dispositivo: celular e desktop têm layouts
+    diferentes, e um clique do celular não tem onde cair na página do desktop. Sem filtro, o
+    mapa usa o dispositivo mais visitado que tem cópia (os números ao lado seguem somando
+    todos); com filtro, o próprio.
+  */
+  const byVisits = [...(report?.devices ?? [])].sort((a, b) => b.n - a.n).map((d) => d.device);
+  const mapDevice: HeatmapDevice | null =
+    device ?? byVisits.find((d) => snapDevices.includes(d)) ?? byVisits[0] ?? null;
+  const mapReport =
+    scope && report && !device && mapDevice && byVisits.length > 1 ? await getHeatmapReport({ ...scope, device: mapDevice }) : report;
   const multiHost = new Set(pages.map((p) => p.host)).size > 1;
 
   return (
@@ -87,7 +102,10 @@ export default async function HeatmapsPage({
         mode={mode}
         page={selected ? { host: selected.host, path: selected.path } : null}
         device={device ?? null}
+        mapDevice={mapDevice}
+        mapDevices={byVisits}
         report={report}
+        mapReport={mapReport}
         compare={sp.compare === "1" && !!from}
       />
     </div>

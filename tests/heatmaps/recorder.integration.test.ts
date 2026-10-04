@@ -98,3 +98,31 @@ test("cópia da página: sem scripts, sem valores digitados, dados pessoais masc
   assert.match(html, /loading="eager"/);
   assert.match(html, /Começar agora/); // o resto do conteúdo continua
 });
+
+test("app que rola dentro do <body>: a profundidade é a do painel, não 100% da janela", async () => {
+  const body = document.body;
+  // janela do tamanho da tela; quem rola é o body (overflow:auto), com 4x a altura
+  body.style.overflowY = "auto";
+  body.setAttribute("data-rect", "0,0,1280,800");
+  Object.defineProperty(document.documentElement, "scrollHeight", { configurable: true, value: 800 });
+  Object.defineProperty(body, "clientHeight", { configurable: true, value: 800 });
+  Object.defineProperty(body, "scrollHeight", { configurable: true, value: 3200 });
+  Object.defineProperty(window, "innerHeight", { configurable: true, value: 800 });
+  let top = 0;
+  Object.defineProperty(body, "scrollTop", { configurable: true, get: () => top });
+
+  rec.route(); // nova visita
+  (window as unknown as { __hmPath?: string }).__hmPath = "x";
+  top = 800; // rolou até 50% do conteúdo (800 + 800 de 3200)
+  body.dispatchEvent(new Event("scroll"));
+  await sleep(30);
+  document.querySelector("nav a")!.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 110, clientY: 110 }));
+  await sleep(1100);
+  const before = beacons.length;
+  Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
+  document.dispatchEvent(new Event("visibilitychange"));
+  await sleep(30);
+  const p = JSON.parse(beacons[before].body);
+  assert.equal(p.sd, 50);
+  assert.equal(p.dh, 3200 + 0); // altura do conteúdo do painel, não a da janela
+});
