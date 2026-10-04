@@ -37,6 +37,21 @@ test("automático: prefere a foto do topo/menu à de um card no conteúdo", () =
   assert.equal(r.name, "Bia Lima");
 });
 
+test("shadcn (o app da Jovens Gênios): menu do usuário na barra lateral, com e sem foto", () => {
+  const menu = (img: string) =>
+    `<aside data-slot="sidebar"><button data-slot="dropdown-menu-trigger" data-sidebar="menu-button"><span data-slot="avatar" class="relative flex size-8 shrink-0 overflow-hidden rounded-full">${img}<span data-slot="avatar-fallback">JS</span></span><div class="grid"><span class="truncate font-semibold">JOÃO DA SILVA</span><span class="truncate text-xs">joao.silva@al.educacao.sp.gov.br</span></div></button></aside>`;
+  assert.deepEqual(page(menu(`<img data-slot="avatar-image" src="https://cdn.jg.com/u/7.webp" alt="JOÃO DA SILVA">`)), { name: "JOÃO DA SILVA", avatar: "https://cdn.jg.com/u/7.webp" });
+  // aluno sem foto: só as iniciais, nenhum <img> — o nome ainda é encontrado
+  assert.deepEqual(page(menu("")), { name: "JOÃO DA SILVA", avatar: null });
+});
+
+test("nome ao lado do e-mail do usuário (avatar só no topo, nome no menu)", () => {
+  document.body.innerHTML = `<header><span data-slot="avatar"><span data-slot="avatar-fallback">MS</span></span></header><main><div class="card"><p class="title">Maria Souza</p><p>maria.souza@escola.sp.gov.br</p></div></main>`;
+  assert.equal(readPageIdentity(AUTO, document, "Maria.Souza@escola.sp.gov.br").name, "Maria Souza");
+  // e-mail de outra pessoa na tela não vale
+  assert.equal(readPageIdentity(AUTO, document, "outra@escola.com").name, null);
+});
+
 test("sem foto de perfil na tela: nada; data-luumu-name explícito ainda vale", () => {
   assert.deepEqual(page(`<header><a href="/">Início</a></header>`), { name: null, avatar: null });
   assert.equal(page(`<span data-luumu-name="Carla Mendes"></span>`).name, "Carla Mendes");

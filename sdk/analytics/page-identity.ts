@@ -21,6 +21,10 @@ export interface CaptureConfig {
   a: string;
 }
 
+// contêiner do avatar, COM ou SEM foto: usuário sem foto só tem as iniciais (o <img> do Radix
+// nem é montado), e é nele que o nome ao lado é procurado
+const AVATAR_BOX = ['[data-slot="avatar"]', '[class*="avatar" i]:not(img)'].join(",");
+
 const AVATAR_AUTO = [
   '[data-slot="avatar-image"]',
   '[data-slot="avatar"] img',
@@ -71,18 +75,28 @@ function visible(el: Element): boolean {
   return r.width >= 12 && r.width <= 200 && r.height <= 200;
 }
 
+const CHROME = 'header, nav, aside, [role="banner"], [role="navigation"], [role="menu"], [data-sidebar], [data-slot^="sidebar"]';
+const firstVisible = (doc: Document, sel: string) => {
+  const all = Array.from(doc.querySelectorAll(sel)).filter(visible);
+  // prefere o que está no topo/menu/barra lateral (o usuário logado), não um card do conteúdo
+  return all.find((el) => el.closest(CHROME)) ?? all[0] ?? null;
+};
+
 /** Foto de perfil automática: a primeira visível, preferindo topo/menu/barra lateral. */
 function autoAvatar(doc: Document): Element | null {
-  const all = Array.from(doc.querySelectorAll(AVATAR_AUTO)).filter(visible);
-  const inChrome = all.find((el) => el.closest('header, nav, aside, [role="banner"], [role="navigation"], [role="menu"]'));
-  return inChrome ?? all[0] ?? null;
+  return firstVisible(doc, AVATAR_AUTO);
 }
 
 /** Primeira linha com cara de nome dentro do menu/botão do usuário em volta da foto. */
 function nameNear(avatar: Element): string | null {
   const alt = avatar.tagName === "IMG" ? looksLikeName(avatar.getAttribute("alt")) : looksLikeName(avatar.querySelector("img")?.getAttribute("alt"));
   if (alt) return alt;
-  const box = avatar.closest('button, a, [role="button"], [aria-haspopup], [data-slot*="trigger"], [class*="user" i], [class*="profile" i]') ?? avatar.parentElement?.parentElement ?? null;
+  // o menu/botão do usuário em volta; sem ele, só o contêiner IMEDIATO (subir até o <body>
+  // pegaria qualquer nome da página, como o de um professor num card)
+  const parent = avatar.parentElement;
+  const box =
+    avatar.closest('button, a, [role="button"], [aria-haspopup], [data-slot*="trigger"], [data-sidebar="menu-button"], [class*="user" i], [class*="profile" i]') ??
+    (parent && !parent.matches("body, html, main, header, nav, aside") && parent.childElementCount <= 6 ? parent : null);
   if (!box) return null;
   // cada pedaço de texto separado: innerText junta <span>s vizinhos ("ASAna SouzaAluno")
   const walker = box.ownerDocument.createTreeWalker(box, 4 /* NodeFilter.SHOW_TEXT */);
@@ -94,7 +108,32 @@ function nameNear(avatar: Element): string | null {
   return null;
 }
 
-export function readPageIdentity(cfg: CaptureConfig, doc: Document = document): { name: string | null; avatar: string | null } {
+/*
+  Nome ao lado do E-MAIL do usuário: o SDK já sabe o e-mail (Luumu.identify) e menus/perfis
+  costumam mostrar "Nome / e-mail" juntos. É o sinal mais confiável quando o nome não está
+  colado no avatar (ex.: avatar só no topo e nome no menu da barra lateral).
+*/
+function nameNearEmail(doc: Document, email: string): string | null {
+  const target = email.trim().toLowerCase();
+  if (!target.includes("@") || !doc.body) return null;
+  const walker = doc.createTreeWalker(doc.body, 4 /* SHOW_TEXT */);
+  let seen = 0;
+  for (let node = walker.nextNode(); node && seen < 20_000; node = walker.nextNode(), seen++) {
+    if ((node.textContent ?? "").trim().toLowerCase() !== target) continue;
+    // sobe até 3 níveis procurando o nome no mesmo bloco
+    let box: Element | null = node.parentElement;
+    for (let i = 0; i < 3 && box; i++, box = box.parentElement) {
+      const inner = doc.createTreeWalker(box, 4);
+      for (let t = inner.nextNode(); t; t = inner.nextNode()) {
+        const n = looksLikeName(t.textContent);
+        if (n && !/^[\p{Lu}]{1,3}$/u.test(n)) return n;
+      }
+    }
+  }
+  return null;
+}
+
+export function readPageIdentity(cfg: CaptureConfig, doc: Document = document, email?: string | null): { name: string | null; avatar: string | null } {
   let name: string | null = null;
   let avatar: string | null = null;
   try {
@@ -104,7 +143,10 @@ export function readPageIdentity(cfg: CaptureConfig, doc: Document = document): 
 
     const av = cfg.a ? doc.querySelector(cfg.a) : autoAvatar(doc);
     avatar = imageUrl(av);
-    if (!name && !cfg.n && av) name = nameNear(av);
+    // nome ao lado do avatar — com foto, ou só com as iniciais (usuário sem foto)
+    const anchor = av ?? (cfg.a ? null : firstVisible(doc, AVATAR_BOX));
+    if (!name && !cfg.n && anchor) name = nameNear(anchor);
+    if (!name && !cfg.n && email) name = nameNearEmail(doc, email);
   } catch {
     // seletor inválido ou DOM estranho: fica sem, nunca quebra o produto do cliente
   }

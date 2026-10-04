@@ -8,7 +8,7 @@ import { CodeBlock } from "@/components/ui/CodeBlock";
 import { InstallSnippets } from "@/components/sdk/InstallSnippets";
 import { EventDetector } from "@/components/sdk/EventDetector";
 import { canManageWorkspace, getCurrentProjectId, requireUser } from "@/lib/auth/current";
-import { getIdentityCapture } from "@/lib/db/identity-capture";
+import { getIdentityCapture, identityCaptureStatus } from "@/lib/db/identity-capture";
 import { IdentityCaptureCard } from "@/components/sdk/IdentityCaptureCard";
 import { getPrimaryPublicKey } from "@/lib/db/keys";
 import { listEvents } from "@/lib/db/events";
@@ -36,7 +36,7 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
 
 export default async function SdkPage() {
   const [projectId, session] = await Promise.all([getCurrentProjectId(), requireUser()]);
-  const [sdkKey, events, activeSurveys, hosts, capture, canManage] = await Promise.all([
+  const [sdkKey, events, activeSurveys, hosts, capture, canManage, captureStatus] = await Promise.all([
     getPrimaryPublicKey(projectId),
     listEvents(projectId),
     listActiveSurveys(projectId),
@@ -44,6 +44,7 @@ export default async function SdkPage() {
     // sem a migração 0023 o card avisa em vez de quebrar a página
     getIdentityCapture(session.workspaceId, true).catch(() => null),
     canManageWorkspace(),
+    identityCaptureStatus(session.workspaceId).catch(() => null),
   ]);
 
   const initialStatus = {
@@ -247,7 +248,7 @@ async function handleLoginSuccess(user) {
 
         {/* Coluna lateral: chave + como funciona */}
         <div className="flex flex-col gap-4">
-          <IdentityCaptureCard initial={capture} canManage={canManage} />
+          <IdentityCaptureCard initial={capture} canManage={canManage} status={captureStatus} />
           <Card>
             <div className="mb-3 flex items-center gap-2">
               <Key className="size-4 text-accent" />

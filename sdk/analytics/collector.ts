@@ -41,6 +41,8 @@ export interface AnalyticsCollector {
   event(name: string): void;
   /** entrega o que está pendente ao core, que faz UM envio junto com os heatmaps */
   collect(): AnalyticsBatch | null;
+  /** diagnóstico (Luumu.debugIdentity): o que o identify mandou e o que a página mostra agora */
+  peek(): { capture: CaptureConfig | null; identify: { id: string | null; email: string | null; name: string | null; avatar: string | null }; page: { name: string | null; avatar: string | null } | null };
 }
 
 interface Page {
@@ -130,10 +132,10 @@ function startPage() {
   tenta de novo no máximo a cada 15 s (a tela do usuário pode ainda não ter montado).
 */
 let captured: { who: string; name: string | null; avatar: string | null; at: number } | null = null;
-function pageIdentity(c: AnalyticsBootConfig, who: string) {
+function pageIdentity(c: AnalyticsBootConfig, who: string, email: string | null) {
   if (!c.capture) return null;
   if (captured && captured.who === who && (captured.name && captured.avatar ? true : Date.now() - captured.at < 15_000)) return captured;
-  const found = readPageIdentity(c.capture);
+  const found = readPageIdentity(c.capture, document, email);
   const prev = captured?.who === who ? captured : null;
   captured = { who, name: found.name ?? prev?.name ?? null, avatar: found.avatar ?? prev?.avatar ?? null, at: Date.now() };
   return captured;
@@ -148,7 +150,7 @@ function collect(): AnalyticsBatch | null {
     aid: anonymousId().replace(/[^A-Za-z0-9_-]/g, "").slice(0, 64).padEnd(6, "0"),
     ...(() => {
       const who = c.identity();
-      const page = (who.id || who.email) && (!who.name || !who.avatar) ? pageIdentity(c, who.id || who.email || "") : null;
+      const page = (who.id || who.email) && (!who.name || !who.avatar) ? pageIdentity(c, who.id || who.email || "", who.email) : null;
       return { uid: who.id, email: who.email, name: who.name ?? page?.name ?? null, avatar: who.avatar ?? page?.avatar ?? null };
     })(),
     sid: session.id,
@@ -209,6 +211,11 @@ const collector: AnalyticsCollector = {
     if (cur && cur.ev.size < LIMITS.events) cur.ev.add(name.slice(0, LIMITS.name));
   },
   collect,
+  peek() {
+    const c = cfg;
+    const who = c ? c.identity() : { id: null, email: null, name: null, avatar: null };
+    return { capture: c?.capture ?? null, identify: who, page: c?.capture ? readPageIdentity(c.capture, document, who.email) : null };
+  },
 };
 
 (window as unknown as { __luumuAnalytics?: AnalyticsCollector }).__luumuAnalytics = collector;

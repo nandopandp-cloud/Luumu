@@ -1638,6 +1638,26 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
         localStorage.setItem("luumu_identity", JSON.stringify(identity));
       } catch {}
     },
+    /*
+      Diagnóstico da captura de nome/foto, para rodar no console do produto logado:
+      Luumu.debugIdentity() → o que o identify mandou, o que a tela mostra e o que vai ao painel.
+    */
+    debugIdentity() {
+      if (!analytics) return { ok: false, motivo: catalogLoaded ? "O Analytics não está ativo neste projeto (ative em Analytics no painel da Luumu)." : "O SDK ainda está carregando; tente de novo em alguns segundos." };
+      const d = analytics.peek();
+      const logged = !!(d.identify.id || d.identify.email);
+      const name = d.identify.name ?? d.page?.name ?? null;
+      const avatar = d.identify.avatar ?? d.page?.avatar ?? null;
+      return {
+        ok: logged && !!(name || avatar),
+        usuarioIdentificado: logged ? d.identify.id || d.identify.email : "não (o produto ainda não chamou Luumu.identify)",
+        capturaAtiva: !!d.capture,
+        modo: d.capture ? (d.capture.n || d.capture.a ? "seletores" : "automático") : "desligada (Configurações → SDK & Eventos)",
+        nomeLidoDaTela: d.page?.name ?? null,
+        fotoLidaDaTela: d.page?.avatar ?? null,
+        vaiParaOPainel: logged ? { nome: name, foto: avatar } : null,
+      };
+    },
     // limpa a identidade (ex.: logout)
     reset() {
       identity = {};

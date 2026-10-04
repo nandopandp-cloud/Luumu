@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowDown, ArrowUp, Check, GripVertical, Loader2, MoreVertical, Plus, Search, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, GripVertical, LayoutGrid, Loader2, MoreVertical, Plus, Search, Trash2, X } from "lucide-react";
+import { Dialog } from "@/components/ui/Dialog";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { DataFilters } from "@/components/ui/DataFilters";
@@ -36,7 +37,8 @@ const GRID = "grid grid-cols-2 gap-5 @[40rem]:grid-cols-12";
 const GAP = 20;
 const isKpi = (id: WidgetId) => id.startsWith("kpi_");
 const spanClass = (b: Block) => cn(isKpi(b.id) ? "col-span-1" : "col-span-2", CQ_SPAN[b.span] ?? CQ_SPAN[defaultSpan(b.id)]);
-const minSpan = (id: WidgetId) => (isKpi(id) ? 2 : 3);
+/** 3 colunas no mínimo: com o painel de blocos aberto, 2 colunas viram ~110px e o texto quebra letra a letra */
+const MIN_SPAN = 3;
 const ctxFor = (ctx: WidgetCtx, b: Block) => (isKpi(b.id) && b.span <= 2 ? { ...ctx, dense: true } : ctx);
 
 /** O bloco já tem as consultas de que precisa? (recém-adicionado espera o servidor) */
@@ -67,7 +69,6 @@ export interface EditStart {
 }
 
 const SIZES = [
-  { span: 2, label: "Mínimo", hint: "1/6" },
   { span: 3, label: "Pequeno", hint: "1/4" },
   { span: 4, label: "Médio", hint: "1/3" },
   { span: 6, label: "Metade", hint: "1/2" },
@@ -94,7 +95,8 @@ export function ViewEditor({
   const toast = useToast();
   const [viewId, setViewId] = useState(start.viewId);
   const [name, setName] = useState(start.name);
-  const [layout, setLayout] = useState<Block[]>(start.layout);
+  // blocos vindos de uma aba padrão (indicadores com 2 colunas) sobem para o mínimo do editor
+  const [layout, setLayout] = useState<Block[]>(() => start.layout.map((b) => ({ ...b, span: Math.max(b.span, MIN_SPAN) })));
   const [saved, setSaved] = useState(() => JSON.stringify({ n: start.name, l: start.layout }));
   const [selected, setSelected] = useState<WidgetId | null>(null);
   const [panel, setPanel] = useState(true);
@@ -157,35 +159,30 @@ export function ViewEditor({
       [next[i], next[j]] = [next[j], next[i]];
       return next;
     });
-  const moveTo = (id: WidgetId, target: WidgetId, after: boolean) =>
-    setLayout((l) => {
-      const item = l.find((b) => b.id === id);
-      if (!item || id === target) return l;
-      const rest = l.filter((b) => b.id !== id);
-      const at = rest.findIndex((b) => b.id === target) + (after ? 1 : 0);
-      const next = [...rest.slice(0, at), item, ...rest.slice(at)];
-      return next.map((b) => b.id).join() === l.map((b) => b.id).join() ? l : next;
-    });
+  const reorder = (order: WidgetId[]) => setLayout((l) => order.map((id) => l.find((b) => b.id === id)!).filter(Boolean));
 
-  function save(exit: boolean) {
-    const n = name.trim();
-    if (n.length < 2) {
-      toast("error", "Dê um nome para a sua visão.");
-      nameRef.current?.focus();
+  // sem nome ao salvar: pede num modal (com sugestões) em vez de só um aviso
+  const [askName, setAskName] = useState<null | { exit: boolean }>(null);
+
+  function save(exit: boolean, nameOverride?: string) {
+    const n = (nameOverride ?? name).trim();
+    if (!layout.length) {
+      toast("error", "Adicione ao menos um bloco antes de salvar.");
       return;
     }
-    if (!layout.length) {
-      toast("error", "Adicione ao menos um bloco.");
+    if (n.length < 2) {
+      setAskName({ exit });
       return;
     }
     startSave(async () => {
       const cfg = cfgOf(layout);
       const input = { name: n, goal: start.goal, shared: false, config: cfg };
+      if (nameOverride !== undefined) setName(n);
       const r = viewId ? await updateViewAction(viewId, input) : await createViewAction(input);
       if (!r.ok) return toast("error", r.error);
       const id = r.id ?? viewId!;
       setViewId(id);
-      setSaved(JSON.stringify({ n: name, l: layout }));
+      setSaved(JSON.stringify({ n, l: layout }));
       toast("success", viewId ? "Visão salva." : "Visão criada! Ela fica em Minhas visões.");
       const href = viewHref(cfg, id);
       if (exit) onExit(href);
@@ -250,7 +247,7 @@ export function ViewEditor({
             onResize={resize}
             onRemove={remove}
             onShift={shift}
-            onMove={moveTo}
+            onReorder={reorder}
           />
           <button
             type="button"
@@ -271,11 +268,138 @@ export function ViewEditor({
         </div>
         {panel && <BlockPanel searchRef={searchRef} used={new Set(layout.map((b) => b.id))} onAdd={add} onClose={() => setPanel(false)} />}
       </div>
+
+      {askName && (
+        <NameDialog
+          exit={askName.exit}
+          busy={busy}
+          layout={layout}
+          onClose={() => {
+            setAskName(null);
+            nameRef.current?.focus();
+          }}
+          onConfirm={(n) => {
+            setAskName(null);
+            save(askName.exit, n);
+          }}
+        />
+      )}
     </div>
   );
 }
 
+/** "Como vamos chamar esta visão?" — aparece ao salvar sem nome, com sugestões pelos blocos. */
+function NameDialog({ exit, busy, layout, onClose, onConfirm }: { exit: boolean; busy: boolean; layout: Block[]; onClose: () => void; onConfirm: (name: string) => void }) {
+  const [value, setValue] = useState("");
+  const suggestions = useMemo(() => {
+    const count = new Map<string, number>();
+    for (const b of layout) count.set(CATALOG[b.id].category, (count.get(CATALOG[b.id].category) ?? 0) + 1);
+    const top = [...count.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+    const label = CATEGORIES.find((c) => c.id === top)?.label;
+    const byCategory: Record<string, string> = {
+      metrics: "Indicadores principais",
+      charts: "Tendências do produto",
+      users: "Base de usuários",
+      engagement: "Engajamento dos usuários",
+      retention: "Retenção de usuários",
+      acquisition: "Aquisição e canais",
+      pages: "Páginas e navegação",
+      devices: "Dispositivos e acesso",
+      events: "Ações e eventos",
+    };
+    return [...new Set([top ? byCategory[top] : null, "Minha visão de produto", "Acompanhamento semanal", "Relatório executivo", label ? `Visão de ${label.toLowerCase()}` : null].filter((x): x is string => !!x))].slice(0, 4);
+  }, [layout]);
+  const ok = value.trim().length >= 2;
+  return (
+    <Dialog
+      title="Como vamos chamar esta visão?"
+      description="Dê um nome para encontrar esta visão depois em Minhas visões."
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            Voltar
+          </Button>
+          <Button size="sm" disabled={!ok || busy} onClick={() => onConfirm(value)}>
+            <Check className="size-4" /> {exit ? "Salvar e sair" : "Salvar visão"}
+          </Button>
+        </>
+      }
+    >
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (ok) onConfirm(value);
+        }}
+        className="flex flex-col gap-4"
+      >
+        <div className="flex items-center gap-3 rounded-2xl bg-surface-brand/40 p-3">
+          <span className="grid size-10 shrink-0 place-items-center rounded-xl [background:var(--grad-roxo)] text-white">
+            <LayoutGrid className="size-5" />
+          </span>
+          <p className="text-xs leading-relaxed text-fg-soft">
+            Sua visão tem <strong>{layout.length} {layout.length === 1 ? "bloco" : "blocos"}</strong>. Só você vê as suas visões, e pode renomear quando quiser.
+          </p>
+        </div>
+        <label className="flex flex-col gap-1.5">
+          <span className="text-sm font-semibold text-fg-soft">Nome da visão</span>
+          <input
+            autoFocus
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            maxLength={60}
+            placeholder="Ex.: Ativação de novos alunos"
+            className="rounded-xl border border-line-strong bg-bg-elev px-3.5 py-2.5 text-sm outline-none transition focus:border-accent"
+          />
+        </label>
+        <div>
+          <div className="mb-2 text-xs font-semibold text-fg-mut">Sugestões</div>
+          <div className="flex flex-wrap gap-2">
+            {suggestions.map((sg) => (
+              <button
+                key={sg}
+                type="button"
+                onClick={() => setValue(sg)}
+                className={cn(
+                  "rounded-full border px-3 py-1.5 text-xs font-semibold transition",
+                  value === sg ? "border-accent bg-surface-brand text-accent" : "border-line text-fg-soft hover:border-accent/50 hover:text-accent"
+                )}
+              >
+                {sg}
+              </button>
+            ))}
+          </div>
+        </div>
+      </form>
+    </Dialog>
+  );
+}
+
 /* ---------- grade editável ---------- */
+
+type DragState = {
+  id: WidgetId;
+  /** tamanho do bloco ao ser pego (a "fantasia" e o espaço reservado usam) */
+  w: number;
+  h: number;
+  /** onde o ponteiro pegou o bloco */
+  offX: number;
+  offY: number;
+  x: number;
+  y: number;
+  /** posição de inserção na lista SEM o bloco arrastado */
+  index: number;
+};
+
+const PH = "__placeholder";
+
+/** Caixa da "fantasia": legível em blocos estreitos, contida em blocos largos; o ponto de pega acompanha a proporção. */
+function ghostBox(d: DragState) {
+  const w = Math.min(Math.max(d.w, 280), 440);
+  const h = Math.min(d.h, 220);
+  return { w, h, offX: (d.offX / d.w) * w, offY: Math.min(d.offY, h - 24) };
+}
+const EDGE = 90; // px da borda da janela em que a página rola sozinha
 
 function EditableGrid({
   layout,
@@ -286,7 +410,7 @@ function EditableGrid({
   onResize,
   onRemove,
   onShift,
-  onMove,
+  onReorder,
 }: {
   layout: Block[];
   data: AnalyticsData;
@@ -296,13 +420,21 @@ function EditableGrid({
   onResize: (id: WidgetId, span: number) => void;
   onRemove: (id: WidgetId) => void;
   onShift: (id: WidgetId, by: -1 | 1) => void;
-  onMove: (id: WidgetId, target: WidgetId, after: boolean) => void;
+  onReorder: (order: WidgetId[]) => void;
 }) {
   const gridRef = useRef<HTMLDivElement>(null);
-  const [armed, setArmed] = useState<WidgetId | null>(null);
-  const [dragging, setDragging] = useState<WidgetId | null>(null);
+  const els = useRef(new Map<string, HTMLElement>());
+  const [drag, setDragState] = useState<DragState | null>(null);
+  // espelho do estado para os eventos de ponteiro/animação (sempre o valor mais recente)
+  const dragRef = useRef<DragState | null>(null);
+  const setDrag = (d: DragState | null) => {
+    dragRef.current = d;
+    setDragState(d);
+  };
   const [menu, setMenu] = useState<WidgetId | null>(null);
   const [resizing, setResizing] = useState<{ id: WidgetId; span: number } | null>(null);
+  const justDragged = useRef(false);
+  const dropFrom = useRef<{ id: WidgetId; left: number; top: number } | null>(null);
 
   // fecha o menu de um bloco ao clicar fora
   useEffect(() => {
@@ -311,6 +443,169 @@ function EditableGrid({
     document.addEventListener("pointerdown", close);
     return () => document.removeEventListener("pointerdown", close);
   }, [menu]);
+
+  const dragged = drag ? layout.find((b) => b.id === drag.id) ?? null : null;
+  const rest = drag ? layout.filter((b) => b.id !== drag.id) : layout;
+  // o que está na tela: durante o arraste, o espaço reservado ocupa o lugar de destino
+  const shown: (Block | typeof PH)[] = drag ? [...rest.slice(0, drag.index), PH, ...rest.slice(drag.index)] : layout;
+  const orderKey = shown.map((b) => (b === PH ? PH : `${b.id}:${b.span}`)).join(",");
+
+  /*
+    Animação dos vizinhos (FLIP): quando o espaço reservado muda de lugar, cada bloco desliza da
+    posição antiga para a nova em vez de pular. Posições guardadas em coordenadas da PÁGINA, para a
+    rolagem automática não virar animação.
+  */
+  const prevPos = useRef(new Map<string, { x: number; y: number }>());
+  useLayoutEffect(() => {
+    const next = new Map<string, { x: number; y: number }>();
+    for (const [key, el] of els.current) {
+      if (!el.isConnected) continue;
+      const r = el.getBoundingClientRect();
+      const pos = { x: r.left + window.scrollX, y: r.top + window.scrollY };
+      next.set(key, pos);
+      const before = prevPos.current.get(key);
+      const from = dropFrom.current;
+      if (from && key === from.id) {
+        // o bloco solto "pousa" de onde a fantasia estava
+        el.animate([{ transform: `translate(${from.left - r.left}px, ${from.top - r.top}px) scale(1.02)` }, { transform: "none" }], { duration: 220, easing: "cubic-bezier(.2,.8,.2,1)" });
+        dropFrom.current = null;
+      } else if (before && (Math.abs(before.x - pos.x) > 1 || Math.abs(before.y - pos.y) > 1) && key !== PH) {
+        el.animate([{ transform: `translate(${before.x - pos.x}px, ${before.y - pos.y}px)` }, { transform: "none" }], { duration: 200, easing: "cubic-bezier(.2,.8,.2,1)" });
+      }
+    }
+    prevPos.current = next;
+  }, [orderKey]);
+
+  /** Onde inserir para o ponteiro em (x, y): o bloco sob o ponteiro (ou o mais próximo) e o lado dele. */
+  function indexAt(x: number, y: number, d: DragState): number {
+    const others = layout.filter((b) => b.id !== d.id);
+    let best: { j: number; r: DOMRect; dist: number } | null = null;
+    for (let j = 0; j < others.length; j++) {
+      const el = els.current.get(others[j].id);
+      if (!el) continue;
+      const r = el.getBoundingClientRect();
+      const inside = x >= r.left - GAP / 2 && x <= r.right + GAP / 2 && y >= r.top - GAP / 2 && y <= r.bottom + GAP / 2;
+      const dist = inside ? -1 : Math.hypot(x - (r.left + r.width / 2), y - (r.top + r.height / 2));
+      if (!best || dist < best.dist) best = { j, r, dist };
+    }
+    // sobre o próprio espaço reservado: fica onde está (evita o vai-e-vem)
+    const ph = els.current.get(PH)?.getBoundingClientRect();
+    if (ph && x >= ph.left && x <= ph.right && y >= ph.top && y <= ph.bottom) return d.index;
+    if (!best) return 0;
+    // abaixo de tudo = fim da lista
+    const last = els.current.get(others[others.length - 1]?.id)?.getBoundingClientRect();
+    if (last && y > last.bottom + GAP && best.dist >= 0) return others.length;
+    const r = best.r;
+    // diagonal: à direita OU abaixo do centro do bloco = depois dele
+    const after = (x - r.left) / r.width + (y - r.top) / r.height > 1;
+    return best.j + (after ? 1 : 0);
+  }
+
+  // rolagem automática perto das bordas da janela, enquanto arrasta
+  useEffect(() => {
+    if (!drag) return;
+    let raf = 0;
+    const tick = () => {
+      const d = dragRef.current;
+      if (!d) return;
+      const v = d.y < EDGE ? -(EDGE - d.y) / 4 : d.y > window.innerHeight - EDGE ? (d.y - (window.innerHeight - EDGE)) / 4 : 0;
+      if (v) {
+        window.scrollBy(0, Math.max(-24, Math.min(24, v)));
+        const index = indexAt(d.x, d.y, d);
+        if (index !== d.index) setDrag({ ...d, index });
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!drag]);
+
+  /*
+    Arrastar pelo bloco INTEIRO (menos menu e alça de tamanho). Mouse: começa depois de 5px de
+    movimento (um clique simples só seleciona). Toque: segurar ~0,2s — sem isso o arraste
+    roubaria a rolagem da página no celular.
+  */
+  function onBlockPointerDown(e: React.PointerEvent<HTMLElement>, b: Block) {
+    if (e.button !== 0 || (e.target as Element).closest("[data-no-drag]")) return;
+    const el = e.currentTarget;
+    const x0 = e.clientX;
+    const y0 = e.clientY;
+    const touch = e.pointerType === "touch";
+    let started = false;
+    let timer = 0;
+    let frame = 0;
+    let last = { x: x0, y: y0 };
+
+    const begin = (x: number, y: number) => {
+      started = true;
+      const r = el.getBoundingClientRect();
+      const d: DragState = { id: b.id, w: r.width, h: r.height, offX: x0 - r.left, offY: y0 - r.top, x, y, index: layout.findIndex((it) => it.id === b.id) };
+      setDrag(d);
+      setMenu(null);
+      onSelect(b.id);
+      document.body.style.cursor = "grabbing";
+      document.body.style.userSelect = "none";
+      if (touch) navigator.vibrate?.(8);
+    };
+    const move = (ev: PointerEvent) => {
+      last = { x: ev.clientX, y: ev.clientY };
+      if (!started) {
+        const dist = Math.hypot(ev.clientX - x0, ev.clientY - y0);
+        if (touch) {
+          if (dist > 8) cleanup(); // é rolagem, não arraste
+          return;
+        }
+        if (dist < 5) return;
+        begin(ev.clientX, ev.clientY);
+      }
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const d = dragRef.current;
+        if (!d) return;
+        const index = indexAt(last.x, last.y, d);
+        setDrag({ ...d, x: last.x, y: last.y, index });
+      });
+    };
+    const blockScroll = (ev: TouchEvent) => started && ev.preventDefault();
+    const finish = (commit: boolean) => {
+      const d = dragRef.current;
+      if (started && d) {
+        justDragged.current = true;
+        window.setTimeout(() => (justDragged.current = false), 0);
+        if (commit) {
+          const others = layout.filter((it) => it.id !== d.id).map((it) => it.id);
+          const order = [...others.slice(0, d.index), d.id, ...others.slice(d.index)];
+          const g = ghostBox(d);
+          dropFrom.current = { id: d.id, left: d.x - g.offX, top: d.y - g.offY };
+          if (order.join() !== layout.map((it) => it.id).join()) onReorder(order);
+        }
+        setDrag(null);
+      }
+      cleanup();
+    };
+    const up = () => finish(true);
+    const key = (ev: KeyboardEvent) => ev.key === "Escape" && finish(false);
+    function cleanup() {
+      window.clearTimeout(timer);
+      cancelAnimationFrame(frame);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      window.removeEventListener("keydown", key);
+      window.removeEventListener("touchmove", blockScroll);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    }
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+    window.addEventListener("keydown", key);
+    if (touch) {
+      window.addEventListener("touchmove", blockScroll, { passive: false });
+      timer = window.setTimeout(() => begin(last.x, last.y), 220);
+    }
+  }
 
   function startResize(e: React.PointerEvent, b: Block) {
     const grid = gridRef.current;
@@ -326,7 +621,7 @@ function EditableGrid({
     el.setPointerCapture(e.pointerId);
     setResizing({ id: b.id, span: s0 });
     const move = (ev: PointerEvent) => {
-      const span = Math.min(12, Math.max(minSpan(b.id), s0 + Math.round((ev.clientX - x0) / step)));
+      const span = Math.min(12, Math.max(MIN_SPAN, s0 + Math.round((ev.clientX - x0) / step)));
       setResizing({ id: b.id, span });
       onResize(b.id, span);
     };
@@ -340,6 +635,11 @@ function EditableGrid({
     el.addEventListener("pointerup", up);
     el.addEventListener("pointercancel", up);
   }
+
+  const setEl = (key: string) => (el: HTMLElement | null) => {
+    if (el) els.current.set(key, el);
+    else els.current.delete(key);
+  };
 
   if (!layout.length) {
     return (
@@ -355,37 +655,42 @@ function EditableGrid({
   return (
     <div className="@container">
       <div ref={gridRef} className={GRID}>
-        {layout.map((b, i) => {
+        {shown.map((b) => {
+          if (b === PH) {
+            return (
+              <div
+                key={PH}
+                ref={setEl(PH)}
+                aria-hidden
+                className={cn(
+                  "grid min-w-0 place-items-center rounded-2xl border-2 border-dashed border-accent bg-surface-brand/40 shadow-[inset_0_0_0_6px_color-mix(in_srgb,var(--accent)_8%,transparent)]",
+                  dragged && spanClass(dragged)
+                )}
+                style={{ height: drag?.h }}
+              >
+                <span className="flex flex-col items-center gap-1 text-center">
+                  <span className="grid size-9 place-items-center rounded-full bg-accent/15 text-accent">
+                    <ArrowDown className="size-4 animate-bounce" />
+                  </span>
+                  <span className="text-sm font-semibold text-accent">Soltar aqui</span>
+                </span>
+              </div>
+            );
+          }
+          const i = layout.findIndex((x) => x.id === b.id);
           const sel = selected === b.id;
           const ready = hasData(data, b.id);
           return (
             <div
               key={b.id}
               id={`blk-${b.id}`}
-              draggable={armed === b.id}
-              onDragStart={(e) => {
-                setDragging(b.id);
-                e.dataTransfer.effectAllowed = "move";
-                e.dataTransfer.setData("text/plain", b.id);
-              }}
-              onDragEnd={() => {
-                setDragging(null);
-                setArmed(null);
-              }}
-              onDragOver={(e) => {
-                if (!dragging || dragging === b.id) return;
-                e.preventDefault();
-                const r = e.currentTarget.getBoundingClientRect();
-                // diagonal: à direita OU abaixo do centro = depois deste bloco
-                onMove(dragging, b.id, (e.clientX - r.left) / r.width + (e.clientY - r.top) / r.height > 1);
-              }}
-              onDrop={(e) => e.preventDefault()}
-              onClick={() => onSelect(b.id)}
+              ref={setEl(b.id)}
+              onPointerDown={(e) => onBlockPointerDown(e, b)}
+              onClick={() => !justDragged.current && onSelect(b.id)}
               className={cn(
-                "group/blk relative min-w-0 rounded-2xl outline-2 outline-offset-4 transition-[outline-color,opacity]",
+                "group/blk relative min-w-0 cursor-grab touch-manipulation rounded-2xl outline-2 outline-offset-4 transition-[outline-color,box-shadow] active:cursor-grabbing",
                 spanClass(b),
-                sel ? "outline outline-accent" : "outline-dashed outline-accent/30 hover:outline-accent/60",
-                dragging === b.id && "opacity-40"
+                sel ? "outline outline-accent" : "outline-dashed outline-accent/30 hover:outline-accent/70 hover:shadow-[var(--shadow-md)]"
               )}
             >
               {/* o conteúdo não responde a clique durante a edição (links, filtros, abas) */}
@@ -393,7 +698,7 @@ function EditableGrid({
                 {ready ? <Widget id={b.id} ctx={ctxFor(ctx, b)} /> : <div className="h-full min-h-[150px] animate-pulse rounded-2xl border border-line bg-bg-sunken" aria-label="Carregando bloco" />}
               </div>
 
-              {/* barra do bloco: alça de arrastar + menu (no topo, sem disputar o espaço entre blocos) */}
+              {/* barra do bloco: alça (também move pelo teclado) + menu */}
               <div
                 data-block-menu
                 className={cn(
@@ -403,44 +708,50 @@ function EditableGrid({
               >
                 <button
                   type="button"
-                  aria-label={`Arrastar ${widgetName(b.id)}`}
-                  title="Arraste para mover"
-                  onPointerDown={() => setArmed(b.id)}
-                  onPointerUp={() => !dragging && setArmed(null)}
-                  className="grid h-7 w-7 cursor-grab place-items-center rounded-l-lg text-fg-mut transition hover:bg-surface-brand hover:text-accent active:cursor-grabbing"
+                  aria-label={`Mover ${widgetName(b.id)} (setas do teclado)`}
+                  title="Arraste o bloco para mover"
+                  onKeyDown={(e) => {
+                    const by = e.key === "ArrowUp" || e.key === "ArrowLeft" ? -1 : e.key === "ArrowDown" || e.key === "ArrowRight" ? 1 : 0;
+                    if (by) {
+                      e.preventDefault();
+                      onShift(b.id, by);
+                    }
+                  }}
+                  className="grid h-7 w-7 cursor-grab place-items-center rounded-l-lg text-fg-mut transition hover:bg-surface-brand hover:text-accent"
                 >
                   <GripVertical className="size-4" />
                 </button>
                 <span className="h-4 w-px bg-line" />
                 <button
                   type="button"
+                  data-no-drag
                   aria-label={`Opções de ${widgetName(b.id)}`}
                   aria-expanded={menu === b.id}
                   onClick={(e) => {
                     e.stopPropagation();
                     setMenu(menu === b.id ? null : b.id);
                   }}
-                  className="grid h-7 w-7 place-items-center rounded-r-lg text-fg-mut transition hover:bg-surface-brand hover:text-accent"
+                  className="grid h-7 w-7 cursor-pointer place-items-center rounded-r-lg text-fg-mut transition hover:bg-surface-brand hover:text-accent"
                 >
                   <MoreVertical className="size-4" />
                 </button>
                 {menu === b.id && (
-                  <div role="menu" className="absolute right-0 top-full mt-1.5 w-56 overflow-hidden rounded-xl border border-line bg-bg-elev py-1 shadow-[var(--shadow-lg)] animate-[luumuSelectIn_.14s_ease-out]">
+                  <div data-no-drag role="menu" className="absolute right-0 top-full mt-1.5 w-56 cursor-default overflow-hidden rounded-xl border border-line bg-bg-elev py-1 shadow-[var(--shadow-lg)] animate-[luumuSelectIn_.14s_ease-out]">
                     <MenuItem icon={ArrowUp} label="Mover para antes" disabled={i === 0} onClick={() => (onShift(b.id, -1), setMenu(null))} />
                     <MenuItem icon={ArrowDown} label="Mover para depois" disabled={i === layout.length - 1} onClick={() => (onShift(b.id, 1), setMenu(null))} />
                     <div className="my-1 border-t border-line" />
                     <div className="px-3 pb-1 pt-1.5 font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-fg-mut">Tamanho</div>
-                    {SIZES.filter((s) => s.span >= minSpan(b.id)).map((s) => (
+                    {SIZES.filter((sz) => sz.span >= MIN_SPAN).map((sz) => (
                       <button
-                        key={s.span}
+                        key={sz.span}
                         type="button"
                         role="menuitemradio"
-                        aria-checked={b.span === s.span}
-                        onClick={() => (onResize(b.id, s.span), setMenu(null))}
-                        className={cn("flex w-full items-center justify-between px-3 py-1.5 text-left text-sm transition hover:bg-bg-sunken", b.span === s.span && "font-semibold text-accent")}
+                        aria-checked={b.span === sz.span}
+                        onClick={() => (onResize(b.id, sz.span), setMenu(null))}
+                        className={cn("flex w-full items-center justify-between px-3 py-1.5 text-left text-sm transition hover:bg-bg-sunken", b.span === sz.span && "font-semibold text-accent")}
                       >
-                        {s.label}
-                        <span className="font-mono text-[11px] text-fg-mut">{s.hint}</span>
+                        {sz.label}
+                        <span className="font-mono text-[11px] text-fg-mut">{sz.hint}</span>
                       </button>
                     ))}
                     <div className="my-1 border-t border-line" />
@@ -451,15 +762,17 @@ function EditableGrid({
 
               {/* redimensionar (canto inferior direito) */}
               <span
+                data-no-drag
                 role="slider"
                 aria-label={`Redimensionar ${widgetName(b.id)}`}
-                aria-valuemin={minSpan(b.id)}
+                title="Arraste para redimensionar"
+                aria-valuemin={MIN_SPAN}
                 aria-valuemax={12}
                 aria-valuenow={b.span}
                 tabIndex={0}
                 onKeyDown={(e) => {
                   if (e.key === "ArrowRight") onResize(b.id, Math.min(12, b.span + 1));
-                  if (e.key === "ArrowLeft") onResize(b.id, Math.max(minSpan(b.id), b.span - 1));
+                  if (e.key === "ArrowLeft") onResize(b.id, Math.max(MIN_SPAN, b.span - 1));
                 }}
                 onPointerDown={(e) => startResize(e, b)}
                 className={cn(
@@ -467,14 +780,46 @@ function EditableGrid({
                   sel || resizing?.id === b.id ? "opacity-100" : "opacity-0 group-hover/blk:opacity-100 focus-visible:opacity-100"
                 )}
               />
-              {(resizing?.id === b.id || sel) && (
+              {resizing?.id === b.id && (
                 <span className="pointer-events-none absolute -bottom-9 right-0 z-10 hidden whitespace-nowrap rounded-lg bg-fg px-2 py-1 text-[11px] font-semibold text-bg shadow-[var(--shadow-md)] @[40rem]:block">
-                  {resizing?.id === b.id ? `${resizing.span} de 12 colunas` : "Redimensionar"}
+                  {resizing.span} de 12 colunas
                 </span>
               )}
             </div>
           );
         })}
+      </div>
+
+      {/* a "fantasia" do bloco seguindo o ponteiro */}
+      {drag && dragged && <DragGhost block={dragged} drag={drag} />}
+    </div>
+  );
+}
+
+function DragGhost({ block, drag }: { block: Block; drag: DragState }) {
+  const Icon = CATALOG[block.id].icon;
+  const { w, h, offX, offY } = ghostBox(drag);
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none fixed left-0 top-0 z-[60] will-change-transform"
+      style={{ width: w, height: h, transform: `translate(${drag.x - offX}px, ${drag.y - offY}px)` }}
+    >
+      <div className="flex h-full -rotate-[1.5deg] scale-[1.02] flex-col overflow-hidden rounded-2xl border-2 border-accent bg-bg-elev/95 p-5 shadow-[0_24px_60px_-12px_rgba(75,28,171,.45)] backdrop-blur-sm">
+        <div className="flex items-center gap-2.5">
+          <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-surface-brand text-accent">
+            <Icon className="size-[18px]" />
+          </span>
+          <span className="min-w-0">
+            <span className="block truncate font-display text-[15px] font-bold">{widgetName(block.id)}</span>
+            <span className="block text-xs text-fg-mut">{block.span} de 12 colunas</span>
+          </span>
+        </div>
+        <div className="mt-4 flex flex-1 flex-col gap-2 opacity-60">
+          <span className="h-2.5 w-2/3 rounded-full bg-bg-sunken" />
+          <span className="h-2.5 w-1/2 rounded-full bg-bg-sunken" />
+          <span className="mt-auto h-12 w-full rounded-xl bg-gradient-to-t from-accent/20 to-transparent" />
+        </div>
       </div>
     </div>
   );
