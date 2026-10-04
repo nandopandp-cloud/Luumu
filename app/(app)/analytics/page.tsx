@@ -4,23 +4,17 @@ import { canManageWorkspace, getCurrentProject, getCurrentRole, requireUser } fr
 import { collectingSince, getAnalytics, getAnalyticsSettings, hasAnalyticsData, listAnalyticsUsers, listViews, USER_SEGMENTS, USER_SORTS, type AnalyticsSettings, type UserSegment, type UserSort } from "@/lib/db/analytics";
 import type { UsersData } from "@/components/analytics/UsersView";
 import { listHosts } from "@/lib/db/hosts";
-import { parseViewConfig, type ViewConfig } from "@/lib/analytics/core";
+import { parseViewConfig, viewHref, type ViewConfig } from "@/lib/analytics/core";
 import { datasetsFor, defaultSpan, TAB_LAYOUT, type Block } from "@/lib/analytics/derive";
 import { normalizeHost } from "@/lib/hosts";
-import { periodToRange } from "@/lib/period";
+import { DEFAULT_PERIOD, periodToRange } from "@/lib/period";
 
 export const dynamic = "force-dynamic";
 
 type SP = { tab?: string; view?: string; period?: string; from?: string; to?: string; host?: string; device?: string; w?: string; q?: string; seg?: string; sort?: string; dir?: string; pg?: string };
 
-const same = (a: ViewConfig, b: ViewConfig) =>
-  a.tab === b.tab &&
-  (a.period ?? "30d") === (b.period ?? "30d") &&
-  (a.from ?? "") === (b.from ?? "") &&
-  (a.to ?? "") === (b.to ?? "") &&
-  (a.host ?? "") === (b.host ?? "") &&
-  (a.device ?? "") === (b.device ?? "") &&
-  (a.widgets ?? []).join(",") === (b.widgets ?? []).join(",");
+/** Mesma configuração = mesma URL (aba, filtros, blocos, tamanhos e ordem). */
+const same = (a: ViewConfig, b: ViewConfig) => viewHref(a) === viewHref(b);
 
 export default async function AnalyticsPage({ searchParams }: { searchParams: Promise<SP> }) {
   const sp = await searchParams;
@@ -51,12 +45,13 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
     host: normalizeHost(sp.host) || saved?.config.host,
     device: sp.device ?? saved?.config.device,
     widgets: sp.w ? sp.w.split(",") : saved?.config.widgets,
+    spans: sp.w ? undefined : saved?.config.spans,
   });
 
   const blocks: Block[] =
-    config.tab === "custom" ? (config.widgets ?? []).map((id) => ({ id, span: defaultSpan(id) })) : config.tab === "users" ? [] : TAB_LAYOUT[config.tab];
+    config.tab === "custom" ? (config.widgets ?? []).map((id) => ({ id, span: config.spans?.[id] ?? defaultSpan(id) })) : config.tab === "users" ? [] : TAB_LAYOUT[config.tab];
 
-  const range = periodToRange(config.period ?? "30d", config.from, config.to);
+  const range = periodToRange(config.period ?? DEFAULT_PERIOD, config.from, config.to);
   const to = range.to ?? new Date();
   const from = range.from ?? new Date(to.getTime() - 365 * 86_400_000);
   const data = blocks.length

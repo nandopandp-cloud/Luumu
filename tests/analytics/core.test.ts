@@ -89,6 +89,19 @@ test("visão salva: config limpa e link de volta", () => {
   assert.equal(viewHref({ tab: "overview" }), "/analytics");
 });
 
+test("visão personalizada: ordem e tamanho dos blocos vão e voltam pela URL", () => {
+  const c = parseViewConfig({ tab: "custom", period: "today", widgets: ["users_trend:8", "kpi_dau:3", "kpi_dau:6", "hours:99", "hack:4", "top_pages"] });
+  assert.equal(c.period, "today");
+  assert.deepEqual(c.widgets, ["users_trend", "kpi_dau", "hours", "top_pages"]); // sem repetidos nem desconhecidos
+  assert.deepEqual(c.spans, { users_trend: 8, kpi_dau: 6, hours: 12 }); // 99 → 12; o último tamanho vale
+  const href = viewHref(c, "avw_9");
+  assert.equal(decodeURIComponent(href), "/analytics?view=avw_9&tab=custom&period=today&w=users_trend:8,kpi_dau:6,hours:12,top_pages");
+  // visão salva no banco (spans como objeto) e visão antiga sem spans
+  assert.deepEqual(parseViewConfig({ tab: "custom", widgets: ["kpi_dau", "hours"], spans: { hours: 6, kpi_mau: 4, kpi_dau: 1 } }).spans, { hours: 6, kpi_dau: 2 });
+  assert.equal(parseViewConfig({ tab: "custom", widgets: ["kpi_dau"] }).spans, undefined);
+  assert.equal(parseViewConfig({ tab: "overview", widgets: ["kpi_dau:4"] }).spans, undefined);
+});
+
 test("todo bloco das abas existe no catálogo e sabe de quais dados precisa", () => {
   for (const blocks of Object.values(TAB_LAYOUT)) for (const b of blocks) assert.ok(WIDGET_IDS.includes(b.id), b.id);
   for (const w of WIDGET_IDS) assert.ok(WIDGET_DATASETS[w]?.length, w);

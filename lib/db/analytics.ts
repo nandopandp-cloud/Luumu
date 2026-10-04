@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, or, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, sql, type SQL } from "drizzle-orm";
 import { db } from "./client";
 import { analyticsPageviews, analyticsSessions, analyticsSettings, analyticsUsers, analyticsViews } from "@/db/schema";
 import { analyticsViewId } from "./ids";
@@ -236,6 +236,11 @@ function uf(s: AnalyticsScope, from = s.from, to = s.to): SQL {
   }${s.device ? sql` and u.first_device = ${s.device}` : sql``}`;
 }
 const day = (col: SQL) => sql`to_char((${col} at time zone ${TZ})::date, 'YYYY-MM-DD')`;
+/** Recorte de até 2 dias (ex.: "Hoje") vira série POR HORA ("2026-10-04T09"): por dia seria um ponto só. */
+const hourly = (s: AnalyticsScope) => s.to.getTime() - s.from.getTime() <= 2 * 86_400_000;
+const bucket = (s: AnalyticsScope, col: SQL) => (hourly(s) ? sql`to_char(${col} at time zone ${TZ}, 'YYYY-MM-DD"T"HH24')` : day(col));
+/** Início (ms) do balde: dia às 12h ou a hora cheia, no horário de Brasília. */
+const bucketTime = (d: string) => new Date(d.length > 10 ? `${d}:00:00-03:00` : `${d}T12:00:00-03:00`).getTime();
 /** timestamp → ISO 8601 em UTC ("…T…Z"): o formato texto do Postgres ("2026-10-02 01:54:25+00") não é lido pelo Safari */
 const isoTs = (col: SQL) => sql`to_char(${col} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`;
 
@@ -266,12 +271,12 @@ export async function listAnalyticsEvents(projectId: string): Promise<string[]> 
 async function dailySessions(s: AnalyticsScope, p: AnalyticsScope) {
   const r = rows<{ d: string; users: number; sessions: number; ms: number; pv: number }>(
     await db.execute(sql`
-      select ${day(sql`s.started_at`)} d, count(distinct s.anon_id)::int users, count(*)::int sessions,
+      select ${bucket(s, sql`s.started_at`)} d, count(distinct s.anon_id)::int users, count(*)::int sessions,
              coalesce(avg(s.duration_ms), 0)::int ms, coalesce(sum(s.pageviews), 0)::int pv
         from analytics_sessions s where ${sf(s, p.from, s.to)} group by 1 order by 1`)
   );
   const curFrom = s.from.getTime();
-  const split = (x: { d: string }) => new Date(`${x.d}T12:00:00-03:00`).getTime() >= curFrom;
+  const split = (x: { d: string }) => bucketTime(x.d) >= curFrom;
   return { cur: r.filter(split).map((x) => ({ ...x, users: n(x.users), sessions: n(x.sessions), ms: n(x.ms), pv: n(x.pv) })), prev: r.filter((x) => !split(x)).map((x) => ({ ...x, users: n(x.users), sessions: n(x.sessions), ms: n(x.ms), pv: n(x.pv) })) };
 }
 
@@ -433,7 +438,7 @@ async function eventTrend(s: AnalyticsScope, names: string[]) {
   if (!names.length) return [];
   const r = rows<{ e: string; d: string; users: number }>(
     await db.execute(sql`
-      select e, ${day(sql`p.created_at`)} d, count(distinct p.anon_id)::int users
+      select e, ${bucket(s, sql`p.created_at`)} d, count(distinct p.anon_id)::int users
         from analytics_pageviews p, unnest(p.events) e where ${pf(s)} and e in (${sql.join(names.map((x) => sql`${x}`), sql`, `)})
        group by 1, 2 order by 2`)
   );
@@ -443,7 +448,7 @@ async function eventTrend(s: AnalyticsScope, names: string[]) {
 /** Novos usuários: por dia e canal, e os totais (período e anterior). */
 async function newUsers(s: AnalyticsScope, p: AnalyticsScope) {
   const r = rows<{ d: string; ch: string; users: number }>(
-    await db.execute(sql`select ${day(sql`u.first_seen_at`)} d, u.first_channel ch, count(*)::int users from analytics_users u where ${uf(s)} group by 1, 2 order by 1`)
+    await db.execute(sql`select ${bucket(s, sql`u.first_seen_at`)} d, u.first_channel ch, count(*)::int users from analytics_users u where ${uf(s)} group by 1, 2 order by 1`)
   );
   const [t] = rows<{ cur: number; prev: number }>(
     await db.execute(sql`
@@ -560,7 +565,7 @@ async function techs(s: AnalyticsScope) {
 
 async function deviceTrend(s: AnalyticsScope) {
   const r = rows<{ d: string; device: string; users: number }>(
-    await db.execute(sql`select ${day(sql`s.started_at`)} d, s.device, count(distinct s.anon_id)::int users from analytics_sessions s where ${sf(s)} group by 1, 2 order by 1`)
+    await db.execute(sql`select ${bucket(s, sql`s.started_at`)} d, s.device, count(distinct s.anon_id)::int users from analytics_sessions s where ${sf(s)} group by 1, 2 order by 1`)
   );
   return r.map((x) => ({ d: x.d, device: x.device, users: n(x.users) }));
 }
@@ -675,7 +680,7 @@ export async function listViews(projectId: string, userId: string): Promise<Save
   const r = await db
     .select()
     .from(analyticsViews)
-    .where(and(eq(analyticsViews.projectId, projectId), or(eq(analyticsViews.userId, userId), eq(analyticsViews.shared, true))))
+    .where(and(eq(analyticsViews.projectId, projectId), eq(analyticsViews.userId, userId)))
     .orderBy(desc(analyticsViews.updatedAt));
   return r.map((v) => ({
     id: v.id,

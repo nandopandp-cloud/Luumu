@@ -7,7 +7,7 @@ import { Field, Select } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { useToast } from "@/components/ui/Toast";
-import { PERIOD_OPTIONS } from "@/lib/period";
+import { DEFAULT_PERIOD, PERIOD_OPTIONS, periodLabel } from "@/lib/period";
 import {
   createPublicLinkAction,
   togglePublicLinkAction,
@@ -39,7 +39,7 @@ export function PublicLinks({
   const [items, setItems] = useState(initial);
   const [creating, setCreating] = useState(false);
   const [surveyId, setSurveyId] = useState("");
-  const [period, setPeriod] = useState("all");
+  const [period, setPeriod] = useState<string>(DEFAULT_PERIOD);
   const [saving, start] = useTransition();
 
   function create() {
@@ -139,7 +139,7 @@ function PublicLinkRow({
 
   const url = typeof window !== "undefined" ? `${window.location.origin}/r/${item.token}` : `/r/${item.token}`;
   const scopeName = item.surveyId ? surveys.find((s) => s.id === item.surveyId)?.name ?? "Pesquisa" : "Todas as pesquisas";
-  const periodLabel = PERIOD_OPTIONS.find((p) => p.value === item.period)?.label ?? item.period;
+  const label = periodLabel(item.period);
 
   function copy() {
     navigator.clipboard?.writeText(url);
@@ -156,7 +156,7 @@ function PublicLinkRow({
           <Badge tone={item.active ? "success" : "neutral"}>{item.active ? "ativo" : "revogado"}</Badge>
         </div>
         <div className="mt-0.5 truncate text-xs text-fg-mut">
-          {periodLabel} · {item.viewCount} {item.viewCount === 1 ? "visualização" : "visualizações"}
+          {label} · {item.viewCount} {item.viewCount === 1 ? "visualização" : "visualizações"}
         </div>
         {item.active && (
           <code className="mt-1 block max-w-full truncate rounded bg-bg-sunken px-2 py-1 font-mono text-[11px] text-fg-soft">

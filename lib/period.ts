@@ -1,7 +1,7 @@
 export const PERIOD_OPTIONS = [
+  { value: "today", label: "Hoje" },
   { value: "7d", label: "Últimos 7 dias" },
   { value: "30d", label: "Últimos 30 dias" },
-  { value: "90d", label: "Últimos 90 dias" },
   { value: "12m", label: "Últimos 12 meses" },
   { value: "all", label: "Todo o período" },
   { value: "custom", label: "Período específico…" },
@@ -10,10 +10,19 @@ export const PERIOD_OPTIONS = [
 export type PeriodValue = (typeof PERIOD_OPTIONS)[number]["value"];
 
 /**
- * Período das telas com filtro quando a URL não diz nada. É o que o seletor mostra; antes os
- * dados caíam em "todo o período" enquanto o seletor dizia "Últimos 30 dias".
+ * Período das telas com filtro quando a URL não diz nada: "Hoje" em toda a plataforma. É o que
+ * o seletor mostra e o que os dados usam (os dois precisam bater).
  */
-export const DEFAULT_PERIOD = "30d";
+export const DEFAULT_PERIOD = "today";
+
+/** "90d" saiu do seletor, mas links, visões e relatórios salvos com ele continuam valendo. */
+const LEGACY_LABELS: Record<string, string> = { "90d": "Últimos 90 dias" };
+
+/** Meia-noite de hoje no horário de Brasília (UTC−3, sem horário de verão desde 2019). */
+export function startOfTodayBR(now = new Date()): Date {
+  const br = new Date(now.getTime() - 3 * 3_600_000).toISOString().slice(0, 10);
+  return new Date(`${br}T00:00:00-03:00`);
+}
 
 /**
  * Converte o valor do período em uma data de início (ou undefined para "todo o período").
@@ -21,6 +30,7 @@ export const DEFAULT_PERIOD = "30d";
  * Para "custom", use periodToRange (precisa das datas from/to explícitas).
  */
 export function periodToDateFrom(period: string | null | undefined): Date | undefined {
+  if (period === "today") return startOfTodayBR();
   const days: Record<string, number> = { "7d": 7, "30d": 30, "90d": 90, "12m": 365 };
   const n = period ? days[period] : undefined;
   if (!n) return undefined;
@@ -55,7 +65,7 @@ export function periodLabel(period: string | null | undefined, customFrom?: stri
     };
     return `${fmt(customFrom)} a ${fmt(customTo)}`;
   }
-  return PERIOD_OPTIONS.find((p) => p.value === period)?.label ?? "Últimos 30 dias";
+  return PERIOD_OPTIONS.find((p) => p.value === period)?.label ?? LEGACY_LABELS[period ?? ""] ?? "Hoje";
 }
 
 /** "28/09/2026" */

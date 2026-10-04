@@ -20,7 +20,7 @@ const scheduleSchema = z.object({
   name: z.string().min(1, "Dê um nome ao envio."),
   recipients: z.array(z.string().email("E-mail inválido.")).min(1, "Informe ao menos um e-mail."),
   frequency: z.enum(["daily", "weekly", "monthly"]),
-  period: z.enum(["7d", "30d", "90d", "12m", "all"]),
+  period: z.enum(["today", "7d", "30d", "90d", "12m", "all"]),
   format: z.enum(["pdf", "xlsx", "csv"]),
   surveyIds: z.array(z.string()),
   // tipos acompanhados: o envio resolve sozinho a última campanha encerrada de cada um
@@ -81,7 +81,7 @@ export async function deleteScheduleAction(id: string) {
 
 const publicLinkSchema = z.object({
   surveyId: z.string().nullable().optional(),
-  period: z.enum(["7d", "30d", "90d", "12m", "all"]),
+  period: z.enum(["today", "7d", "30d", "90d", "12m", "all"]),
 });
 
 export async function createPublicLinkAction(input: unknown) {

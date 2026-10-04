@@ -607,6 +607,19 @@ export const analyticsSettings = pgTable("analytics_settings", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * Captura de nome e foto do usuário lida da página do produto (para a workspace inteira).
+ * Seletores vazios = detecção automática (avatar no topo da tela e o nome ao lado dele).
+ */
+export const identityCaptureSettings = pgTable("identity_capture_settings", {
+  workspaceId: text("workspace_id").primaryKey().references(() => workspaces.id, { onDelete: "cascade" }),
+  enabled: boolean("enabled").notNull().default(false),
+  nameSelector: text("name_selector").notNull().default(""),
+  avatarSelector: text("avatar_selector").notNull().default(""),
+  updatedBy: text("updated_by").references(() => users.id, { onDelete: "set null" }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 /** Um usuário (anônimo, por navegador) visto no projeto: primeira visita e de onde veio. */
 export const analyticsUsers = pgTable(
   "analytics_users",

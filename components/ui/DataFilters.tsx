@@ -5,7 +5,7 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { BarChart3, Calendar, Layers } from "lucide-react";
 import { Select, Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-import { PERIOD_OPTIONS, periodLabel } from "@/lib/period";
+import { DEFAULT_PERIOD, PERIOD_OPTIONS, periodLabel } from "@/lib/period";
 
 export interface SurveyOption {
   id: string;
@@ -29,7 +29,7 @@ export function DataFilters({
   surveys,
   defaultSurveyId,
   hosts,
-  defaultPeriod = "30d",
+  defaultPeriod = DEFAULT_PERIOD,
 }: {
   surveys?: SurveyOption[];
   defaultSurveyId?: string;
@@ -137,6 +137,8 @@ export function DataFilters({
           icon={<Calendar />}
           className="w-auto min-w-[200px] py-2 text-sm"
         >
+          {/* link/visão antiga com "90d": o valor continua aparecendo em vez de cair na 1ª opção */}
+          {!PERIOD_OPTIONS.some((p) => p.value === periodSelectValue) && <option value={periodSelectValue}>{periodLabel(periodSelectValue)}</option>}
           {PERIOD_OPTIONS.map((p) => (
             <option key={p.value} value={p.value}>
               {p.value === "custom" && period === "custom" && from && to

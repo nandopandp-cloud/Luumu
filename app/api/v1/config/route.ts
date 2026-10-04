@@ -3,6 +3,7 @@ import { eventCatalogForSdk } from "@/lib/db/events";
 import { hostStateForSdk, normalizeHost } from "@/lib/db/hosts";
 import { listPublishedToursForSdk } from "@/lib/db/tours";
 import { heatmapPlan, isHeatmapsEnabled } from "@/lib/db/heatmaps";
+import { getIdentityCapture } from "@/lib/db/identity-capture";
 import { getAnalyticsSettings } from "@/lib/db/analytics";
 import { SDK_BUNDLE_VERSION } from "@/lib/tours/sdk-version";
 import { normalizeAppearance } from "@/lib/builder";
@@ -71,7 +72,7 @@ export async function GET(req: Request) {
   }
 
   const host = normalizeHost(searchParams.get("host"));
-  const [active, eventCatalog, hostState, tours, heatmaps, analytics] = await Promise.all([
+  const [active, eventCatalog, hostState, tours, heatmaps, analytics, capture] = await Promise.all([
     listActiveSurveysForSdk(resolved.projectId),
     eventCatalogForSdk(resolved.projectId, host),
     hostStateForSdk(resolved.projectId, host),
@@ -83,6 +84,8 @@ export async function GET(req: Request) {
     // idem: sem a migração dos heatmaps (ou com falha), a coleta só fica desligada
     isHeatmapsEnabled(resolved.projectId).catch(() => false),
     getAnalyticsSettings(resolved.projectId).then((a) => a.enabled).catch(() => false),
+    // captura de nome/foto da página (configuração da workspace); sem a migração 0023 = desligada
+    getIdentityCapture(resolved.workspaceId).catch(() => null),
   ]);
   // heatmaps: taxa de amostragem (cota do plano) + páginas que já têm cópia (o SDK não pergunta)
   const plan = heatmaps ? await heatmapPlan(resolved.workspaceId, resolved.projectId, host).catch(() => null) : null;
@@ -117,6 +120,8 @@ export async function GET(req: Request) {
       hmFresh: plan?.fresh ?? [],
       // coleta de analytics de produto ativa: o SDK baixa sdk-analytics.js só se for true
       analytics,
+      // ler nome e foto do usuário logado na própria página (n/a = seletores; vazios = automático)
+      idc: analytics && capture?.enabled ? { n: capture.nameSelector, a: capture.avatarSelector } : null,
       // versão atual de sdk-tours.js / sdk-builder.js (o core pode estar em cache e ser mais velho)
       sdk: SDK_BUNDLE_VERSION,
     },

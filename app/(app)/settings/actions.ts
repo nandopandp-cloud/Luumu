@@ -12,6 +12,7 @@ import {
   updateMemberRole,
 } from "@/lib/db/users";
 import { setMembershipProjects } from "@/lib/db/member-projects";
+import { cleanSelector, saveIdentityCapture } from "@/lib/db/identity-capture";
 
 export type ActionResult = { ok: boolean; error?: string };
 
@@ -222,5 +223,31 @@ export async function removeMemberAction(targetUserId: string): Promise<ActionRe
 
   await removeMemberFromWorkspace(workspaceId, targetUserId);
   revalidatePath("/settings/members");
+  return { ok: true };
+}
+
+const captureSchema = z.object({
+  enabled: z.boolean(),
+  nameSelector: z.string().max(200),
+  avatarSelector: z.string().max(200),
+});
+
+/** Captura de nome e foto da página (toda a workspace). Só owner/admin. */
+export async function saveIdentityCaptureAction(input: unknown): Promise<ActionResult> {
+  const session = await requireUser();
+  if (!(await canManageWorkspace())) return { ok: false, error: "Só donos e administradores podem mudar esta configuração." };
+  const p = captureSchema.safeParse(input);
+  if (!p.success) return { ok: false, error: "Configuração inválida." };
+  const nameSelector = cleanSelector(p.data.nameSelector);
+  const avatarSelector = cleanSelector(p.data.avatarSelector);
+  if ((p.data.nameSelector.trim() && !nameSelector) || (p.data.avatarSelector.trim() && !avatarSelector)) {
+    return { ok: false, error: "Use um seletor CSS simples (ex.: header .user-name)." };
+  }
+  try {
+    await saveIdentityCapture(session.workspaceId, session.userId, { enabled: p.data.enabled, nameSelector, avatarSelector });
+  } catch {
+    return { ok: false, error: "Não foi possível salvar. A migração 0023 já foi aplicada?" };
+  }
+  revalidatePath("/settings/sdk");
   return { ok: true };
 }

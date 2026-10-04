@@ -7,7 +7,7 @@ import { getHeatmapReport, hasAnyPageview, heatmapQuota, isHeatmapsEnabled, list
 import { listHosts } from "@/lib/db/hosts";
 import { getPrimaryPublicKey } from "@/lib/db/keys";
 import { HEATMAP_DEVICES, type HeatmapDevice, type HeatmapMode } from "@/lib/heatmaps/core";
-import { periodToRange } from "@/lib/period";
+import { DEFAULT_PERIOD, periodToRange } from "@/lib/period";
 
 export const dynamic = "force-dynamic";
 
@@ -38,7 +38,7 @@ export default async function HeatmapsPage({
 
   const canManage = await canManageWorkspace();
   // heatmap acumula: por padrão, todas as visitas registradas
-  const { from, to } = periodToRange(sp.period ?? "all", sp.from, sp.to);
+  const { from, to } = periodToRange(sp.period ?? DEFAULT_PERIOD, sp.from, sp.to);
   const [pages, anyData, hosts, quota] = await Promise.all([
     listHeatmapPages(project.id, from, to),
     hasAnyPageview(project.id),

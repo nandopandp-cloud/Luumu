@@ -309,22 +309,48 @@ export interface ViewConfig {
   host?: string;
   device?: string;
   widgets?: WidgetId[];
+  /** largura de cada bloco (colunas de 12) na visão personalizada; ausente = tamanho padrão */
+  spans?: Partial<Record<WidgetId, number>>;
 }
+
+/** Largura aceita para um bloco: inteiro de 2 a 12 colunas. */
+export const clampSpan = (n: unknown) => (typeof n === "number" && Number.isFinite(n) ? Math.min(12, Math.max(2, Math.round(n))) : undefined);
 
 /** Limpa a configuração de uma visão salva (vem do banco/usuário). */
 export function parseViewConfig(raw: unknown): ViewConfig {
   const o = (raw ?? {}) as Record<string, unknown>;
   const tab = TABS.includes(o.tab as AnalyticsTab) ? (o.tab as AnalyticsTab) : "overview";
   const s = (v: unknown, re: RegExp) => (typeof v === "string" && re.test(v) ? v : undefined);
-  const widgets = Array.isArray(o.widgets) ? (o.widgets.filter((w) => WIDGET_IDS.includes(w as WidgetId)) as WidgetId[]).slice(0, 24) : undefined;
+  // blocos: "id" ou "id:colunas" (formato da URL), sem repetição, até 30
+  const spans: Partial<Record<WidgetId, number>> = {};
+  if (o.spans && typeof o.spans === "object") {
+    for (const [k, v] of Object.entries(o.spans as Record<string, unknown>)) if (WIDGET_IDS.includes(k as WidgetId) && clampSpan(v)) spans[k as WidgetId] = clampSpan(v);
+  }
+  const widgets = Array.isArray(o.widgets)
+    ? ([
+        ...new Set(
+          o.widgets
+            .map((w) => {
+              if (typeof w !== "string") return null;
+              const [id, span] = w.split(":");
+              if (!WIDGET_IDS.includes(id as WidgetId)) return null;
+              if (span && clampSpan(Number(span))) spans[id as WidgetId] = clampSpan(Number(span));
+              return id as WidgetId;
+            })
+            .filter((w): w is WidgetId => !!w)
+        ),
+      ].slice(0, 30) as WidgetId[])
+    : undefined;
+  for (const k of Object.keys(spans) as WidgetId[]) if (!widgets?.includes(k)) delete spans[k];
   return {
     tab,
-    period: s(o.period, /^(7d|30d|90d|12m|all|custom)$/),
+    period: s(o.period, /^(today|7d|30d|90d|12m|all|custom)$/),
     from: s(o.from, /^\d{4}-\d{2}-\d{2}$/),
     to: s(o.to, /^\d{4}-\d{2}-\d{2}$/),
     host: s(o.host, /^[a-z0-9.-]{1,253}$/),
     device: s(o.device, /^(desktop|tablet|mobile)$/),
     widgets: tab === "custom" ? widgets ?? [] : undefined,
+    spans: tab === "custom" && Object.keys(spans).length ? spans : undefined,
   };
 }
 
@@ -334,7 +360,7 @@ export function viewHref(c: ViewConfig, viewId?: string): string {
   if (viewId) p.set("view", viewId);
   if (c.tab !== "overview") p.set("tab", c.tab);
   for (const k of ["period", "from", "to", "host", "device"] as const) if (c[k]) p.set(k, c[k]!);
-  if (c.tab === "custom" && c.widgets?.length) p.set("w", c.widgets.join(","));
+  if (c.tab === "custom" && c.widgets?.length) p.set("w", c.widgets.map((w) => (c.spans?.[w] ? `${w}:${c.spans[w]}` : w)).join(","));
   const q = p.toString();
   return `/analytics${q ? `?${q}` : ""}`;
 }

@@ -69,7 +69,7 @@ export function HeatmapFilters({
           </option>
         ))}
       </Select>
-      <DataFilters defaultPeriod="all" />
+      <DataFilters />
       <Select
         value={device}
         onChange={(e) => update({ device: e.target.value || null })}

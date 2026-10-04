@@ -121,7 +121,7 @@ function ScheduleForm({
   const [saving, start] = useTransition();
   const [name, setName] = useState(item?.name ?? "");
   const [frequency, setFrequency] = useState(item?.frequency ?? "weekly");
-  const [period, setPeriod] = useState(item?.period ?? "30d");
+  const [period, setPeriod] = useState(item?.period ?? "today");
   const [format, setFormat] = useState(item?.format ?? "pdf");
   const [surveyIds, setSurveyIds] = useState<string[]>(item?.surveyIds ?? []);
   // "campanha": acompanha tipos e resolve sozinho a última encerrada de cada um

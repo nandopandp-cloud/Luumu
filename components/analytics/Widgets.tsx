@@ -90,7 +90,9 @@ export interface WidgetCtx {
 }
 
 const axis = { fontSize: 11, fill: "var(--text-mut)", fontFamily: "var(--font-mono)" };
-const shortDay = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`;
+/** "2026-10-04" → "04/10"; balde por hora ("2026-10-04T09", período "Hoje") → "09h" */
+const shortDay = (d: string) => (d.length > 10 ? `${d.slice(11, 13)}h` : `${d.slice(8, 10)}/${d.slice(5, 7)}`);
+const isHourly = (rows: { d?: unknown }[]) => String(rows[0]?.d ?? "").length > 10;
 const DEVICE_NAME: Record<string, string> = { desktop: "Desktop", mobile: "Mobile", tablet: "Tablet" };
 const DEVICE_ICON: Record<string, LucideIcon> = { desktop: Monitor, mobile: Smartphone, tablet: Tablet };
 const DEVICE_COLOR: Record<string, string> = { desktop: "#6B2BD9", mobile: "#A78BFA", tablet: "#DDD0FF" };
@@ -105,7 +107,11 @@ function ChartTip({ active, payload, label, fmt }: { active?: boolean; payload?:
   if (!active || !payload?.length) return null;
   return (
     <div className="rounded-xl border border-line bg-bg-elev px-3 py-2 text-xs shadow-[var(--shadow-md)]">
-      {label && <div className="mb-1 font-semibold text-fg">{/^\d{4}-\d{2}-\d{2}$/.test(label) ? shortDay(label) : label}</div>}
+      {label && (
+        <div className="mb-1 font-semibold text-fg">
+          {/^\d{4}-\d{2}-\d{2}T\d{2}$/.test(label) ? `${label.slice(8, 10)}/${label.slice(5, 7)} · ${label.slice(11, 13)}h` : /^\d{4}-\d{2}-\d{2}$/.test(label) ? shortDay(label) : label}
+        </div>
+      )}
       {payload.map((p, i) => (
         <div key={i} className="flex items-center gap-2 text-fg-soft">
           <span className="size-2 rounded-full" style={{ background: p.color || p.stroke || p.fill }} />
@@ -335,7 +341,9 @@ export function Widget({ id, ctx }: { id: WidgetId; ctx: WidgetCtx }) {
 
 /* ---------- gráficos e tabelas ---------- */
 
-function Granularity({ value, onChange }: { value: "day" | "week"; onChange: (v: "day" | "week") => void }) {
+function Granularity({ value, onChange, hourly }: { value: "day" | "week"; onChange: (v: "day" | "week") => void; hourly?: boolean }) {
+  // série por hora (período curto, ex.: "Hoje"): agrupar por dia/semana não faz sentido
+  if (hourly) return <span className="rounded-lg border border-line px-2.5 py-1.5 text-xs font-semibold text-fg-mut">Por hora</span>;
   return (
     <Select value={value} onChange={(e) => onChange(e.target.value as "day" | "week")} aria-label="Agrupamento" className="w-auto min-w-[120px] py-1.5 text-sm">
       <option value="day">Diário</option>
@@ -363,11 +371,11 @@ function UsersTrend({ ctx }: { ctx: WidgetCtx }) {
     const mau = new Map((ctx.data.mau ?? []).map((m) => [m.d, m.mau]));
     let lastMau: number | null = null;
     const daily = (ctx.data.daily?.cur ?? []).map((x) => {
-      const m = mau.get(x.d);
+      const m = mau.get(x.d.slice(0, 10));
       if (m !== undefined) lastMau = m;
       return { d: x.d, dau: x.users, mau: m ?? lastMau ?? 0 };
     });
-    return g === "week" ? weekly(daily, ["dau", "mau"]) : daily;
+    return g === "week" && !isHourly(daily) ? weekly(daily, ["dau", "mau"]) : daily;
   }, [ctx.data, g]);
   return (
     <Panel
@@ -375,12 +383,12 @@ function UsersTrend({ ctx }: { ctx: WidgetCtx }) {
       action={
         <div className="flex items-center gap-4">
           <Legend items={[{ label: "DAU", color: "#6B2BD9" }, { label: "MAU", color: "#C4B5FD" }]} />
-          <Granularity value={g} onChange={setG} />
+          <Granularity value={g} onChange={setG} hourly={isHourly(rows)} />
         </div>
       }
     >
       {rows.length < 2 ? (
-        <Empty text="Ainda há poucos dias de dados para mostrar a evolução." />
+        <Empty text="Ainda há poucos dados neste período para mostrar a evolução." />
       ) : (
         <ResponsiveContainer width="100%" height={250}>
           <AreaChart data={rows} margin={{ top: 8, right: 20, left: -10, bottom: 0 }}>
@@ -576,7 +584,7 @@ function SessionTime({ ctx, k }: { ctx: WidgetCtx; k: Kpi }) {
       </div>
       <span className="text-xs text-fg-mut">{delta ? "vs. período anterior" : " "}</span>
       {rows.length < 2 ? (
-        <Empty text="Poucos dias de dados." />
+        <Empty text="Poucos dados neste período." />
       ) : (
         <ResponsiveContainer width="100%" height={150}>
           <AreaChart data={rows} margin={{ top: 10, right: 20, left: -6, bottom: 0 }}>
@@ -752,11 +760,11 @@ function ChannelsTrend({ ctx }: { ctx: WidgetCtx }) {
   const [g, setG] = useState<"day" | "week">("day");
   const shares = channelShares(ctx.data);
   const raw = channelSeries(ctx.data) as ({ d: string } & Record<string, number>)[];
-  const rows = g === "week" ? weekly(raw, CHANNELS as unknown as (keyof (typeof raw)[number])[], "sum") : raw;
+  const rows = g === "week" && !isHourly(raw) ? weekly(raw, CHANNELS as unknown as (keyof (typeof raw)[number])[], "sum") : raw;
   return (
-    <Panel title="Novos usuários por canal" subtitle="Novos usuários ao longo do tempo, separados pelo canal de aquisição." action={<Granularity value={g} onChange={setG} />}>
+    <Panel title="Novos usuários por canal" subtitle="Novos usuários ao longo do tempo, separados pelo canal de aquisição." action={<Granularity value={g} onChange={setG} hourly={isHourly(raw)} />}>
       {rows.length < 2 ? (
-        <Empty text="Ainda há poucos dias de dados." />
+        <Empty text="Ainda há poucos dados neste período." />
       ) : (
         <div className="flex flex-1 flex-col gap-4 lg:flex-row">
           <div className="min-w-0 flex-1">
@@ -1041,7 +1049,7 @@ function Campaigns({ ctx }: { ctx: WidgetCtx }) {
 function EngagementTrend({ ctx }: { ctx: WidgetCtx }) {
   const [g, setG] = useState<"day" | "week">("day");
   const daily = (ctx.data.daily?.cur ?? []).map((x) => ({ d: x.d, dau: x.users, min: x.ms / 60000, spu: x.users ? x.sessions / x.users : 0 }));
-  const rows = g === "week" ? weekly(daily, ["dau", "min", "spu"]) : daily;
+  const rows = g === "week" && !isHourly(daily) ? weekly(daily, ["dau", "min", "spu"]) : daily;
   return (
     <Panel
       title="Evolução do engajamento"
@@ -1049,12 +1057,12 @@ function EngagementTrend({ ctx }: { ctx: WidgetCtx }) {
       action={
         <div className="flex flex-wrap items-center justify-end gap-3">
           <Legend items={[{ label: "DAU", color: "#6B2BD9" }, { label: "Tempo médio de uso", color: "#F59E0B" }, { label: "Sessões por usuário", color: "#3B82F6" }]} />
-          <Granularity value={g} onChange={setG} />
+          <Granularity value={g} onChange={setG} hourly={isHourly(daily)} />
         </div>
       }
     >
       {rows.length < 2 ? (
-        <Empty text="Ainda há poucos dias de dados." />
+        <Empty text="Ainda há poucos dados neste período." />
       ) : (
         <ResponsiveContainer width="100%" height={250}>
           <LineChart data={rows} margin={{ top: 8, right: 20, left: 0, bottom: 0 }}>
@@ -1200,7 +1208,7 @@ function DeviceTrend({ ctx }: { ctx: WidgetCtx }) {
   return (
     <Panel title="Usuários por dispositivo ao longo do tempo" action={<Legend items={devices.map((dv) => ({ label: DEVICE_NAME[dv], color: DEVICE_COLOR[dv] }))} />}>
       {rows.length < 2 ? (
-        <Empty text="Ainda há poucos dias de dados." />
+        <Empty text="Ainda há poucos dados neste período." />
       ) : (
         <ResponsiveContainer width="100%" height={240}>
           <AreaChart data={rows} margin={{ top: 8, right: 20, left: -10, bottom: 0 }}>
@@ -1231,7 +1239,7 @@ function EventsTrend({ ctx }: { ctx: WidgetCtx }) {
   return (
     <Panel title="Tendência dos principais eventos" subtitle="Usuários únicos por dia que realizaram cada ação." action={<Legend items={names.map((n, i) => ({ label: eventLabel(n), color: colors[i] }))} />}>
       {rows.length < 2 ? (
-        <Empty text="Ainda há poucos dias de dados." />
+        <Empty text="Ainda há poucos dados neste período." />
       ) : (
         <ResponsiveContainer width="100%" height={260}>
           <LineChart data={rows} margin={{ top: 8, right: 20, left: -10, bottom: 0 }}>

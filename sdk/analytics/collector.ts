@@ -14,6 +14,7 @@
   servidor (não vira uma visualização nova).
 */
 import { anonymousId } from "../shared/memory";
+import { readPageIdentity, type CaptureConfig } from "./page-identity";
 import { detectBrowser, detectOS, SESSION_IDLE_MS, LIMITS, type AnalyticsDevice, type AnalyticsPayload } from "../../lib/analytics/core";
 
 export interface AnalyticsBootConfig {
@@ -27,6 +28,8 @@ export interface AnalyticsBootConfig {
   identity: () => { id: string | null; email: string | null; name: string | null; avatar: string | null };
   /** pede ao core para enviar agora (virada de sessão, muitas telas acumuladas) */
   requestFlush: () => void;
+  /** ler nome/foto da página quando o identify não manda (configuração da workspace) */
+  capture?: CaptureConfig | null;
 }
 
 /** O que vai no envio (o core acrescenta key e host). */
@@ -121,6 +124,21 @@ function startPage() {
   if (pages.length >= LIMITS.pages) cfg!.requestFlush();
 }
 
+/*
+  Nome/foto lidos da página: só no envio (a aba está saindo; nada roda durante o uso) e só para
+  usuário identificado. Achou os dois → guardado para esta pessoa e não procura mais; senão,
+  tenta de novo no máximo a cada 15 s (a tela do usuário pode ainda não ter montado).
+*/
+let captured: { who: string; name: string | null; avatar: string | null; at: number } | null = null;
+function pageIdentity(c: AnalyticsBootConfig, who: string) {
+  if (!c.capture) return null;
+  if (captured && captured.who === who && (captured.name && captured.avatar ? true : Date.now() - captured.at < 15_000)) return captured;
+  const found = readPageIdentity(c.capture);
+  const prev = captured?.who === who ? captured : null;
+  captured = { who, name: found.name ?? prev?.name ?? null, avatar: found.avatar ?? prev?.avatar ?? null, at: Date.now() };
+  return captured;
+}
+
 function collect(): AnalyticsBatch | null {
   const c = cfg;
   if (!c || !session) return null;
@@ -130,7 +148,8 @@ function collect(): AnalyticsBatch | null {
     aid: anonymousId().replace(/[^A-Za-z0-9_-]/g, "").slice(0, 64).padEnd(6, "0"),
     ...(() => {
       const who = c.identity();
-      return { uid: who.id, email: who.email, name: who.name, avatar: who.avatar };
+      const page = (who.id || who.email) && (!who.name || !who.avatar) ? pageIdentity(c, who.id || who.email || "") : null;
+      return { uid: who.id, email: who.email, name: who.name ?? page?.name ?? null, avatar: who.avatar ?? page?.avatar ?? null };
     })(),
     sid: session.id,
     st: session.st,

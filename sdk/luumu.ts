@@ -164,6 +164,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     hmRate: number; // fração das sessões a gravar (amostragem definida pelo servidor)
     hmFresh: string[]; // "dispositivo|rota" com cópia recente (não perguntar nem enviar)
     analytics: boolean; // coleta de analytics de produto ativa no projeto
+    idc: { n: string; a: string } | null; // ler nome/foto da página (configuração da workspace)
   };
   let eventsOpen: boolean | null = null;
   let serverKnown: Record<string, 1> = {};
@@ -650,6 +651,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
         sdk?: unknown;
         heatmaps?: unknown;
         analytics?: unknown;
+        idc?: unknown;
         hmRate?: unknown;
         hmFresh?: unknown;
       };
@@ -663,6 +665,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
         sdk: typeof parsed.sdk === "string" ? parsed.sdk : null,
         heatmaps: parsed.heatmaps === true,
         analytics: parsed.analytics === true,
+        idc: parseCapture(parsed.idc),
         hmRate: typeof parsed.hmRate === "number" ? parsed.hmRate : 1,
         hmFresh: Array.isArray(parsed.hmFresh) ? (parsed.hmFresh as string[]) : [],
       };
@@ -686,6 +689,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
           sdk: catalog.sdk,
           heatmaps: catalog.heatmaps,
           analytics: catalog.analytics,
+          idc: catalog.idc,
           hmRate: catalog.hmRate,
           hmFresh: catalog.hmFresh,
         })
@@ -713,6 +717,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
           sdk: typeof d.sdk === "string" ? d.sdk : null,
           heatmaps: d.heatmaps === true,
           analytics: d.analytics === true,
+          idc: parseCapture(d.idc),
           hmRate: typeof d.hmRate === "number" ? d.hmRate : 1,
           hmFresh: Array.isArray(d.hmFresh) ? d.hmFresh : [],
         },
@@ -741,7 +746,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     maybeAnnounceHost(key);
     safe(maybeLoadTours);
     if (catalog.heatmaps && heatmapsSampled(catalog.hmRate)) safe(() => loadHeatmaps(key, catalog.hmRate, catalog.hmFresh));
-    if (catalog.analytics) safe(() => loadAnalytics(key));
+    if (catalog.analytics) safe(() => loadAnalytics(key, catalog.idc));
   }
 
   /* ---------- Product Tours: ponte com o runtime carregado sob demanda ----------
@@ -881,11 +886,19 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     }
   }
 
+  /** { n, a } do /config: seletores de nome/foto (strings curtas) ou null = captura desligada */
+  function parseCapture(v: unknown): Catalog["idc"] {
+    if (!v || typeof v !== "object") return null;
+    const o = v as Record<string, unknown>;
+    const str = (x: unknown) => (typeof x === "string" ? x.slice(0, 200) : "");
+    return { n: str(o.n), a: str(o.a) };
+  }
+
   /* ---------- Analytics: coletor baixado só quando o projeto ativou a coleta ---------- */
   let analytics: AnalyticsCollector | null = null;
   let analyticsLoading = false;
 
-  function loadAnalytics(key: string) {
+  function loadAnalytics(key: string, capture: Catalog["idc"]) {
     // o administrador montando tour ou vendo preview não é uso real do produto
     if (analytics || analyticsLoading || builderToken || previewToken) return;
     analyticsLoading = true;
@@ -900,6 +913,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
           path: () => routePattern(location.pathname),
           identity: () => whoFrom(identity),
           requestFlush: flushBeacon,
+          capture,
         });
         analytics = c;
         installBeacon();
