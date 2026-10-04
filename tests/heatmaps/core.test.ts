@@ -13,6 +13,7 @@ import {
   redactLabel,
   sectionStats,
   splitPath,
+  heatmapSampleRate,
 } from "../../lib/heatmaps/core";
 
 const base = { key: "pk_x", host: "App.Cliente.com", path: "home", device: "desktop", sid: "s1" };
@@ -28,7 +29,9 @@ test("envio do SDK: números presos aos limites, listas cortadas, lixo descartad
     h: { "body>a": 1500, "<img>": 9 },
     l: { "body>main>button": "Enviar para joao@x.com", "nao-citado": "x" },
     p: ["body>main>button", "body>a", "body>a", "b", "c", "d"],
+    r: 0.05,
   })!;
+  assert.equal(p.r, 0.05);
   assert.equal(p.host, "app.cliente.com");
   assert.equal(p.vw, 0);
   assert.equal(p.sd, 100);
@@ -100,4 +103,16 @@ test("formatos e cores", () => {
   const pal = heatPalette();
   assert.deepEqual([pal[0], pal[1], pal[2]], [40, 60, 255]); // frio = azul
   assert.deepEqual([pal[1020], pal[1021], pal[1022]], [255, 40, 40]); // quente = vermelho
+});
+
+test("amostragem: cabe na cota do mês, com teto diário", () => {
+  const base = { limit: 50_000, used: 10_000, daysLeft: 20, dailyCap: 3000 };
+  // sobra 40 mil em 20 dias = 2 mil/dia; com 40 mil sessões/dia, grava 5%
+  assert.equal(heatmapSampleRate({ ...base, estimatedDaily: 40_000 }), 0.05);
+  assert.equal(heatmapSampleRate({ ...base, estimatedDaily: 500 }), 1); // pouco tráfego: tudo
+  assert.equal(heatmapSampleRate({ ...base, estimatedDaily: 0 }), 1); // sem histórico
+  assert.equal(heatmapSampleRate({ ...base, used: 50_000, estimatedDaily: 100 }), 0); // cota esgotada
+  assert.equal(heatmapSampleRate({ ...base, limit: Infinity, estimatedDaily: 30_000 }), 0.1); // ilimitado: teto de 3 mil/dia
+  assert.equal(heatmapSampleRate({ ...base, estimatedDaily: 10_000_000 }), 0.01); // piso de 1%
+  assert.equal(heatmapSampleRate({ ...base, limit: 0, estimatedDaily: 10 }), 0); // plano sem heatmaps
 });

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- payloads JSON inspecionados campo a campo nos testes */
 /*
   Coletor de analytics (sdk/analytics/collector.ts) num navegador simulado: sessão com origem,
   telas e eventos por tela, um único envio ao sair e continuação sem nova visualização.
@@ -8,9 +9,10 @@ import { installDom, sleep } from "../tours/support/dom-env";
 
 installDom("https://app.cliente.com/cursos/42?utm_source=newsletter&utm_medium=email&utm_campaign=Volta%20as%20aulas");
 const beacons: { url: string; body: string }[] = [];
-let col: { boot: (c: object) => void; route: () => void; event: (n: string) => void };
+let col: { boot: (c: object) => void; route: () => void; event: (n: string) => void; collect: () => Record<string, any> | null };
 let path = "cursos/:id";
 let uid: string | null = null;
+const delivered: Record<string, any>[] = [];
 
 before(async () => {
   Object.defineProperty(document, "referrer", { configurable: true, get: () => "https://www.google.com/search?q=x" });
@@ -38,7 +40,7 @@ const show = () => {
 };
 
 test("um envio com as telas da visita, eventos por tela e a origem da sessão", async () => {
-  col.boot({ api: "https://luumu.test/api/v1", key: "pk_test", host: "app.cliente.com", device: "desktop", path: () => path, uid: () => uid });
+  col.boot({ api: "https://luumu.test/api/v1", key: "pk_test", host: "app.cliente.com", device: "desktop", path: () => path, uid: () => uid, requestFlush: () => {} });
   document.dispatchEvent(new Event("pointerdown"));
   col.event("click_comecar");
   col.event("page_view_cursos"); // telas já são registradas: não viram evento
@@ -51,9 +53,11 @@ test("um envio com as telas da visita, eventos por tela e a origem da sessão", 
   col.event("luumu_survey_response");
   await hide();
 
-  assert.equal(beacons.length, 1, "um único envio por carregamento");
-  assert.equal(beacons[0].url, "https://luumu.test/api/v1/analytics/collect");
-  const p = JSON.parse(beacons[0].body);
+  // o coletor não envia sozinho: entrega ao core, que faz um envio único com os heatmaps
+  assert.equal(beacons.length, 0);
+  const p = col.collect()!;
+  assert.equal(p.key, undefined);
+  delivered.push(p);
   assert.equal(p.uid, "aluno-7");
   assert.equal(p.ref, "www.google.com");
   assert.deepEqual(p.utm, { source: "newsletter", medium: "email", campaign: "Volta as aulas" });
@@ -66,14 +70,14 @@ test("um envio com as telas da visita, eventos por tela e a origem da sessão", 
 });
 
 test("aba volta: a tela atual continua (mesmo id, c=true), sem nova visualização", async () => {
-  const first = JSON.parse(beacons[0].body);
+  const first = delivered[0];
   show();
   document.dispatchEvent(new Event("pointerdown"));
   col.event("view_result");
   await sleep(1100);
   await hide();
-  assert.equal(beacons.length, 2);
-  const p = JSON.parse(beacons[1].body);
+  const p = col.collect()!;
+  assert.equal(col.collect(), null, "nada pendente depois da entrega");
   assert.equal(p.sid, first.sid, "mesma sessão");
   assert.equal(p.pages.length, 1);
   assert.equal(p.pages[0].id, first.pages[1].id);

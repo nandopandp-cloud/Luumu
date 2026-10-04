@@ -27,11 +27,12 @@ const nextConfig: NextConfig = {
       },
       {
         /*
-          Bundles carregados sob demanda pelo core (runtime dos tours e overlay do builder).
+          Bundles carregados sob demanda pelo core (tours, builder, heatmaps, analytics).
           O core sempre os pede com `?v=<build>`, então a URL muda a cada deploy e o cache
-          pode ser longo sem risco de servir versão velha.
+          pode ser longo sem risco de servir versão velha. Sem esta regra o navegador
+          revalidava o arquivo a cada página (uma Edge Request por pageview só para ouvir 304).
         */
-        source: "/sdk-:bundle(tours|builder).js",
+        source: "/sdk-:bundle(tours|builder|heatmaps|analytics).js",
         headers: [{ key: "Cache-Control", value: "public, max-age=604800, immutable" }],
       },
     ];

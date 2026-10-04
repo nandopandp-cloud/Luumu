@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- payloads JSON inspecionados campo a campo nos testes */
 /*
   Gravador de heatmaps (sdk/heatmaps/recorder.ts) num navegador simulado (happy-dom): cliques
   ancorados no elemento, seletor que acha o elemento de novo, envio por sendBeacon e a cópia
@@ -10,7 +11,9 @@ import { installDom, sleep } from "../tours/support/dom-env";
 installDom("https://app.cliente.com/cursos/42");
 const g = globalThis as Record<string, unknown>;
 const beacons: { url: string; body: string }[] = [];
-let rec: { boot: (c: object) => void; route: () => void };
+let rec: { boot: (c: object) => void; route: () => void; collect: () => Record<string, unknown>[] };
+let flushRequests = 0;
+let path = "cursos/:id";
 let selectorOf: (el: Element) => string;
 let serializePage: (d?: Document) => string;
 
@@ -49,9 +52,17 @@ test("seletor acha o mesmo elemento de novo (nth-of-type e id estável)", () => 
   assert.equal(selectorOf(links[0]), "#logo");
 });
 
-test("clique no ícone conta no botão, com a posição dentro dele; envio ao ocultar a aba", async () => {
-  let path = "cursos/:id";
-  rec.boot({ api: "https://luumu.test/api/v1", key: "pk_test", host: "app.cliente.com", device: "desktop", path: () => path });
+test("clique no ícone conta no botão, com a posição dentro dele; a visita vai para o envio único", async () => {
+  rec.boot({
+    api: "https://luumu.test/api/v1",
+    key: "pk_test",
+    host: "app.cliente.com",
+    device: "desktop",
+    path: () => path,
+    rate: 0.25,
+    fresh: ["desktop|cursos/:id"], // já tem cópia: não pergunta ao servidor
+    requestFlush: () => flushRequests++,
+  });
   window.dispatchEvent(new Event("load"));
   await sleep(10);
 
@@ -61,13 +72,13 @@ test("clique no ícone conta no botão, com a posição dentro dele; envio ao oc
   document.querySelector("nav a:nth-of-type(2)")!.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 110, clientY: 110 }));
   await sleep(1100); // ao menos 1s de tempo ativo
 
-  Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
-  document.dispatchEvent(new Event("visibilitychange"));
-  await sleep(20);
-
-  assert.equal(beacons.length, 1);
-  assert.equal(beacons[0].url, "https://luumu.test/api/v1/heatmaps/collect");
-  const p = JSON.parse(beacons[0].body);
+  // o gravador não envia sozinho: entrega ao core (que junta com o analytics num request)
+  assert.equal(beacons.length, 0);
+  const out = rec.collect();
+  assert.equal(out.length, 1);
+  const p = out[0] as Record<string, any>;
+  assert.equal(p.r, 0.25);
+  assert.equal(p.key, undefined); // key e host vão uma vez só, no envelope do core
   assert.equal(p.path, "cursos/:id");
   assert.equal(p.c.length, 2);
   const [sel, x, y] = p.c[0];
@@ -78,10 +89,10 @@ test("clique no ícone conta no botão, com a posição dentro dele; envio ao oc
   assert.ok(p.dur >= 1000);
   assert.ok(!JSON.stringify(p).includes("segredo"));
 
-  // troca de rota numa SPA: a próxima visita é outra
-  Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
+  // troca de rota numa SPA: fecha a visita na fila, SEM request
   path = "precos";
   rec.route();
+  assert.equal(beacons.length, 0);
 });
 
 test("cópia da página: sem scripts, sem valores digitados, dados pessoais mascarados", () => {
@@ -111,18 +122,15 @@ test("app que rola dentro do <body>: a profundidade é a do painel, não 100% da
   let top = 0;
   Object.defineProperty(body, "scrollTop", { configurable: true, get: () => top });
 
+  path = "trilha";
   rec.route(); // nova visita
-  (window as unknown as { __hmPath?: string }).__hmPath = "x";
   top = 800; // rolou até 50% do conteúdo (800 + 800 de 3200)
   body.dispatchEvent(new Event("scroll"));
   await sleep(30);
   document.querySelector("nav a")!.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 110, clientY: 110 }));
   await sleep(1100);
-  const before = beacons.length;
-  Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
-  document.dispatchEvent(new Event("visibilitychange"));
-  await sleep(30);
-  const p = JSON.parse(beacons[before].body);
+  const visits = rec.collect();
+  const p = visits[visits.length - 1] as Record<string, any>;
   assert.equal(p.sd, 50);
   assert.equal(p.dh, 3200 + 0); // altura do conteúdo do painel, não a da janela
 });

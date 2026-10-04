@@ -561,6 +561,8 @@ export const heatmapPageviews = pgTable(
     hovers: jsonb("hovers").notNull().default({}), // { sel: ms }
     labels: jsonb("labels").notNull().default({}), // { sel: rótulo }
     clickPath: text("click_path"), // "a ⟶ b ⟶ c" (null com menos de 2 cliques)
+    // fração das sessões gravadas quando esta visita foi coletada (amostragem por cota)
+    sampleRate: real("sample_rate").notNull().default(1),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

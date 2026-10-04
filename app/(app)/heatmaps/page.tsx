@@ -98,7 +98,8 @@ export default async function HeatmapsPage({
         quota={{ used: quota.used, limit: quota.limit === Infinity ? null : quota.limit }}
       />
       <HeatmapWorkspace
-        key={`${selected?.host}|${selected?.path}|${device}|${mode}`}
+        // sem o modo na chave: trocar Cliques/Movimento/Scroll não baixa nem remonta a cópia da página
+        key={`${selected?.host}|${selected?.path}|${device}`}
         mode={mode}
         page={selected ? { host: selected.host, path: selected.path } : null}
         device={device ?? null}

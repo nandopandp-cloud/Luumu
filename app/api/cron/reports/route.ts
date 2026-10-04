@@ -15,6 +15,7 @@ import { toPdf } from "@/lib/export/pdf";
 import { sendEmail } from "@/lib/email";
 import { reportEmailHtml } from "@/lib/email-templates";
 import { getAppOrigin } from "@/lib/env";
+import { pruneBehaviorData } from "@/lib/db/retention";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -161,5 +162,9 @@ export async function GET(req: Request) {
     }
   }
 
-  return NextResponse.json({ processed: results.length, results });
+  // mesma rodada diária: limpeza dos dados de comportamento além da retenção do plano
+  // (aproveita o cron que já existe; best-effort, não afeta os relatórios)
+  const pruned = await pruneBehaviorData().catch((e) => ({ error: String(e) }));
+
+  return NextResponse.json({ processed: results.length, results, pruned });
 }

@@ -25,12 +25,19 @@ export interface AnalyticsBootConfig {
   path: () => string;
   /** ID do usuário identificado (Luumu.identify), se houver */
   uid: () => string | null;
+  /** pede ao core para enviar agora (virada de sessão, muitas telas acumuladas) */
+  requestFlush: () => void;
 }
+
+/** O que vai no envio (o core acrescenta key e host). */
+export type AnalyticsBatch = Omit<AnalyticsPayload, "key" | "host">;
 
 export interface AnalyticsCollector {
   boot(cfg: AnalyticsBootConfig): void;
   route(): void;
   event(name: string): void;
+  /** entrega o que está pendente ao core, que faz UM envio junto com os heatmaps */
+  collect(): AnalyticsBatch | null;
 }
 
 interface Page {
@@ -98,7 +105,8 @@ function touchSession(now = Date.now()) {
     // reabriu dentro de 30 min (outra aba, recarga): continua a mesma sessão
     session = saved && now - saved.last < SESSION_IDLE_MS ? saved : newSession(true);
   } else if (now - session.last >= SESSION_IDLE_MS) {
-    flush();
+    // o pendente pertence à sessão antiga: sai agora, antes de virar
+    cfg!.requestFlush();
     session = newSession(false);
     const cur = pages[pages.length - 1];
     pages = cur ? [{ ...cur, id: rand(), t: now, dur: 0, ev: new Set(), sent: false }] : [];
@@ -110,17 +118,15 @@ function touchSession(now = Date.now()) {
 function startPage() {
   const path = cfg!.path();
   pages.push({ id: rand(), path, t: Date.now(), dur: 0, ev: new Set(), sent: false });
-  if (pages.length > LIMITS.pages) flush();
+  if (pages.length >= LIMITS.pages) cfg!.requestFlush();
 }
 
-function flush() {
+function collect(): AnalyticsBatch | null {
   const c = cfg;
-  if (!c || !session) return;
+  if (!c || !session) return null;
   const send = pages.filter((p) => !p.sent || p.dur > 0 || p.ev.size > 0);
-  if (!send.length) return;
-  const payload: AnalyticsPayload = {
-    key: c.key,
-    host: c.host,
+  if (!send.length) return null;
+  const payload: AnalyticsBatch = {
     aid: anonymousId().replace(/[^A-Za-z0-9_-]/g, "").slice(0, 64).padEnd(6, "0"),
     uid: c.uid(),
     sid: session.id,
@@ -134,13 +140,6 @@ function flush() {
     landing: session.landing,
     pages: send.map((p) => ({ id: p.id, path: p.path, t: p.t, dur: p.dur, ev: [...p.ev], ...(p.sent ? { c: true } : {}) })),
   };
-  const body = JSON.stringify(payload);
-  const url = `${c.api}/analytics/collect`;
-  let ok = false;
-  try {
-    ok = !!navigator.sendBeacon && navigator.sendBeacon(url, new Blob([body], { type: "text/plain;charset=UTF-8" }));
-  } catch {}
-  if (!ok) fetch(url, { method: "POST", body, keepalive: true, headers: { "Content-Type": "text/plain;charset=UTF-8" } }).catch(() => {});
   for (const p of send) {
     p.sent = true;
     p.dur = 0;
@@ -148,6 +147,7 @@ function flush() {
   }
   // só a tela atual continua aberta
   pages = pages.slice(-1);
+  return payload;
 }
 
 const collector: AnalyticsCollector = {
@@ -161,11 +161,10 @@ const collector: AnalyticsCollector = {
     };
     const opts = { capture: true, passive: true } as const;
     for (const ev of ["pointerdown", "keydown", "scroll", "touchstart", "mousemove"]) document.addEventListener(ev, input, opts);
+    // o envio (aba oculta/fechada) é do core, que junta analytics e heatmaps num request só
     document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "hidden") flush();
-      else touchSession();
+      if (document.visibilityState === "visible") touchSession();
     });
-    window.addEventListener("pagehide", flush);
     // tempo ATIVO: aba visível e alguém interagiu nos últimos 30s
     setInterval(() => {
       const now = Date.now();
@@ -187,6 +186,7 @@ const collector: AnalyticsCollector = {
     const cur = pages[pages.length - 1];
     if (cur && cur.ev.size < LIMITS.events) cur.ev.add(name.slice(0, LIMITS.name));
   },
+  collect,
 };
 
 (window as unknown as { __luumuAnalytics?: AnalyticsCollector }).__luumuAnalytics = collector;

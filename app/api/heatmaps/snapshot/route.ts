@@ -20,5 +20,9 @@ export async function GET(req: Request) {
   const device = (HEATMAP_DEVICES as readonly string[]).includes(d) ? (d as HeatmapDevice) : undefined;
   const snap = await getSnapshot(project.id, q.get("host") ?? "", q.get("path") ?? "", device);
   if (!snap) return NextResponse.json({ error: "Sem cópia desta página." }, { status: 404 });
-  return NextResponse.json(snap, { headers: { "Cache-Control": "private, max-age=300" } });
+  // a cópia muda no máximo 1x por semana: cache de 1h no navegador e 304 quando não mudou
+  const etag = `"${snap.device}-${Date.parse(snap.capturedAt)}"`;
+  const headers = { "Cache-Control": "private, max-age=3600", ETag: etag };
+  if (req.headers.get("if-none-match") === etag) return new NextResponse(null, { status: 304, headers });
+  return NextResponse.json(snap, { headers });
 }

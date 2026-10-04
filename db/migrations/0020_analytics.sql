@@ -78,3 +78,6 @@ CREATE TABLE IF NOT EXISTS "analytics_views" (
   "updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 CREATE INDEX IF NOT EXISTS "analytics_views_project_idx" ON "analytics_views" ("project_id");
+
+-- Heatmaps: fração de sessões gravadas (amostragem para caber na cota do plano e no custo).
+ALTER TABLE "heatmap_pageviews" ADD COLUMN IF NOT EXISTS "sample_rate" real DEFAULT 1 NOT NULL;

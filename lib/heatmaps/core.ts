@@ -58,6 +58,8 @@ export interface PageviewPayload {
   l: Record<string, string>;
   /** primeiros elementos clicados, em ordem, sem repetição seguida */
   p: string[];
+  /** fração das sessões que estão sendo gravadas (amostragem); 1 = todas */
+  r: number;
 }
 
 const int = (v: unknown, min: number, max: number) => {
@@ -141,6 +143,7 @@ export function parsePageview(raw: unknown): PageviewPayload | null {
     h,
     l,
     p,
+    r: Math.min(1, Math.max(0.001, Number(o.r) || 1)),
   };
 }
 
@@ -266,4 +269,16 @@ export function heatPalette(): Uint8ClampedArray {
 export function reachColor(reach: number, palette = heatPalette()): [number, number, number] {
   const i = Math.round(Math.min(1, Math.max(0, reach)) * 255) * 4;
   return [palette[i], palette[i + 1], palette[i + 2]];
+}
+
+/**
+ * Fração das sessões a gravar: a cota do mês que sobra dividida pelos dias restantes (com teto
+ * diário), sobre o volume diário estimado. Sem histórico, grava tudo; cota esgotada, nada.
+ */
+export function heatmapSampleRate(i: { limit: number; used: number; daysLeft: number; estimatedDaily: number; dailyCap: number }): number {
+  if (i.limit <= 0 || (i.limit !== Infinity && i.used >= i.limit)) return 0;
+  if (i.estimatedDaily <= 0) return 1;
+  const perDay = Math.min(i.dailyCap, i.limit === Infinity ? i.dailyCap : (i.limit - i.used) / Math.max(1, i.daysLeft));
+  const rate = Math.min(1, Math.max(0.01, perDay / i.estimatedDaily));
+  return Math.round(rate * 1000) / 1000;
 }

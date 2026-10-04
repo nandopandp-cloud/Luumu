@@ -160,6 +160,8 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     tours: TourCatalogEntry[];
     sdk: string | null; // versão atual dos bundles sob demanda (vem do servidor)
     heatmaps: boolean; // coleta de heatmaps ativa no projeto
+    hmRate: number; // fração das sessões a gravar (amostragem definida pelo servidor)
+    hmFresh: string[]; // "dispositivo|rota" com cópia recente (não perguntar nem enviar)
     analytics: boolean; // coleta de analytics de produto ativa no projeto
   };
   let eventsOpen: boolean | null = null;
@@ -647,6 +649,8 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
         sdk?: unknown;
         heatmaps?: unknown;
         analytics?: unknown;
+        hmRate?: unknown;
+        hmFresh?: unknown;
       };
       if (!parsed || typeof parsed.t !== "number" || !Array.isArray(parsed.surveys)) return null;
       if (Date.now() - parsed.t > CATALOG_TTL_MS) return null;
@@ -658,6 +662,8 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
         sdk: typeof parsed.sdk === "string" ? parsed.sdk : null,
         heatmaps: parsed.heatmaps === true,
         analytics: parsed.analytics === true,
+        hmRate: typeof parsed.hmRate === "number" ? parsed.hmRate : 1,
+        hmFresh: Array.isArray(parsed.hmFresh) ? (parsed.hmFresh as string[]) : [],
       };
     } catch {
       // localStorage indisponível (modo privado, storage bloqueado) ou JSON corrompido:
@@ -679,6 +685,8 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
           sdk: catalog.sdk,
           heatmaps: catalog.heatmaps,
           analytics: catalog.analytics,
+          hmRate: catalog.hmRate,
+          hmFresh: catalog.hmFresh,
         })
       );
     } catch {}
@@ -704,6 +712,8 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
           sdk: typeof d.sdk === "string" ? d.sdk : null,
           heatmaps: d.heatmaps === true,
           analytics: d.analytics === true,
+          hmRate: typeof d.hmRate === "number" ? d.hmRate : 1,
+          hmFresh: Array.isArray(d.hmFresh) ? d.hmFresh : [],
         },
         status: r.status,
       };
@@ -729,7 +739,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     catalogLoaded = true;
     maybeAnnounceHost(key);
     safe(maybeLoadTours);
-    if (catalog.heatmaps) safe(() => loadHeatmaps(key));
+    if (catalog.heatmaps && heatmapsSampled(catalog.hmRate)) safe(() => loadHeatmaps(key, catalog.hmRate, catalog.hmFresh));
     if (catalog.analytics) safe(() => loadAnalytics(key));
   }
 
@@ -800,6 +810,76 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     return runtimeLoading;
   }
 
+  /* ---------- envio único: analytics + heatmaps num request por saída de página ----------
+   *
+   * Os módulos não enviam sozinhos: guardam o que coletaram e entregam aqui. Quando a aba é
+   * ocultada ou fechada, sai UM sendBeacon com tudo (antes: um por tela do heatmap + um do
+   * analytics). Acima de ~60 KB (teto do sendBeacon) o envio é dividido.
+   */
+  let beaconInstalled = false;
+  const BEACON_MAX = 60_000;
+
+  function sendBody(body: string) {
+    const url = `${API}/collect`;
+    try {
+      if (navigator.sendBeacon && navigator.sendBeacon(url, new Blob([body], { type: SIMPLE_CONTENT_TYPE }))) return;
+    } catch {}
+    fetch(url, { method: "POST", body, keepalive: true, headers: { "Content-Type": SIMPLE_CONTENT_TYPE } }).catch(() => {});
+  }
+
+  function flushBeacon() {
+    const key = activeKey || keyFromAttr;
+    if (!key) return;
+    let a: unknown = null;
+    let h: unknown[] = [];
+    safe(() => (a = analytics?.collect() ?? null));
+    safe(() => (h = heatmaps?.collect() ?? []));
+    if (!a && !h.length) return;
+    const all = JSON.stringify({ key, host: HOST, a, h });
+    if (all.length <= BEACON_MAX) return sendBody(all);
+    if (a) sendBody(JSON.stringify({ key, host: HOST, a }));
+    let chunk: unknown[] = [];
+    let size = 0;
+    for (const v of h) {
+      const s = JSON.stringify(v).length;
+      if (chunk.length && size + s > BEACON_MAX - 200) {
+        sendBody(JSON.stringify({ key, host: HOST, h: chunk }));
+        chunk = [];
+        size = 0;
+      }
+      chunk.push(v);
+      size += s;
+    }
+    if (chunk.length) sendBody(JSON.stringify({ key, host: HOST, h: chunk }));
+  }
+
+  function installBeacon() {
+    if (beaconInstalled) return;
+    beaconInstalled = true;
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") flushBeacon();
+    });
+    window.addEventListener("pagehide", flushBeacon);
+  }
+
+  /**
+   * Amostragem dos heatmaps: sorteada UMA vez por sessão da aba com a taxa do servidor
+   * (que a ajusta para caber na cota do plano). Fora da amostra, o módulo nem é baixado.
+   */
+  function heatmapsSampled(rate: number): boolean {
+    if (rate >= 1) return true;
+    if (rate <= 0) return false;
+    try {
+      const saved = sessionStorage.getItem("luumu_hm_sample");
+      if (saved === "1" || saved === "0") return saved === "1";
+      const pick = Math.random() < rate;
+      sessionStorage.setItem("luumu_hm_sample", pick ? "1" : "0");
+      return pick;
+    } catch {
+      return Math.random() < rate;
+    }
+  }
+
   /* ---------- Analytics: coletor baixado só quando o projeto ativou a coleta ---------- */
   let analytics: AnalyticsCollector | null = null;
   let analyticsLoading = false;
@@ -818,8 +898,10 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
           device: detectDevice(navigator.userAgent, navigator.maxTouchPoints || 0),
           path: () => routePattern(location.pathname),
           uid: () => (typeof identity.id === "string" && identity.id ? identity.id : null),
+          requestFlush: flushBeacon,
         });
         analytics = c;
+        installBeacon();
       })
       .catch(() => {
         analyticsLoading = false;
@@ -830,7 +912,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
   let heatmaps: HeatmapsRecorder | null = null;
   let heatmapsLoading = false;
 
-  function loadHeatmaps(key: string) {
+  function loadHeatmaps(key: string, rate: number, fresh: string[]) {
     // o administrador montando tour ou vendo preview não é comportamento de usuário final
     if (heatmaps || heatmapsLoading || builderToken || previewToken) return;
     heatmapsLoading = true;
@@ -843,8 +925,12 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
           host: HOST,
           device: detectDevice(navigator.userAgent, navigator.maxTouchPoints || 0),
           path: () => routePattern(location.pathname),
+          rate,
+          fresh,
+          requestFlush: flushBeacon,
         });
         heatmaps = r;
+        installBeacon();
       })
       .catch(() => {
         heatmapsLoading = false;

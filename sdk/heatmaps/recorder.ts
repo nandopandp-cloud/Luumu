@@ -25,12 +25,23 @@ export interface HeatmapsBootConfig {
   device: HeatmapDevice;
   /** rota normalizada da página atual ("home", "cursos/:id") */
   path: () => string;
+  /** fração das sessões gravadas (definida pelo servidor) — vai junto em cada visita */
+  rate: number;
+  /** "dispositivo|rota" que já têm cópia recente: nem pergunta ao servidor */
+  fresh: string[];
+  /** pede ao core para enviar agora (fila grande) */
+  requestFlush: () => void;
 }
+
+/** Uma visita pronta para envio (o core acrescenta key e host no envio único). */
+export type HeatmapVisit = Omit<PageviewPayload, "key" | "host">;
 
 export interface HeatmapsRecorder {
   boot(cfg: HeatmapsBootConfig): void;
-  /** troca de rota em SPA: fecha a visita atual e começa outra */
+  /** troca de rota em SPA: fecha a visita atual e começa outra (vai para a fila, sem envio) */
   route(): void;
+  /** fecha a visita atual e entrega a fila ao core, que faz UM envio junto com o analytics */
+  collect(): HeatmapVisit[];
 }
 
 const INTERACTIVE = "a[href],button,input,select,textarea,summary,label,[role=button],[role=link],[role=tab],[role=menuitem],[role=checkbox],[role=radio],[data-luumu-track]";
@@ -255,7 +266,15 @@ function onScroll(e: Event) {
   requestAnimationFrame(measureScroll);
 }
 
-function flush() {
+/*
+  Fila de visitas: trocar de tela numa SPA não envia nada. Tudo vai num único envio quando a
+  aba é ocultada ou fechada (core) — antes era um request por tela.
+*/
+let queue: HeatmapVisit[] = [];
+let queuedBytes = 0;
+const QUEUE_MAX_BYTES = 45_000;
+
+function finalize() {
   const v = visit;
   if (!v || v.sent || !cfg) return;
   v.sent = true;
@@ -268,9 +287,7 @@ function flush() {
     findScroller();
     v.sd = scroller ? Math.max(v.sd, viewDepth()) : 100;
   }
-  const payload: PageviewPayload = {
-    key: cfg.key,
-    host: cfg.host,
+  const payload: HeatmapVisit = {
     path: v.path,
     device: cfg.device,
     sid,
@@ -286,18 +303,17 @@ function flush() {
     h: v.hovers,
     l: v.labels,
     p: v.path_,
+    r: cfg.rate,
   };
-  let body = JSON.stringify(payload);
+  let size = JSON.stringify(payload).length;
   // sendBeacon tem teto (~64 KB): o movimento é o que cede primeiro
-  if (body.length > 60_000) {
+  if (size > 40_000) {
     payload.m = Object.fromEntries(Object.entries(payload.m).sort((a, b) => b[1] - a[1]).slice(0, 60));
-    body = JSON.stringify(payload);
+    size = JSON.stringify(payload).length;
   }
-  const url = `${cfg.api}/heatmaps/collect`;
-  try {
-    if (navigator.sendBeacon && navigator.sendBeacon(url, new Blob([body], { type: "text/plain;charset=UTF-8" }))) return;
-  } catch {}
-  fetch(url, { method: "POST", body, keepalive: true, headers: { "Content-Type": "text/plain;charset=UTF-8" } }).catch(() => {});
+  queue.push(payload);
+  queuedBytes += size;
+  if (queuedBytes > QUEUE_MAX_BYTES) cfg.requestFlush();
 }
 
 /* ---------- cópia da página ---------- */
@@ -387,10 +403,23 @@ function idle(fn: () => void, delay: number) {
   }, delay);
 }
 
+async function gzip(text: string): Promise<Blob | null> {
+  try {
+    const CS = (window as unknown as { CompressionStream?: new (f: string) => GenericTransformStream }).CompressionStream;
+    if (!CS) return null;
+    const stream = new Blob([text]).stream().pipeThrough(new CS("gzip") as unknown as ReadableWritablePair<Uint8Array, Uint8Array>);
+    return await new Response(stream).blob();
+  } catch {
+    return null;
+  }
+}
+
 async function maybeSnapshot() {
   const c = cfg;
   if (!c) return;
   const path = c.path();
+  // a lista do /config (em cache) já diz que existe cópia: nenhuma request
+  if (c.fresh.includes(`${c.device}|${path}`)) return;
   const stamp = `${SNAP_STAMP}${c.host}:${path}:${c.device}`;
   try {
     const last = Number(localStorage.getItem(stamp) || 0);
@@ -404,9 +433,11 @@ async function maybeSnapshot() {
     if (c.path() !== path) return; // o usuário já foi para outra tela
     const html = serializePage();
     if (html.length > SNAPSHOT_MAX_BYTES) return;
-    await fetch(`${c.api}/heatmaps/snapshot?${q}&w=${window.innerWidth}&h=${docHeight()}&vh=${window.innerHeight}`, {
+    // comprimida (gzip): a cópia tem centenas de KB e o HTML comprime ~10x
+    const gz = await gzip(html);
+    await fetch(`${c.api}/heatmaps/snapshot?${q}&w=${window.innerWidth}&h=${docHeight()}&vh=${window.innerHeight}${gz ? "&z=1" : ""}`, {
       method: "POST",
-      body: html,
+      body: gz ?? html,
       headers: { "Content-Type": "text/plain;charset=UTF-8" },
     });
   } catch {}
@@ -435,10 +466,7 @@ const recorder: HeatmapsRecorder = {
     // captura: scroll não borbulha, e o de painéis internos só chega assim
     document.addEventListener("scroll", onScroll, { capture: true, passive: true });
     for (const ev of ["keydown", "touchstart", "pointerdown"]) document.addEventListener(ev, () => (lastInput = Date.now()), opts);
-    document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "hidden") flush();
-    });
-    window.addEventListener("pagehide", flush);
+    // o envio (aba oculta/fechada) é do core, que junta heatmaps e analytics num request só
     // tempo ATIVO: aba visível e alguém interagiu nos últimos 30s
     setInterval(() => {
       if (visit && !document.hidden && Date.now() - lastInput < IDLE_MS) visit.activeMs += 1000;
@@ -449,8 +477,15 @@ const recorder: HeatmapsRecorder = {
   route() {
     if (!cfg || !visit) return;
     if (cfg.path() === visit.path && !visit.sent) return; // replaceState na mesma tela
-    flush();
+    finalize();
     startVisit();
+  },
+  collect() {
+    finalize();
+    const out = queue;
+    queue = [];
+    queuedBytes = 0;
+    return out;
   },
 };
 

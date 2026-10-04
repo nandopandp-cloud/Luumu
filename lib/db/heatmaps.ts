@@ -5,7 +5,7 @@ import { db } from "./client";
 import { heatmapPageviews, heatmapSettings, heatmapSnapshots, workspaces } from "@/db/schema";
 import { heatmapPageviewId, heatmapSnapshotId } from "./ids";
 import { monthStart, planAllowsHeatmaps, planOf } from "@/lib/plans";
-import { clickPathKey, SNAPSHOT_TTL_DAYS, type HeatmapDevice, type PageviewPayload } from "@/lib/heatmaps/core";
+import { clickPathKey, heatmapSampleRate, SNAPSHOT_TTL_DAYS, type HeatmapDevice, type PageviewPayload } from "@/lib/heatmaps/core";
 
 /*
   Heatmaps no banco. A coleta grava UMA linha por visita a uma página; o painel agrega no
@@ -59,8 +59,14 @@ export async function heatmapQuota(workspaceId: string, fresh = false) {
 
 /* ---------- ingestão ---------- */
 
+/*
+  A coluna sample_rate chega com a migração 0020. Se o deploy entrar antes dela, a gravação
+  segue sem a coluna (a coleta que já está no ar não pode cair) e tenta de novo em 10 min.
+*/
+let sampleColumnMissingUntil = 0;
+
 export async function recordPageview(workspaceId: string, projectId: string, host: string, p: PageviewPayload) {
-  await db.insert(heatmapPageviews).values({
+  const values = {
     id: heatmapPageviewId(),
     workspaceId,
     projectId,
@@ -79,7 +85,99 @@ export async function recordPageview(workspaceId: string, projectId: string, hos
     hovers: p.h,
     labels: p.l,
     clickPath: clickPathKey(p.p),
-  });
+  };
+  if (Date.now() > sampleColumnMissingUntil) {
+    try {
+      await db.insert(heatmapPageviews).values({ ...values, sampleRate: p.r });
+      return;
+    } catch (e) {
+      if (!/sample_rate/.test(String((e as Error)?.message ?? e) + String((e as { cause?: unknown })?.cause ?? ""))) throw e;
+      sampleColumnMissingUntil = Date.now() + 10 * 60_000;
+    }
+  }
+  // colunas explícitas: o insert do Drizzle listaria sample_rate (como `default`) e falharia igual
+  await db.execute(sql`
+    insert into heatmap_pageviews (id, workspace_id, project_id, host, path, device, session_id, viewport_w, viewport_h, doc_h,
+                                   duration_ms, max_scroll, max_move, clicks, moves, hovers, labels, click_path)
+    values (${values.id}, ${values.workspaceId}, ${values.projectId}, ${values.host}, ${values.path}, ${values.device}, ${values.sessionId},
+            ${values.viewportW}, ${values.viewportH}, ${values.docH}, ${values.durationMs}, ${values.maxScroll}, ${values.maxMove},
+            ${JSON.stringify(values.clicks)}::jsonb, ${JSON.stringify(values.moves)}::jsonb, ${JSON.stringify(values.hovers)}::jsonb,
+            ${JSON.stringify(values.labels)}::jsonb, ${values.clickPath})`);
+}
+
+/* ---------- plano de coleta (amostragem + cópias existentes) ---------- */
+
+/** Teto de sessões gravadas por dia e projeto, mesmo em plano ilimitado (custo de ingestão). */
+export const HEATMAP_DAILY_CAP = 3000;
+
+export interface HeatmapPlan {
+  /** fração das sessões que o SDK deve gravar (0–1) */
+  rate: number;
+  /** "dispositivo|rota" com cópia recente: o SDK não pergunta nem envia de novo */
+  fresh: string[];
+}
+
+const planCache = new Map<string, { v: HeatmapPlan; exp: number }>();
+
+/**
+ * Quanto gravar: a cota do mês que sobra, dividida pelos dias que faltam (com teto diário),
+ * sobre o volume estimado das últimas 24h (sessões gravadas ÷ a taxa com que foram gravadas).
+ * Heatmap é distribuição: uma amostra representa bem o todo, e cada sessão a menos é uma
+ * Edge Request, uma invocação e uma linha a menos. Recalculado a cada 10 min por projeto.
+ */
+export async function heatmapPlan(workspaceId: string, projectId: string, host: string): Promise<HeatmapPlan> {
+  const key = `${projectId}|${host}`;
+  const hit = planCache.get(key);
+  if (hit && hit.exp > Date.now()) return hit.v;
+
+  const since = new Date(Date.now() - 86_400_000);
+  const [quota, est, fresh] = await Promise.all([
+    heatmapQuota(workspaceId),
+    db
+      .execute(
+        sql`select coalesce(sum(1.0 / r), 0)::float est from (
+              select max(${heatmapPageviews.sampleRate}) r from ${heatmapPageviews}
+               where ${heatmapPageviews.projectId} = ${projectId} and ${heatmapPageviews.createdAt} >= ${since.toISOString()}::timestamptz
+               group by ${heatmapPageviews.sessionId}) t`
+      )
+      // sem a coluna (migração pendente): conta as sessões como gravadas integralmente
+      .catch(() =>
+        db.execute(
+          sql`select count(distinct ${heatmapPageviews.sessionId})::float est from ${heatmapPageviews}
+               where ${heatmapPageviews.projectId} = ${projectId} and ${heatmapPageviews.createdAt} >= ${since.toISOString()}::timestamptz`
+        )
+      ),
+    db
+      .select({ device: heatmapSnapshots.device, path: heatmapSnapshots.path })
+      .from(heatmapSnapshots)
+      .where(and(eq(heatmapSnapshots.projectId, projectId), eq(heatmapSnapshots.host, host), gte(heatmapSnapshots.createdAt, snapshotFreshSince())))
+      .orderBy(desc(heatmapSnapshots.createdAt))
+      .limit(400),
+  ]);
+
+  const estimated = Number(((est as unknown as { rows?: { est: number }[] }).rows ?? (est as unknown as { est: number }[]))[0]?.est) || 0;
+  const now = new Date();
+  const daysLeft = (new Date(now.getFullYear(), now.getMonth() + 1, 1).getTime() - now.getTime()) / 86_400_000;
+  const rate = heatmapSampleRate({ limit: quota.allowed ? quota.limit : 0, used: quota.used, daysLeft, estimatedDaily: estimated, dailyCap: HEATMAP_DAILY_CAP });
+  const v: HeatmapPlan = { rate, fresh: fresh.map((f) => `${f.device}|${f.path}`) };
+  planCache.set(key, { v, exp: Date.now() + 10 * 60_000 });
+  return v;
+}
+
+/*
+  Reserva de cópia: quando um navegador recebe "precisa mandar", os outros que perguntarem a
+  mesma página nos próximos 10 min ouvem "não" — evita várias cópias grandes subindo juntas
+  (por instância; o pior caso entre instâncias é uma cópia a mais, descartada no servidor).
+*/
+const snapshotClaims = new Map<string, number>();
+
+export function claimSnapshot(projectId: string, host: string, path: string, device: string): boolean {
+  const k = `${projectId}|${host}|${path}|${device}`;
+  const now = Date.now();
+  if ((snapshotClaims.get(k) ?? 0) > now) return false;
+  snapshotClaims.set(k, now + 10 * 60_000);
+  if (snapshotClaims.size > 5000) for (const [key, exp] of snapshotClaims) if (exp <= now) snapshotClaims.delete(key);
+  return true;
 }
 
 const snapshotFreshSince = () => new Date(Date.now() - SNAPSHOT_TTL_DAYS * 86_400_000);

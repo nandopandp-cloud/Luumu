@@ -2,7 +2,7 @@ import { listActiveSurveysForSdk } from "@/lib/db/surveys";
 import { eventCatalogForSdk } from "@/lib/db/events";
 import { hostStateForSdk, normalizeHost } from "@/lib/db/hosts";
 import { listPublishedToursForSdk } from "@/lib/db/tours";
-import { isHeatmapsEnabled } from "@/lib/db/heatmaps";
+import { heatmapPlan, isHeatmapsEnabled } from "@/lib/db/heatmaps";
 import { getAnalyticsSettings } from "@/lib/db/analytics";
 import { SDK_BUNDLE_VERSION } from "@/lib/tours/sdk-version";
 import { normalizeAppearance } from "@/lib/builder";
@@ -84,6 +84,8 @@ export async function GET(req: Request) {
     isHeatmapsEnabled(resolved.projectId).catch(() => false),
     getAnalyticsSettings(resolved.projectId).then((a) => a.enabled).catch(() => false),
   ]);
+  // heatmaps: taxa de amostragem (cota do plano) + páginas que já têm cópia (o SDK não pergunta)
+  const plan = heatmaps ? await heatmapPlan(resolved.workspaceId, resolved.projectId, host).catch(() => null) : null;
   const forHost = active.filter((s) => {
     const targets = (s.targetHosts as string[] | null) ?? [];
     return targets.length === 0 || (!!host && targets.includes(host));
@@ -110,7 +112,9 @@ export async function GET(req: Request) {
       host: hostState,
       tours,
       // coleta de heatmaps ativa neste projeto: o SDK baixa sdk-heatmaps.js só se for true
-      heatmaps: heatmaps,
+      heatmaps: heatmaps && (plan?.rate ?? 1) > 0,
+      hmRate: plan?.rate ?? 1,
+      hmFresh: plan?.fresh ?? [],
       // coleta de analytics de produto ativa: o SDK baixa sdk-analytics.js só se for true
       analytics,
       // versão atual de sdk-tours.js / sdk-builder.js (o core pode estar em cache e ser mais velho)
