@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import Link from "@/components/ui/Link";
 import { BarChart3, Check, ChevronDown, Copy, LayoutGrid, Loader2, MoreVertical, PencilLine, Plus, Settings2, Trash2 } from "lucide-react";
@@ -22,7 +23,8 @@ export function usePopover() {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
-    const down = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
+    // o menu de uma visão vive num portal (fora do ref): clicar nele não fecha o seletor antes do clique valer
+    const down = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && !(e.target as Element).closest("[data-item-menu]") && setOpen(false);
     const key = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
     document.addEventListener("pointerdown", down);
     document.addEventListener("keydown", key);
@@ -142,15 +144,49 @@ function RenameDialog({ view, onClose }: { view: SavedView; onClose: () => void 
   );
 }
 
-/** Menu de uma visão: editar layout, renomear, duplicar, excluir. */
+/**
+ * Menu de uma visão: editar layout, renomear, duplicar, excluir.
+ * Renderizado num portal com posição fixa: dentro da lista rolável do seletor (overflow) ele
+ * era cortado e ficava sobreposto/ilegível. Abre para cima quando falta espaço embaixo.
+ */
 function ItemMenu({ onEdit, onRename, onDuplicate, onDelete }: { onEdit: () => void; onRename: () => void; onDuplicate: () => void; onDelete: () => void }) {
-  const { open, setOpen, ref } = usePopover();
+  const [pos, setPos] = useState<{ top?: number; bottom?: number; right: number } | null>(null);
+  const btn = useRef<HTMLButtonElement>(null);
+  const close = () => setPos(null);
+
+  useEffect(() => {
+    if (!pos) return;
+    const down = (e: PointerEvent) => {
+      const t = e.target as Element;
+      if (!t.closest("[data-item-menu]") && !btn.current?.contains(t)) close();
+    };
+    const key = (e: KeyboardEvent) => e.key === "Escape" && close();
+    document.addEventListener("pointerdown", down);
+    document.addEventListener("keydown", key);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      document.removeEventListener("pointerdown", down);
+      document.removeEventListener("keydown", key);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [pos]);
+
+  function toggle() {
+    if (pos) return close();
+    const r = btn.current!.getBoundingClientRect();
+    const right = window.innerWidth - r.right;
+    // menu tem ~190px de altura: sem espaço embaixo, abre para cima
+    setPos(window.innerHeight - r.bottom < 210 ? { bottom: window.innerHeight - r.top + 6, right } : { top: r.bottom + 6, right });
+  }
+
   const item = (Icon: typeof Copy, label: string, fn: () => void, danger = false) => (
     <button
       type="button"
       role="menuitem"
       onClick={() => {
-        setOpen(false);
+        close();
         fn();
       }}
       className={cn("flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm transition hover:bg-bg-sunken", danger ? "text-erro" : "text-fg-soft")}
@@ -159,20 +195,27 @@ function ItemMenu({ onEdit, onRename, onDuplicate, onDelete }: { onEdit: () => v
     </button>
   );
   return (
-    <div ref={ref} className="relative">
-      <button type="button" aria-label="Opções da visão" aria-expanded={open} onClick={() => setOpen((v) => !v)} className="grid size-8 place-items-center rounded-lg text-fg-mut transition hover:bg-bg-sunken hover:text-fg">
+    <>
+      <button ref={btn} type="button" aria-label="Opções da visão" aria-expanded={!!pos} onClick={toggle} className="grid size-8 shrink-0 place-items-center rounded-lg text-fg-mut transition hover:bg-bg-sunken hover:text-fg">
         <MoreVertical className="size-4" />
       </button>
-      {open && (
-        <div role="menu" className="absolute right-0 top-full z-50 mt-1 w-48 overflow-hidden rounded-xl border border-line bg-bg-elev py-1 shadow-[var(--shadow-lg)] animate-[luumuSelectIn_.14s_ease-out]">
-          {item(LayoutGrid, "Editar layout", onEdit)}
-          {item(PencilLine, "Renomear", onRename)}
-          {item(Copy, "Duplicar", onDuplicate)}
-          <div className="my-1 border-t border-line" />
-          {item(Trash2, "Excluir", onDelete, true)}
-        </div>
-      )}
-    </div>
+      {pos &&
+        createPortal(
+          <div
+            data-item-menu
+            role="menu"
+            className="fixed z-[200] w-48 overflow-hidden rounded-xl border border-line bg-bg-elev py-1 shadow-[var(--shadow-lg)] animate-[luumuSelectIn_.14s_ease-out]"
+            style={pos}
+          >
+            {item(LayoutGrid, "Editar layout", onEdit)}
+            {item(PencilLine, "Renomear", onRename)}
+            {item(Copy, "Duplicar", onDuplicate)}
+            <div className="my-1 border-t border-line" />
+            {item(Trash2, "Excluir", onDelete, true)}
+          </div>,
+          document.body
+        )}
+    </>
   );
 }
 
