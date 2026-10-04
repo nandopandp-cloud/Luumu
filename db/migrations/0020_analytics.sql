@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS "analytics_users" (
   "project_id" text NOT NULL REFERENCES "projects"("id") ON DELETE cascade,
   "anon_id" text NOT NULL,
   "user_id" text,
+  "user_email" text,
+  "user_name" text,
   "first_seen_at" timestamp with time zone NOT NULL,
   "last_seen_at" timestamp with time zone NOT NULL,
   "first_channel" text DEFAULT 'direct' NOT NULL,

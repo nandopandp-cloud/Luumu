@@ -34,13 +34,17 @@ function liveDuring(s: SurveyRow, from: Date, to: Date): boolean {
   return true;
 }
 
+const DASHBOARD_DEFAULT_PERIOD = "all";
+
 export default async function DashboardPage({
   searchParams,
 }: {
   searchParams: Promise<{ surveyId?: string; period?: string; from?: string; to?: string; host?: string }>;
 }) {
   const { name } = await requireUser();
-  const { surveyId, period, from, to, host: hostParam } = await searchParams;
+  const { surveyId, period: periodParam, from, to, host: hostParam } = await searchParams;
+  // o Dashboard abre com TODO o histórico; um período específico é escolha do usuário
+  const period = periodParam ?? DASHBOARD_DEFAULT_PERIOD;
   const projectId = await getCurrentProjectId();
   const host = normalizeHost(hostParam) || undefined;
   const { from: dateFrom, to: dateTo } = periodToRange(period, from, to);
@@ -107,7 +111,7 @@ export default async function DashboardPage({
         </div>
       </div>
 
-      <DataFilters surveys={surveyOptions} defaultSurveyId={defaultSurveyId} hosts={hosts} />
+      <DataFilters surveys={surveyOptions} defaultSurveyId={defaultSurveyId} hosts={hosts} defaultPeriod={DASHBOARD_DEFAULT_PERIOD} />
 
       {/* Métricas */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">

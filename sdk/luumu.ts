@@ -897,7 +897,11 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
           host: HOST,
           device: detectDevice(navigator.userAgent, navigator.maxTouchPoints || 0),
           path: () => routePattern(location.pathname),
-          uid: () => (typeof identity.id === "string" && identity.id ? identity.id : null),
+          identity: () => {
+            const s = (v: unknown) => (typeof v === "string" && v ? v : null);
+            const fullName = s(identity.name) ?? s(identity.full_name) ?? ([s(identity.first_name), s(identity.last_name)].filter(Boolean).join(" ") || null);
+            return { id: s(identity.id), email: s(identity.email), name: fullName };
+          },
           requestFlush: flushBeacon,
         });
         analytics = c;

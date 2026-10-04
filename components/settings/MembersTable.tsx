@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { SortTh, useTableSort } from "@/components/ui/SortableHeader";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { MoreHorizontal, Trash2, Loader2, AlertTriangle, FolderCog, UserCog } from "lucide-react";
@@ -70,6 +71,13 @@ export function MembersTable({
   const [removing, setRemoving] = useState<MemberRow | null>(null);
   const [scoping, setScoping] = useState<MemberRow | null>(null);
   const [editingRole, setEditingRole] = useState<MemberRow | null>(null);
+  // papel ordena por hierarquia (dono → leitor), não por ordem alfabética
+  const ROLE_RANK: Record<string, number> = { owner: 4, admin: 3, editor: 2, viewer: 1 };
+  const { sorted, sort, toggle } = useTableSort(members, {
+    name: (m) => m.name || m.email,
+    role: (m) => ROLE_RANK[m.role] ?? 0,
+    seen: (m) => (m.lastSeenAt ? new Date(m.lastSeenAt) : null),
+  });
   const [, startTransition] = useTransition();
   const router = useRouter();
   const toast = useToast();
@@ -98,15 +106,15 @@ export function MembersTable({
         <table className="w-full text-sm">
           <thead>
             <tr className="border-y border-line text-left font-mono text-[11px] uppercase tracking-wide text-fg-mut">
-              <th className="px-6 py-2.5 font-semibold">Membro</th>
-              <th className="px-3 py-2.5 font-semibold">Papel</th>
+              <SortTh label="Membro" k="name" sort={sort} onSort={toggle} className="px-6 py-2.5 font-semibold" />
+              <SortTh label="Papel" k="role" sort={sort} onSort={toggle} className="px-3 py-2.5 font-semibold" />
               <th className="px-3 py-2.5 font-semibold">Projetos</th>
-              <th className="px-3 py-2.5 font-semibold">Último acesso</th>
+              <SortTh label="Último acesso" k="seen" sort={sort} onSort={toggle} className="px-3 py-2.5 font-semibold" />
               <th className="px-6 py-2.5 text-right font-semibold">Ações</th>
             </tr>
           </thead>
           <tbody>
-            {members.map((m) => {
+            {sorted.map((m) => {
               const meta = roleMeta[m.role] ?? { label: m.role, tone: "neutral" as const };
               const isCurrent = m.id === currentUserId;
               const removable = canManage && !isCurrent && m.role !== "owner";

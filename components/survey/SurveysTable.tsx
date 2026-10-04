@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { SortTh, useTableSort } from "@/components/ui/SortableHeader";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import Image from "next/image";
@@ -80,6 +81,18 @@ export function SurveysTable({
         (hostFilter === NO_TARGET ? s.targetHosts.length === 0 : s.targetHosts.includes(hostFilter))) &&
       s.name.toLowerCase().includes(q.toLowerCase())
   );
+  // ordenação pelos cabeçalhos; "Atualizada" usa a ordem do servidor (mais recente primeiro)
+  const position = new Map(items.map((x, i) => [x.id, items.length - i]));
+  const { sorted: sortedRows, sort, toggle } = useTableSort(filtered, {
+    name: (x) => x.name,
+    creator: (x) => x.creator?.name ?? null,
+    type: (x) => x.type,
+    status: (x) => x.status,
+    channel: (x) => x.channel,
+    responses: (x) => x.responseCount,
+    score: (x) => x.score,
+    updated: (x) => position.get(x.id) ?? null,
+  });
 
   function changeStatus(id: string, status: SurveyStatus, label: string) {
     setMenuFor(null);
@@ -175,19 +188,19 @@ export function SurveysTable({
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line text-left font-mono text-[11px] uppercase tracking-wide text-fg-mut">
-                <th className="px-6 py-3 font-semibold">Pesquisa</th>
+                <SortTh label="Pesquisa" k="name" sort={sort} onSort={toggle} className="px-6 py-3 font-semibold" />
                 {multiHost && <th className="px-3 py-3 font-semibold">Plataforma</th>}
-                <th className="px-3 py-3 font-semibold">Criada por</th>
-                <th className="px-3 py-3 font-semibold">Tipo</th>
-                <th className="px-3 py-3 font-semibold">Status</th>
-                <th className="px-3 py-3 font-semibold">Canal</th>
-                <th className="px-3 py-3 font-semibold">Respostas</th>
-                <th className="px-3 py-3 font-semibold">Score</th>
-                <th className="px-6 py-3 text-right font-semibold">Atualizada</th>
+                <SortTh label="Criada por" k="creator" sort={sort} onSort={toggle} className="px-3 py-3 font-semibold" />
+                <SortTh label="Tipo" k="type" sort={sort} onSort={toggle} className="px-3 py-3 font-semibold" />
+                <SortTh label="Status" k="status" sort={sort} onSort={toggle} className="px-3 py-3 font-semibold" />
+                <SortTh label="Canal" k="channel" sort={sort} onSort={toggle} className="px-3 py-3 font-semibold" />
+                <SortTh label="Respostas" k="responses" sort={sort} onSort={toggle} className="px-3 py-3 font-semibold" />
+                <SortTh label="Score" k="score" sort={sort} onSort={toggle} className="px-3 py-3 font-semibold" />
+                <SortTh label="Atualizada" k="updated" sort={sort} onSort={toggle} align="right" className="px-6 py-3 text-right font-semibold" />
               </tr>
             </thead>
             <tbody>
-              {filtered.map((s) => (
+              {sortedRows.map((s) => (
                 <tr key={s.id} className="group border-b border-line last:border-0 transition-colors hover:bg-bg-sunken/50">
                   <td className="px-6 py-3.5">
                     <Link href={`/surveys/${s.id}/builder`} className="font-semibold hover:text-accent">{s.name}</Link>

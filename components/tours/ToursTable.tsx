@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { SortTh, useTableSort } from "@/components/ui/SortableHeader";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import Image from "next/image";
@@ -40,6 +41,17 @@ export function TourStatusBadge({ status, version, dirty }: { status: TourListIt
 export function ToursTable({ items, hosts, newTour }: { items: TourRow[]; hosts: string[]; newTour: React.ReactNode }) {
   const [menu, setMenu] = useState<{ id: string; top: number; right: number } | null>(null);
   const [deleting, setDeleting] = useState<TourRow | null>(null);
+  // "Atualizado" usa a ordem do servidor (mais recente primeiro)
+  const position = new Map(items.map((x, i) => [x.id, items.length - i]));
+  const { sorted, sort, toggle } = useTableSort(items, {
+    name: (t) => t.name,
+    status: (t) => t.status,
+    steps: (t) => t.stepCount,
+    started: (t) => t.started,
+    rate: (t) => (t.started ? t.completed / t.started : null),
+    creator: (t) => t.creator?.name ?? null,
+    updated: (t) => position.get(t.id) ?? null,
+  });
   const [busy, start] = useTransition();
   const router = useRouter();
   const toast = useToast();
@@ -87,18 +99,18 @@ export function ToursTable({ items, hosts, newTour }: { items: TourRow[]; hosts:
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line text-left font-mono text-[11px] uppercase tracking-wide text-fg-mut">
-                <th className="px-6 py-3 font-semibold">Tour</th>
+                <SortTh label="Tour" k="name" sort={sort} onSort={toggle} className="px-6 py-3 font-semibold" />
                 {multiHost && <th className="px-3 py-3 font-semibold">Plataforma</th>}
-                <th className="px-3 py-3 font-semibold">Status</th>
-                <th className="px-3 py-3 font-semibold">Passos</th>
-                <th className="px-3 py-3 font-semibold">Iniciaram</th>
-                <th className="px-3 py-3 font-semibold">Conclusão</th>
-                <th className="px-3 py-3 font-semibold">Criado por</th>
-                <th className="px-6 py-3 text-right font-semibold">Atualizado</th>
+                <SortTh label="Status" k="status" sort={sort} onSort={toggle} className="px-3 py-3 font-semibold" />
+                <SortTh label="Passos" k="steps" sort={sort} onSort={toggle} className="px-3 py-3 font-semibold" />
+                <SortTh label="Iniciaram" k="started" sort={sort} onSort={toggle} className="px-3 py-3 font-semibold" />
+                <SortTh label="Conclusão" k="rate" sort={sort} onSort={toggle} className="px-3 py-3 font-semibold" />
+                <SortTh label="Criado por" k="creator" sort={sort} onSort={toggle} className="px-3 py-3 font-semibold" />
+                <SortTh label="Atualizado" k="updated" sort={sort} onSort={toggle} align="right" className="px-6 py-3 text-right font-semibold" />
               </tr>
             </thead>
             <tbody>
-              {items.map((t) => {
+              {sorted.map((t) => {
                 const rate = t.started ? Math.round((t.completed / t.started) * 100) : null;
                 return (
                   <tr key={t.id} className="group border-b border-line last:border-0 transition-colors hover:bg-bg-sunken/50">

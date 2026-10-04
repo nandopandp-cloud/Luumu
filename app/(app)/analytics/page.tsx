@@ -1,7 +1,8 @@
 import { AnalyticsShell } from "@/components/analytics/AnalyticsShell";
 import { AnalyticsUnavailable, EnableAnalytics, WaitingAnalytics } from "@/components/analytics/States";
 import { canManageWorkspace, getCurrentProject, getCurrentRole, requireUser } from "@/lib/auth/current";
-import { collectingSince, getAnalytics, getAnalyticsSettings, hasAnalyticsData, listViews, type AnalyticsSettings } from "@/lib/db/analytics";
+import { collectingSince, getAnalytics, getAnalyticsSettings, hasAnalyticsData, listAnalyticsUsers, listViews, USER_SEGMENTS, USER_SORTS, type AnalyticsSettings, type UserSegment, type UserSort } from "@/lib/db/analytics";
+import type { UsersData } from "@/components/analytics/UsersView";
 import { listHosts } from "@/lib/db/hosts";
 import { parseViewConfig, type ViewConfig } from "@/lib/analytics/core";
 import { datasetsFor, defaultSpan, TAB_LAYOUT, type Block } from "@/lib/analytics/derive";
@@ -10,7 +11,7 @@ import { periodToRange } from "@/lib/period";
 
 export const dynamic = "force-dynamic";
 
-type SP = { tab?: string; view?: string; period?: string; from?: string; to?: string; host?: string; device?: string; w?: string };
+type SP = { tab?: string; view?: string; period?: string; from?: string; to?: string; host?: string; device?: string; w?: string; q?: string; seg?: string; sort?: string; dir?: string; pg?: string };
 
 const same = (a: ViewConfig, b: ViewConfig) =>
   a.tab === b.tab &&
@@ -52,7 +53,8 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
     widgets: sp.w ? sp.w.split(",") : saved?.config.widgets,
   });
 
-  const blocks: Block[] = config.tab === "custom" ? (config.widgets ?? []).map((id) => ({ id, span: defaultSpan(id) })) : TAB_LAYOUT[config.tab];
+  const blocks: Block[] =
+    config.tab === "custom" ? (config.widgets ?? []).map((id) => ({ id, span: defaultSpan(id) })) : config.tab === "users" ? [] : TAB_LAYOUT[config.tab];
 
   const range = periodToRange(config.period ?? "30d", config.from, config.to);
   const to = range.to ?? new Date();
@@ -64,8 +66,29 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
       })
     : {};
 
+  // aba Usuários: a lista (busca/segmento/ordem/página na URL) + os números do topo
+  let users: UsersData | null = null;
+  if (config.tab === "users") {
+    const scope = { projectId, from, to, host: config.host, device: config.device };
+    const [list, kpi] = await Promise.all([
+      listAnalyticsUsers(scope, {
+        q: sp.q,
+        segment: (USER_SEGMENTS as readonly string[]).includes(sp.seg ?? "") ? (sp.seg as UserSegment) : "all",
+        sort: (USER_SORTS as readonly string[]).includes(sp.sort ?? "") ? (sp.sort as UserSort) : "recent",
+        dir: sp.dir === "asc" ? "asc" : "desc",
+        page: Math.max(1, Number(sp.pg) || 1),
+      }),
+      getAnalytics(scope, settings, new Set(["totals", "newUsers"])),
+    ]);
+    users = {
+      ...list,
+      kpis: { active: kpi.totals?.users ?? 0, identified: kpi.totals?.identified ?? 0, newUsers: kpi.newUsers?.cur ?? 0, activePrev: kpi.totals?.users_prev || null },
+    };
+  }
+
   return (
     <AnalyticsShell
+      users={users}
       config={config}
       blocks={blocks}
       data={data}

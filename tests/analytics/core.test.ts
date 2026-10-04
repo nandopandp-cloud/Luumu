@@ -29,6 +29,10 @@ test("envio do SDK: ids, relógio, limites e eventos validados", () => {
   assert.equal(bad.pages[0].dur, 4 * 60 * 60 * 1000);
   assert.deepEqual(bad.pages[0].ev, ["ok_event"]);
   assert.match(bad.pages[0].id, /^[a-z0-9]+$/);
+  const who = parseAnalytics({ ...base, uid: "u-1", email: " Ana@Escola.COM ", name: "Ana <b>Souza</b>" }, now)!;
+  assert.equal(who.email, "ana@escola.com");
+  assert.equal(who.name, "Ana bSouza/b"); // sem < e >: nada de marcação
+  assert.equal(parseAnalytics({ ...base, email: "não é e-mail" }, now)!.email, null);
   const cont = parseAnalytics({ ...base, pages: [{ id: "pg1", c: true, path: "home", t: now, dur: 1000, ev: [] }] }, now)!;
   assert.equal(cont.pages[0].c, true);
 });

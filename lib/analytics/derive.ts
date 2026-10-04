@@ -15,7 +15,8 @@ export interface Block {
 
 const b = (id: WidgetId, span: number): Block => ({ id, span });
 
-export const TAB_LAYOUT: Record<Exclude<AnalyticsTab, "custom">, Block[]> = {
+/** Abas montadas por blocos (Usuários e Personalizada têm tela própria). */
+export const TAB_LAYOUT: Record<Exclude<AnalyticsTab, "custom" | "users">, Block[]> = {
   overview: [
     b("kpi_dau", 2), b("kpi_mau", 2), b("kpi_north_star", 2), b("kpi_task_success", 2), b("kpi_session_time", 2), b("kpi_stickiness", 2),
     b("users_trend", 8), b("engagement_funnel", 4),

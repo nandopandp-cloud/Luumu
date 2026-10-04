@@ -40,7 +40,7 @@ const show = () => {
 };
 
 test("um envio com as telas da visita, eventos por tela e a origem da sessão", async () => {
-  col.boot({ api: "https://luumu.test/api/v1", key: "pk_test", host: "app.cliente.com", device: "desktop", path: () => path, uid: () => uid, requestFlush: () => {} });
+  col.boot({ api: "https://luumu.test/api/v1", key: "pk_test", host: "app.cliente.com", device: "desktop", path: () => path, identity: () => ({ id: uid, email: uid ? "aluno7@escola.com" : null, name: uid ? "Aluno Sete" : null }), requestFlush: () => {} });
   document.dispatchEvent(new Event("pointerdown"));
   col.event("click_comecar");
   col.event("page_view_cursos"); // telas já são registradas: não viram evento
@@ -59,6 +59,8 @@ test("um envio com as telas da visita, eventos por tela e a origem da sessão", 
   assert.equal(p.key, undefined);
   delivered.push(p);
   assert.equal(p.uid, "aluno-7");
+  assert.equal(p.email, "aluno7@escola.com");
+  assert.equal(p.name, "Aluno Sete");
   assert.equal(p.ref, "www.google.com");
   assert.deepEqual(p.utm, { source: "newsletter", medium: "email", campaign: "Volta as aulas" });
   assert.equal(p.landing, "cursos/:id");

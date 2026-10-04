@@ -30,6 +30,7 @@ import type { AnalyticsData, SavedView } from "@/lib/db/analytics";
 import { createViewAction, deleteViewAction, listMetricEventsAction, saveMetricsAction, updateViewAction } from "@/app/(app)/analytics/actions";
 import { Widget, type WidgetCtx } from "./Widgets";
 import { ToggleCollection } from "./States";
+import { UsersView, type UsersData } from "./UsersView";
 
 const SPAN: Record<number, string> = {
   2: "xl:col-span-2",
@@ -63,6 +64,7 @@ export function AnalyticsShell({
   canConfigure,
   enabled,
   since,
+  users = null,
 }: {
   config: ViewConfig;
   blocks: Block[];
@@ -76,6 +78,8 @@ export function AnalyticsShell({
   canConfigure: boolean;
   enabled: boolean;
   since: string | null;
+  /** aba Usuários */
+  users?: UsersData | null;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -196,7 +200,9 @@ export function AnalyticsShell({
       )}
 
       {/* blocos */}
-      {config.tab === "custom" && !blocks.length ? (
+      {config.tab === "users" && users ? (
+        <UsersView data={users} />
+      ) : config.tab === "custom" && !blocks.length ? (
         <button
           type="button"
           onClick={() => setDialog("widgets")}

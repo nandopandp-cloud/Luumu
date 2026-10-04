@@ -13,11 +13,14 @@ export function Drawer({
   subtitle,
   onClose,
   children,
+  wide = false,
 }: {
   title: string;
   subtitle?: string;
   onClose: () => void;
   children: React.ReactNode;
+  /** conteúdo rico (perfil, detalhes): 680px em vez de 480px */
+  wide?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -43,7 +46,7 @@ export function Drawer({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="relative flex h-full w-full max-w-[480px] flex-col border-l border-line bg-bg-elev shadow-[var(--shadow-lg)] outline-none animate-[luumuDrawerIn_.22s_cubic-bezier(.16,1,.3,1)]"
+        className={`relative flex h-full w-full ${wide ? "max-w-[680px]" : "max-w-[480px]"} flex-col border-l border-line bg-bg-elev shadow-[var(--shadow-lg)] outline-none animate-[luumuDrawerIn_.22s_cubic-bezier(.16,1,.3,1)]`}
       >
         <header className="flex items-start justify-between gap-4 border-b border-line px-6 py-5">
           <div>

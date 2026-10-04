@@ -23,8 +23,8 @@ export interface AnalyticsBootConfig {
   device: AnalyticsDevice;
   /** rota normalizada da tela atual */
   path: () => string;
-  /** ID do usuário identificado (Luumu.identify), se houver */
-  uid: () => string | null;
+  /** usuário identificado (Luumu.identify), se houver */
+  identity: () => { id: string | null; email: string | null; name: string | null };
   /** pede ao core para enviar agora (virada de sessão, muitas telas acumuladas) */
   requestFlush: () => void;
 }
@@ -128,7 +128,10 @@ function collect(): AnalyticsBatch | null {
   if (!send.length) return null;
   const payload: AnalyticsBatch = {
     aid: anonymousId().replace(/[^A-Za-z0-9_-]/g, "").slice(0, 64).padEnd(6, "0"),
-    uid: c.uid(),
+    ...(() => {
+      const who = c.identity();
+      return { uid: who.id, email: who.email, name: who.name };
+    })(),
     sid: session.id,
     st: session.st,
     device: c.device,

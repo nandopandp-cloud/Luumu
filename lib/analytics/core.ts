@@ -39,6 +39,9 @@ export interface AnalyticsPayload {
   host: string;
   aid: string;
   uid: string | null;
+  /** e-mail e nome informados em Luumu.identify (para a aba Usuários) */
+  email: string | null;
+  name: string | null;
   sid: string;
   /** início da sessão (ms) */
   st: number;
@@ -87,6 +90,8 @@ export function parseAnalytics(raw: unknown, now = Date.now()): AnalyticsPayload
     host: str(o.host, 253).toLowerCase(),
     aid,
     uid: str(o.uid, 128) || null,
+    email: /^[^\s@<>]{1,64}@[^\s@<>]{1,190}\.[a-z]{2,24}$/i.test(str(o.email, 254)) ? str(o.email, 254).toLowerCase() : null,
+    name: str(o.name, 80).replace(/[<>]/g, "") || null,
     sid,
     st: clamp(o.st),
     device: ANALYTICS_DEVICES.includes(o.device as AnalyticsDevice) ? (o.device as AnalyticsDevice) : "desktop",
@@ -225,7 +230,7 @@ export function eventLabel(name: string): string {
 
 /* ---------- visões ---------- */
 
-export const TABS = ["overview", "acquisition", "engagement", "retention", "pages", "devices", "events", "custom"] as const;
+export const TABS = ["overview", "acquisition", "engagement", "retention", "users", "pages", "devices", "events", "custom"] as const;
 export type AnalyticsTab = (typeof TABS)[number];
 
 export const TAB_META: Record<AnalyticsTab, { label: string; title: string; subtitle: string }> = {
@@ -233,6 +238,7 @@ export const TAB_META: Record<AnalyticsTab, { label: string; title: string; subt
   acquisition: { label: "Aquisição", title: "Aquisição", subtitle: "Entenda como os usuários chegam à sua plataforma e quais canais geram mais valor." },
   engagement: { label: "Engajamento", title: "Engajamento", subtitle: "Acompanhe como os usuários interagem com seu produto e identifique o que gera mais valor." },
   retention: { label: "Retenção", title: "Retenção", subtitle: "Veja quantos usuários voltam e quando eles deixam de voltar." },
+  users: { label: "Usuários", title: "Usuários", subtitle: "Quem são as pessoas por trás dos números: o que cada uma fez, de onde veio e como responde." },
   pages: { label: "Páginas", title: "Páginas", subtitle: "As telas mais vistas, por onde as pessoas entram e por onde saem." },
   devices: { label: "Dispositivos", title: "Dispositivos", subtitle: "Em quais aparelhos, sistemas e navegadores o seu produto é usado." },
   events: { label: "Eventos", title: "Eventos", subtitle: "As ações que os usuários realizam no produto, com alcance e tendência." },

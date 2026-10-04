@@ -44,6 +44,7 @@ import {
 import { cn } from "@/lib/utils";
 import { InsightCard, type Tone } from "@/components/ui/InsightCard";
 import { Select } from "@/components/ui/Select";
+import { SortTh, useTableSort, type SortState } from "@/components/ui/SortableHeader";
 import {
   CHANNEL_COLOR,
   CHANNEL_LABEL,
@@ -156,8 +157,15 @@ function MiniBar({ value, max, color = "var(--accent)" }: { value: number; max: 
   );
 }
 
+const TH = "border-b border-line pb-2 pl-3 text-left align-bottom font-mono text-[10px] font-semibold uppercase leading-tight tracking-[0.06em] text-fg-mut first:pl-0";
+
 function Th({ children, className }: { children?: React.ReactNode; className?: string }) {
-  return <th className={cn("border-b border-line pb-2 pl-3 text-left align-bottom font-mono text-[10px] font-semibold uppercase leading-tight tracking-[0.06em] text-fg-mut first:pl-0", className)}>{children}</th>;
+  return <th className={cn(TH, className)}>{children}</th>;
+}
+
+/** Cabeçalho ordenável no estilo das tabelas do Analytics. */
+function STh({ label, k, sort, onSort, right }: { label: string; k: string; sort: SortState; onSort: (k: string) => void; right?: boolean }) {
+  return <SortTh label={label} k={k} sort={sort} onSort={onSort} align={right ? "right" : "left"} className={cn(TH, right && "text-right")} />;
 }
 function Td({ children, className }: { children: React.ReactNode; className?: string }) {
   return <td className={cn("border-b border-line/60 py-2.5 pl-3 text-[13px] tabular-nums first:pl-0", className)}>{children}</td>;
@@ -440,7 +448,13 @@ function EngagementFunnel({ ctx }: { ctx: WidgetCtx }) {
 function TopPages({ ctx }: { ctx: WidgetCtx }) {
   const rows = ctx.data.pages ?? [];
   const [q, setQ] = useState("");
-  const shown = rows.filter((r) => !q || pagePath(r.host, r.path, ctx.multiHost).toLowerCase().includes(q.toLowerCase()));
+  const { sorted, sort, toggle } = useTableSort(rows, {
+    page: (r) => pagePath(r.host, r.path, ctx.multiHost),
+    pv: (r) => r.pv,
+    users: (r) => r.users,
+    ms: (r) => r.ms,
+  });
+  const shown = sorted.filter((r) => !q || pagePath(r.host, r.path, ctx.multiHost).toLowerCase().includes(q.toLowerCase()));
   const max = Math.max(1, ...rows.map((r) => r.pv));
   return (
     <Panel
@@ -458,11 +472,11 @@ function TopPages({ ctx }: { ctx: WidgetCtx }) {
           <table className="w-full min-w-[460px]">
             <thead>
               <tr>
-                <Th>Página</Th>
+                <STh label="Página" k="page" sort={sort} onSort={toggle} />
                 <Th className="w-[18%]" />
-                <Th className="text-right">Pageviews</Th>
-                <Th className="text-right">Usuários únicos</Th>
-                <Th className="text-right">Tempo médio</Th>
+                <STh label="Pageviews" k="pv" sort={sort} onSort={toggle} right />
+                <STh label="Usuários únicos" k="users" sort={sort} onSort={toggle} right />
+                <STh label="Tempo médio" k="ms" sort={sort} onSort={toggle} right />
               </tr>
             </thead>
             <tbody>
@@ -673,6 +687,13 @@ function eventIcon(name: string): LucideIcon {
 function EventsTable({ ctx, active, title, features }: { ctx: WidgetCtx; active: number; title: string; features?: boolean }) {
   const rows = ctx.data.events ?? [];
   const max = Math.max(1, ...rows.map((r) => r.users));
+  const { sorted, sort, toggle } = useTableSort(rows, {
+    name: (r) => eventLabel(r.name),
+    total: (r) => r.total,
+    users: (r) => r.users,
+    rate: (r) => (active ? r.users / active : 0),
+    sessions: (r) => r.sessions,
+  });
   return (
     <Panel title={title} subtitle={features ? "Ações do produto pelo alcance entre os usuários ativos." : undefined}>
       {!rows.length ? (
@@ -682,15 +703,15 @@ function EventsTable({ ctx, active, title, features }: { ctx: WidgetCtx; active:
           <table className="w-full min-w-[480px]">
             <thead>
               <tr>
-                <Th>{features ? "Funcionalidade" : "Evento"}</Th>
+                <STh label={features ? "Funcionalidade" : "Evento"} k="name" sort={sort} onSort={toggle} />
                 <Th className="w-[16%]" />
-                <Th className="text-right">{features ? "Usuários" : "Total"}</Th>
-                <Th className="text-right">{features ? "Taxa de uso" : "Usuários únicos"}</Th>
-                <Th className="text-right">{features ? "Sessões" : "Taxa de conversão"}</Th>
+                <STh label={features ? "Usuários" : "Total"} k={features ? "users" : "total"} sort={sort} onSort={toggle} right />
+                <STh label={features ? "Taxa de uso" : "Usuários únicos"} k={features ? "rate" : "users"} sort={sort} onSort={toggle} right />
+                <STh label={features ? "Sessões" : "Taxa de conversão"} k={features ? "sessions" : "rate"} sort={sort} onSort={toggle} right />
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => {
+              {sorted.map((r) => {
                 const Icon = eventIcon(r.name);
                 const rate = active ? r.users / active : 0;
                 return (
@@ -780,6 +801,14 @@ function ChannelsTable({ ctx }: { ctx: WidgetCtx }) {
   const rows = channelTable(ctx.data);
   const max = Math.max(1, ...rows.map((r) => r.newUsers));
   const rate = (a: number, b: number) => (b ? fmtPct(a / b) : "–");
+  const { sorted, sort, toggle } = useTableSort(rows, {
+    channel: (r) => CHANNEL_LABEL[r.channel],
+    newUsers: (r) => r.newUsers,
+    active: (r) => r.active,
+    activation: (r) => (r.newUsers ? r.activated / r.newUsers : null),
+    survey: (r) => (r.newUsers ? r.surveyed / r.newUsers : null),
+    ms: (r) => r.ms || null,
+  });
   return (
     <Panel title="Canais de aquisição">
       {!rows.length ? (
@@ -789,17 +818,17 @@ function ChannelsTable({ ctx }: { ctx: WidgetCtx }) {
           <table className="w-full min-w-[620px]">
             <thead>
               <tr>
-                <Th>Canal</Th>
+                <STh label="Canal" k="channel" sort={sort} onSort={toggle} />
                 <Th className="w-[14%]" />
-                <Th className="text-right">Novos usuários</Th>
-                <Th className="text-right">Usuários ativos</Th>
-                <Th className="text-right">Taxa de ativação</Th>
-                <Th className="text-right">Conversão p/ pesquisa</Th>
-                <Th className="text-right">Tempo médio de uso</Th>
+                <STh label="Novos usuários" k="newUsers" sort={sort} onSort={toggle} right />
+                <STh label="Usuários ativos" k="active" sort={sort} onSort={toggle} right />
+                <STh label="Taxa de ativação" k="activation" sort={sort} onSort={toggle} right />
+                <STh label="Conversão p/ pesquisa" k="survey" sort={sort} onSort={toggle} right />
+                <STh label="Tempo médio de uso" k="ms" sort={sort} onSort={toggle} right />
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
+              {sorted.map((r) => (
                 <tr key={r.channel}>
                   <Td>
                     <ChannelDot ch={r.channel} />
@@ -825,6 +854,12 @@ function ChannelsTable({ ctx }: { ctx: WidgetCtx }) {
 function EntryPages({ ctx }: { ctx: WidgetCtx }) {
   const rows = entryTable(ctx.data);
   const max = Math.max(1, ...rows.map((r) => r.sessions));
+  const { sorted, sort, toggle } = useTableSort(rows, {
+    path: (r) => pagePath("", r.path, false),
+    sessions: (r) => r.sessions,
+    newUsers: (r) => r.newUsers,
+    activation: (r) => r.activation,
+  });
   return (
     <Panel title="Páginas de entrada" subtitle="Onde as sessões começam.">
       {!rows.length ? (
@@ -834,15 +869,15 @@ function EntryPages({ ctx }: { ctx: WidgetCtx }) {
           <table className="w-full min-w-[420px]">
             <thead>
               <tr>
-                <Th>Página</Th>
+                <STh label="Página" k="path" sort={sort} onSort={toggle} />
                 <Th className="w-[16%]" />
-                <Th className="text-right">Visitas</Th>
-                <Th className="text-right">Novos usuários</Th>
-                <Th className="text-right">Ativação</Th>
+                <STh label="Visitas" k="sessions" sort={sort} onSort={toggle} right />
+                <STh label="Novos usuários" k="newUsers" sort={sort} onSort={toggle} right />
+                <STh label="Ativação" k="activation" sort={sort} onSort={toggle} right />
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
+              {sorted.map((r) => (
                 <tr key={r.path}>
                   <Td className="max-w-[180px]">
                     <span className="flex items-center gap-2 truncate font-medium text-fg-soft">
@@ -870,6 +905,11 @@ function ExitPages({ ctx }: { ctx: WidgetCtx }) {
   const rows = ctx.data.exit ?? [];
   const pv = new Map((ctx.data.pages ?? []).map((p) => [p.path, (ctx.data.pages ?? []).filter((x) => x.path === p.path).reduce((a, x) => a + x.pv, 0)]));
   const max = Math.max(1, ...rows.map((r) => r.exits));
+  const exitRate = (r: (typeof rows)[number]) => {
+    const views = pv.get(r.path);
+    return views ? Math.min(1, r.exits / views) : null;
+  };
+  const { sorted, sort, toggle } = useTableSort(rows, { path: (r) => pagePath("", r.path, false), exits: (r) => r.exits, rate: exitRate });
   return (
     <Panel title="Páginas de saída" subtitle="A última tela vista na sessão.">
       {!rows.length ? (
@@ -879,14 +919,14 @@ function ExitPages({ ctx }: { ctx: WidgetCtx }) {
           <table className="w-full min-w-[380px]">
             <thead>
               <tr>
-                <Th>Página</Th>
+                <STh label="Página" k="path" sort={sort} onSort={toggle} />
                 <Th className="w-[18%]" />
-                <Th className="text-right">Saídas</Th>
-                <Th className="text-right">Taxa de saída</Th>
+                <STh label="Saídas" k="exits" sort={sort} onSort={toggle} right />
+                <STh label="Taxa de saída" k="rate" sort={sort} onSort={toggle} right />
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => {
+              {sorted.map((r) => {
                 const views = pv.get(r.path);
                 return (
                   <tr key={r.path}>
@@ -946,6 +986,13 @@ function AcquisitionFunnel({ ctx }: { ctx: WidgetCtx }) {
 
 function Campaigns({ ctx }: { ctx: WidgetCtx }) {
   const rows = campaignTable(ctx.data);
+  const { sorted, sort, toggle } = useTableSort(rows, {
+    campaign: (r) => r.campaign,
+    channel: (r) => CHANNEL_LABEL[r.channel] ?? r.channel,
+    newUsers: (r) => r.newUsers,
+    sessions: (r) => r.sessions,
+    activation: (r) => r.activation,
+  });
   return (
     <Panel title="Novos usuários por campanha" subtitle="Sessões com utm_campaign na URL de entrada.">
       {!rows.length ? (
@@ -955,15 +1002,15 @@ function Campaigns({ ctx }: { ctx: WidgetCtx }) {
           <table className="w-full min-w-[420px]">
             <thead>
               <tr>
-                <Th>Campanha</Th>
-                <Th>Canal</Th>
-                <Th className="text-right">Novos usuários</Th>
-                <Th className="text-right">Sessões</Th>
-                <Th className="text-right">Ativação</Th>
+                <STh label="Campanha" k="campaign" sort={sort} onSort={toggle} />
+                <STh label="Canal" k="channel" sort={sort} onSort={toggle} />
+                <STh label="Novos usuários" k="newUsers" sort={sort} onSort={toggle} right />
+                <STh label="Sessões" k="sessions" sort={sort} onSort={toggle} right />
+                <STh label="Ativação" k="activation" sort={sort} onSort={toggle} right />
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
+              {sorted.map((r) => (
                 <tr key={r.campaign + r.channel}>
                   <Td className="max-w-[180px]">
                     <span className="truncate font-medium text-fg-soft">{r.campaign}</span>

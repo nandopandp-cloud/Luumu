@@ -81,6 +81,8 @@ export async function recordAnalytics(workspaceId: string, projectId: string, ho
         projectId,
         anonId: p.aid,
         userId: p.uid,
+        userEmail: p.email,
+        userName: p.name,
         firstSeenAt: first,
         lastSeenAt: last,
         firstChannel: channel,
@@ -95,6 +97,8 @@ export async function recordAnalytics(workspaceId: string, projectId: string, ho
         set: {
           lastSeenAt: sql`greatest(${analyticsUsers.lastSeenAt}, excluded.last_seen_at)`,
           userId: sql`coalesce(excluded.user_id, ${analyticsUsers.userId})`,
+          userEmail: sql`coalesce(excluded.user_email, ${analyticsUsers.userEmail})`,
+          userName: sql`coalesce(excluded.user_name, ${analyticsUsers.userName})`,
         },
       }),
     db
@@ -195,6 +199,8 @@ function uf(s: AnalyticsScope, from = s.from, to = s.to): SQL {
   }${s.device ? sql` and u.first_device = ${s.device}` : sql``}`;
 }
 const day = (col: SQL) => sql`to_char((${col} at time zone ${TZ})::date, 'YYYY-MM-DD')`;
+/** timestamp → ISO 8601 em UTC ("…T…Z"): o formato texto do Postgres ("2026-10-02 01:54:25+00") não é lido pelo Safari */
+const isoTs = (col: SQL) => sql`to_char(${col} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`;
 
 /** Há algum dado coletado no projeto? */
 export async function hasAnalyticsData(projectId: string) {
@@ -204,7 +210,7 @@ export async function hasAnalyticsData(projectId: string) {
 
 /** Desde quando há dados (para explicar "novos usuários" no começo da coleta). */
 export async function collectingSince(projectId: string): Promise<string | null> {
-  const r = rows<{ d: string | null }>(await db.execute(sql`select min(first_seen_at)::text d from analytics_users where project_id = ${projectId}`));
+  const r = rows<{ d: string | null }>(await db.execute(sql`select ${isoTs(sql`min(first_seen_at)`)} d from analytics_users where project_id = ${projectId}`));
   return r[0]?.d ?? null;
 }
 
@@ -661,3 +667,209 @@ export async function updateView(projectId: string, userId: string, id: string, 
 export async function deleteView(projectId: string, userId: string, id: string) {
   await db.delete(analyticsViews).where(and(eq(analyticsViews.id, id), eq(analyticsViews.projectId, projectId), eq(analyticsViews.userId, userId)));
 }
+
+/* ---------- usuários ---------- */
+
+export const USER_SEGMENTS = ["all", "identified", "anonymous", "new", "returning"] as const;
+export type UserSegment = (typeof USER_SEGMENTS)[number];
+export const USER_SORTS = ["recent", "sessions", "time", "pages", "days", "first", "name"] as const;
+export type UserSort = (typeof USER_SORTS)[number];
+
+export interface UserRow {
+  anonId: string;
+  userId: string | null;
+  email: string | null;
+  name: string | null;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  channel: Channel;
+  landing: string;
+  device: string;
+  os: string;
+  browser: string;
+  sessions: number;
+  pageviews: number;
+  ms: number;
+  days: number;
+  events: number;
+}
+
+const PAGE_SIZE = 25;
+
+/**
+ * Usuários ativos no período (com sessão no recorte), com o que fizeram NELE. Busca por
+ * nome, e-mail, ID do produto ou ID anônimo; segmentos e ordenação no banco; 25 por página.
+ */
+export async function listAnalyticsUsers(
+  s: AnalyticsScope,
+  opts: { q?: string; segment?: UserSegment; sort?: UserSort; dir?: "asc" | "desc"; page?: number }
+): Promise<{ rows: UserRow[]; total: number; page: number; pages: number }> {
+  const page = Math.max(1, opts.page ?? 1);
+  const q = (opts.q ?? "").trim().slice(0, 80).toLowerCase();
+  const like = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+  const seg = opts.segment ?? "all";
+  // coluna escolhida no sentido pedido; desempate pela atividade mais recente
+  const dir = sql.raw(opts.dir === "asc" ? "asc" : "desc");
+  const col = {
+    recent: sql`act.last`,
+    sessions: sql`act.sessions`,
+    time: sql`act.ms`,
+    pages: sql`act.pv`,
+    days: sql`act.days`,
+    first: sql`u.first_seen_at`,
+    name: sql`lower(coalesce(u.user_name, u.user_email, u.user_id))`,
+  }[opts.sort ?? "recent"];
+  const order = sql`${col} ${dir} nulls last, act.last desc`;
+
+  const r = rows<Record<string, unknown>>(
+    await db.execute(sql`
+      with act as (
+        select s.anon_id, count(*)::int sessions, coalesce(sum(s.pageviews), 0)::int pv, coalesce(sum(s.duration_ms), 0)::bigint ms,
+               count(distinct (s.started_at at time zone ${TZ})::date)::int days, max(s.last_seen_at) last,
+               (array_agg(s.device order by s.started_at desc))[1] device, (array_agg(s.os order by s.started_at desc))[1] os,
+               (array_agg(s.browser order by s.started_at desc))[1] browser
+          from analytics_sessions s where ${sf(s)} group by s.anon_id
+      )
+      select u.anon_id, u.user_id, u.user_email, u.user_name, ${isoTs(sql`u.first_seen_at`)} first_seen, ${isoTs(sql`greatest(u.last_seen_at, act.last)`)} last_seen,
+             u.first_channel, u.first_landing, act.device, act.os, act.browser, act.sessions, act.pv, act.ms, act.days,
+             count(*) over ()::int total
+        from act join analytics_users u on u.project_id = ${s.projectId} and u.anon_id = act.anon_id
+       where true
+         ${q ? sql`and (lower(coalesce(u.user_name, '')) like ${like} escape '\\' or lower(coalesce(u.user_email, '')) like ${like} escape '\\'
+                    or lower(coalesce(u.user_id, '')) like ${like} escape '\\' or lower(u.anon_id) like ${like} escape '\\')` : sql``}
+         ${seg === "identified" ? sql`and u.user_id is not null` : seg === "anonymous" ? sql`and u.user_id is null` : sql``}
+         ${seg === "new" ? sql`and u.first_seen_at >= ${iso(s.from)}::timestamptz` : seg === "returning" ? sql`and u.first_seen_at < ${iso(s.from)}::timestamptz` : sql``}
+       order by ${order}
+       limit ${PAGE_SIZE} offset ${(page - 1) * PAGE_SIZE}`)
+  );
+
+  // eventos no período só para as linhas desta página (barato)
+  const ids = r.map((x) => String(x.anon_id));
+  const ev = ids.length
+    ? rows<{ anon_id: string; n: number }>(
+        await db.execute(sql`
+          select p.anon_id, coalesce(sum(cardinality(p.events)), 0)::int n from analytics_pageviews p
+           where ${pf(s)} and p.anon_id in (${sql.join(ids.map((x) => sql`${x}`), sql`, `)}) group by 1`)
+      )
+    : [];
+  const evBy = new Map(ev.map((x) => [x.anon_id, n(x.n)]));
+  const total = n(r[0]?.total);
+  return {
+    rows: r.map((x) => ({
+      anonId: String(x.anon_id),
+      userId: (x.user_id as string) ?? null,
+      email: (x.user_email as string) ?? null,
+      name: (x.user_name as string) ?? null,
+      firstSeenAt: String(x.first_seen),
+      lastSeenAt: String(x.last_seen),
+      channel: x.first_channel as Channel,
+      landing: String(x.first_landing ?? ""),
+      device: String(x.device ?? "desktop"),
+      os: String(x.os ?? ""),
+      browser: String(x.browser ?? ""),
+      sessions: n(x.sessions),
+      pageviews: n(x.pv),
+      ms: n(x.ms),
+      days: n(x.days),
+      events: evBy.get(String(x.anon_id)) ?? 0,
+    })),
+    total,
+    page,
+    pages: Math.max(1, Math.ceil(total / PAGE_SIZE)),
+  };
+}
+
+/** Perfil de um usuário: quem é, linha do tempo de sessões, telas, ações e respostas de pesquisa. */
+export async function getAnalyticsUserProfile(projectId: string, anonId: string) {
+  const [u] = await db
+    .select()
+    .from(analyticsUsers)
+    .where(and(eq(analyticsUsers.projectId, projectId), eq(analyticsUsers.anonId, anonId)))
+    .limit(1);
+  if (!u) return null;
+
+  const since = new Date(Date.now() - 90 * 86_400_000).toISOString();
+  const [sessions, pages, events, totals, activity, surveys] = await Promise.all([
+    db.execute(sql`
+      select s.id, ${isoTs(sql`s.started_at`)} started, ${isoTs(sql`s.last_seen_at`)} last, s.device, s.os, s.browser, s.channel, s.referrer, s.utm_campaign,
+             s.landing_path, s.exit_path, s.pageviews, s.duration_ms, s.host
+        from analytics_sessions s where s.project_id = ${projectId} and s.anon_id = ${anonId}
+       order by s.started_at desc limit 20`),
+    db.execute(sql`
+      select p.session_id, p.path, ${isoTs(sql`p.created_at`)} at, p.duration_ms, p.events
+        from analytics_pageviews p where p.project_id = ${projectId} and p.anon_id = ${anonId}
+       order by p.created_at desc limit 300`),
+    db.execute(sql`
+      select e, count(*)::int n from analytics_pageviews p, unnest(p.events) e
+       where p.project_id = ${projectId} and p.anon_id = ${anonId} group by 1 order by 2 desc limit 12`),
+    db.execute(sql`
+      select count(*)::int sessions, coalesce(sum(pageviews), 0)::int pv, coalesce(sum(duration_ms), 0)::bigint ms,
+             count(distinct (started_at at time zone ${TZ})::date)::int days
+        from analytics_sessions where project_id = ${projectId} and anon_id = ${anonId}`),
+    db.execute(sql`
+      select ${day(sql`started_at`)} d, count(*)::int sessions, coalesce(sum(duration_ms), 0)::bigint ms
+        from analytics_sessions where project_id = ${projectId} and anon_id = ${anonId} and started_at >= ${since}::timestamptz
+       group by 1 order by 1`),
+    // respostas de pesquisa da mesma pessoa (pelo ID do Luumu.identify)
+    u.userId
+      ? db.execute(sql`
+          select r.id, r.score, r.sentiment, ${isoTs(sql`r.created_at`)} at, sv.name survey, sv.id survey_id
+            from responses r join surveys sv on sv.id = r.survey_id
+           where sv.project_id = ${projectId} and r.respondent = ${u.userId}
+           order by r.created_at desc limit 10`)
+      : Promise.resolve({ rows: [] }),
+  ]);
+
+  const pv = rows<{ session_id: string; path: string; at: string; duration_ms: number; events: string[] }>(pages);
+  const bySession = new Map<string, { path: string; at: string; ms: number; events: string[] }[]>();
+  for (const p of pv) {
+    const list = bySession.get(p.session_id) ?? [];
+    list.push({ path: p.path, at: p.at, ms: n(p.duration_ms), events: p.events ?? [] });
+    bySession.set(p.session_id, list);
+  }
+  const t = rows<Record<string, number>>(totals)[0] ?? {};
+  const pageCount = new Map<string, number>();
+  for (const p of pv) pageCount.set(p.path, (pageCount.get(p.path) ?? 0) + 1);
+
+  return {
+    anonId: u.anonId,
+    userId: u.userId,
+    email: u.userEmail,
+    name: u.userName,
+    firstSeenAt: u.firstSeenAt.toISOString(),
+    lastSeenAt: u.lastSeenAt.toISOString(),
+    channel: u.firstChannel as Channel,
+    source: u.firstSource,
+    campaign: u.firstCampaign,
+    landing: u.firstLanding,
+    totals: { sessions: n(t.sessions), pageviews: n(t.pv), ms: n(t.ms), days: n(t.days) },
+    activity: rows<{ d: string; sessions: number; ms: number }>(activity).map((a) => ({ d: a.d, sessions: n(a.sessions), ms: n(a.ms) })),
+    sessions: rows<Record<string, unknown>>(sessions).map((x) => ({
+      id: String(x.id),
+      startedAt: String(x.started),
+      lastSeenAt: String(x.last),
+      device: String(x.device),
+      os: String(x.os),
+      browser: String(x.browser),
+      channel: x.channel as Channel,
+      referrer: String(x.referrer ?? ""),
+      campaign: String(x.utm_campaign ?? ""),
+      host: String(x.host ?? ""),
+      pageviews: n(x.pageviews),
+      ms: n(x.duration_ms),
+      pages: (bySession.get(String(x.id)) ?? []).slice().reverse(),
+    })),
+    topEvents: rows<{ e: string; n: number }>(events).map((x) => ({ name: x.e, n: n(x.n) })),
+    topPages: [...pageCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([path, c]) => ({ path, n: c })),
+    responses: rows<{ id: string; score: number | null; sentiment: string | null; at: string; survey: string; survey_id: string }>(surveys).map((x) => ({
+      id: x.id,
+      score: x.score === null ? null : Number(x.score),
+      sentiment: x.sentiment,
+      at: x.at,
+      survey: x.survey,
+      surveyId: x.survey_id,
+    })),
+  };
+}
+
+export type AnalyticsUserProfile = NonNullable<Awaited<ReturnType<typeof getAnalyticsUserProfile>>>;
