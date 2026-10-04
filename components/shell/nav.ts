@@ -7,7 +7,6 @@ import {
   BarChart3,
   Sparkles,
   FileText,
-  Plug,
   Settings,
   Route,
   Crown,
@@ -61,7 +60,6 @@ export const NAV: NavGroup[] = [
   {
     title: "Configuração",
     items: [
-      { href: "/integrations", label: "Integrações", icon: Plug, locked: locked("/integrations") },
       { href: "/settings", label: "Configurações", icon: Settings },
       { href: "/billing", label: "Plano & Cobrança", icon: Crown },
     ],

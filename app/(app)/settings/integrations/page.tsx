@@ -1,5 +1,6 @@
 import { Check } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { SettingsNav } from "@/components/settings/SettingsNav";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -11,11 +12,12 @@ export default function IntegrationsPage() {
   return (
     <div>
       <PageHeader
-        eyebrow="Configuração"
+        eyebrow="Configurações"
         title="Integrações"
         description="Conecte a Luumu às ferramentas do seu time e leve a voz do cliente para onde o trabalho acontece."
         actions={<Badge tone="success">{connected} conectadas</Badge>}
       />
+      <SettingsNav />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {integrations.map((it) => (

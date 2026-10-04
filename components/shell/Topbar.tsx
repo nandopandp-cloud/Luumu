@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import Link from "@/components/ui/Link";
-import { Bell, Menu, LogOut, ChevronDown, UserRound } from "lucide-react";
+import { Menu, LogOut, ChevronDown, UserRound } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
 import { PlanUsageMenu } from "./PlanUsageMenu";
 import { SearchTrigger } from "@/components/search/SearchTrigger";
@@ -34,13 +34,6 @@ export function Topbar({
 
       <div className="flex items-center gap-2">
         <PlanUsageMenu />
-        <button
-          aria-label="Notificações"
-          className="relative grid size-10 place-items-center rounded-full border border-line-strong bg-bg-elev text-fg-soft transition hover:text-accent"
-        >
-          <Bell className="size-[18px]" />
-          <span className="absolute right-2.5 top-2.5 size-2 rounded-full bg-luumu-verde ring-2 ring-bg-elev" />
-        </button>
         <ThemeToggle />
         <div className="relative">
         <button

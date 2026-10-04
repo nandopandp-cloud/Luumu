@@ -13,7 +13,7 @@ import { listHosts } from "@/lib/db/hosts";
 import { requireUser, getCurrentProjectId } from "@/lib/auth/current";
 import { formatScore } from "@/lib/scoring";
 import { normalizeHost } from "@/lib/hosts";
-import { DEFAULT_PERIOD, formatDayBR, periodToRange } from "@/lib/period";
+import { formatDayBR, periodToRange } from "@/lib/period";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +34,7 @@ function liveDuring(s: SurveyRow, from: Date, to: Date): boolean {
   return true;
 }
 
-const DASHBOARD_DEFAULT_PERIOD = DEFAULT_PERIOD;
+const DASHBOARD_DEFAULT_PERIOD = "all";
 
 export default async function DashboardPage({
   searchParams,
