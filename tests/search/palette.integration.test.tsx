@@ -57,7 +57,7 @@ async function mount() {
   document.body.appendChild(host);
   const root = createRoot(host);
   await React.act(async () =>
-    root.render(React.createElement(AppRouterContext.Provider, { value: router }, React.createElement(SearchProvider, { projectName: "Geniex", children: null })))
+    root.render(React.createElement(AppRouterContext.Provider, { value: router }, React.createElement(SearchProvider, { projectName: "Geniex" })))
   );
   return () => React.act(() => root.unmount());
 }

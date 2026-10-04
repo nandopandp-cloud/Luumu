@@ -12,6 +12,7 @@ import {
   Settings,
   Route,
   Crown,
+  CircleHelp,
   type LucideIcon,
 } from "lucide-react";
 import { LOCKED_ROUTES } from "@/lib/locked-routes";
@@ -66,5 +67,10 @@ export const NAV: NavGroup[] = [
       { href: "/settings", label: "Configurações", icon: Settings },
       { href: "/billing", label: "Plano & Cobrança", icon: Crown },
     ],
+  },
+  {
+    // grupo sem título: a Ajuda fica separada do resto
+    title: "",
+    items: [{ href: "/help", label: "Ajuda", icon: CircleHelp }],
   },
 ];

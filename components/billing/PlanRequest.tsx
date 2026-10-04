@@ -2,12 +2,12 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, CheckCircle2, Loader2, MessageCircle } from "lucide-react";
+import { ArrowRight, CheckCircle2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils";
-import { annualTotal, formatBRL, monthlyPrice, PLAN_BY_ID, type BillingCycle, type Plan } from "@/lib/plans";
+import { annualTotal, formatBRL, monthlyPrice, type BillingCycle, type Plan } from "@/lib/plans";
 import { cancelPlanRequestAction, requestPlanChangeAction } from "@/app/(app)/billing/actions";
 
 export function priceLabel(plan: Plan, cycle: BillingCycle) {
@@ -152,29 +152,5 @@ export function CancelRequestButton() {
     >
       Cancelar pedido
     </button>
-  );
-}
-
-/** "Falar com vendas": abre o pedido do Enterprise (ou o e-mail de vendas, para quem não administra). */
-export function TalkToSales({ current, canManage, salesEmail }: { current: Plan; canManage: boolean; salesEmail: string | null }) {
-  const [open, setOpen] = useState(false);
-  const enterprise = PLAN_BY_ID.get("enterprise")!;
-  const cls =
-    "inline-flex w-fit items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold text-white shadow-[var(--shadow-glow)] transition hover:-translate-y-0.5 [background:var(--grad-roxo)]";
-  if (canManage && current.id !== "enterprise") {
-    return (
-      <>
-        <button type="button" onClick={() => setOpen(true)} className={cls}>
-          <MessageCircle className="size-4" aria-hidden /> Falar com vendas
-        </button>
-        {open && <PlanRequestDialog plan={enterprise} current={current} initialCycle="monthly" onClose={() => setOpen(false)} />}
-      </>
-    );
-  }
-  if (!salesEmail) return <p className="text-xs text-fg-mut">Fale com quem administra o seu workspace.</p>;
-  return (
-    <a href={`mailto:${salesEmail}?subject=${encodeURIComponent("Planos da Luumu")}`} className={cls}>
-      <MessageCircle className="size-4" aria-hidden /> Falar com vendas
-    </a>
   );
 }

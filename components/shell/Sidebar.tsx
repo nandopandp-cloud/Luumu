@@ -73,10 +73,12 @@ export function Sidebar({
             <div key={group.title}>
               {collapsed ? (
                 <div className="mx-auto mb-2 h-px w-8 bg-line" aria-hidden />
-              ) : (
+              ) : group.title ? (
                 <div className="whitespace-nowrap px-3 pb-1.5 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-fg-mut">
                   {group.title}
                 </div>
+              ) : (
+                <div className="mx-3 mb-3 h-px bg-line" aria-hidden />
               )}
               <div className="flex flex-col gap-0.5">
                 {group.items.map((item) => {

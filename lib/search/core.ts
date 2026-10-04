@@ -105,6 +105,7 @@ export const COMMANDS: CommandItem[] = [
   { id: "p-settings", kind: "page", title: "Configurações", subtitle: "Workspace, projetos e plataformas", href: "/settings", keywords: ["ajustes", "workspace", "projeto", "logo"], icon: "settings" },
   { id: "p-profile", kind: "page", title: "Meu perfil", subtitle: "Nome, foto e senha", href: "/settings/profile", keywords: ["conta", "senha", "foto", "avatar"], icon: "user" },
   { id: "p-members", kind: "page", title: "Membros", subtitle: "Pessoas e permissões do workspace", href: "/settings/members", keywords: ["equipe", "permissoes", "time"], icon: "users" },
+  { id: "p-help", kind: "page", title: "Ajuda", subtitle: "Perguntas frequentes e tutoriais", href: "/help", keywords: ["faq", "duvida", "suporte", "tutorial", "como"], icon: "help" },
   { id: "p-billing", kind: "page", title: "Plano & Cobrança", subtitle: "Plano atual, uso e upgrade", href: "/billing", keywords: ["plano", "preco", "assinatura", "upgrade", "limite", "cobranca"], icon: "crown" },
 ];
 

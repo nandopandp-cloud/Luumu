@@ -2,8 +2,6 @@ import { BillingHeader } from "@/components/billing/BillingHeader";
 import { UsageCard } from "@/components/billing/UsageCard";
 import { PlanCards } from "@/components/billing/PlanCards";
 import { ComparisonTable } from "@/components/billing/ComparisonTable";
-import { Faq } from "@/components/billing/Faq";
-import { TalkToSales } from "@/components/billing/PlanRequest";
 import { canManageWorkspace, getCurrentWorkspaceId } from "@/lib/auth/current";
 import { getWorkspaceUsage } from "@/lib/db/workspace";
 import { getPendingPlanRequest } from "@/lib/db/plan-requests";
@@ -31,7 +29,6 @@ export default async function BillingPage() {
       />
       <PlanCards current={plan.id} pendingPlan={(pending?.plan as PlanId | undefined) ?? null} canManage={canManage} />
       <ComparisonTable highlight={plan.id} />
-      <Faq cta={<TalkToSales current={plan} canManage={canManage} salesEmail={process.env.SALES_EMAIL?.trim() || null} />} />
     </div>
   );
 }

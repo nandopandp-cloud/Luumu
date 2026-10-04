@@ -12,7 +12,7 @@ export const useSearch = () => useContext(SearchContext);
  * Busca global: ⌘K / Ctrl+K abre e fecha; "/" abre quando o foco não está num campo de texto.
  * A paleta só é montada aberta (nada roda enquanto ninguém busca).
  */
-export function SearchProvider({ projectName, children }: { projectName: string | null; children: React.ReactNode }) {
+export function SearchProvider({ projectName, children }: { projectName: string | null; children?: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const openSearch = useCallback(() => setOpen(true), []);
 

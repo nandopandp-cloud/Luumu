@@ -7,6 +7,7 @@ import {
   ArrowRight,
   BarChart3,
   ClipboardList,
+  CircleHelp,
   Clock,
   Code2,
   CornerDownLeft,
@@ -34,6 +35,7 @@ import { cn } from "@/lib/utils";
 import { Mascot } from "@/components/ui/Mascot";
 import { toggleTheme } from "@/components/shell/ThemeToggle";
 import { getResponseDetailAction } from "@/app/(app)/responses/actions";
+import { searchHelp } from "@/lib/help/articles";
 import {
   COMMANDS,
   highlight,
@@ -105,6 +107,7 @@ const COMMAND_ICON: Record<string, LucideIcon> = {
   users: Users,
   crown: Crown,
   flame: Flame,
+  help: CircleHelp,
 };
 
 const RECENT_ICON: Record<RecentEntry["kind"], LucideIcon> = {
@@ -540,6 +543,19 @@ export function CommandPalette({ projectName, onClose }: { projectName: string |
       matchCommands(term)
         .slice(0, tab === "all" ? 4 : 20)
         .forEach((c) => out.push({ ...commandRow(c), group: "Páginas e ações" }));
+      // artigos da Central de Ajuda (busca local, sem servidor)
+      for (const h of searchHelp(term).slice(0, 3)) {
+        const item: CommandItem = {
+          id: `help-${h.article.id}`,
+          kind: "page",
+          title: h.article.q,
+          subtitle: `Ajuda · ${h.category.title}`,
+          href: `/help?a=${h.article.id}`,
+          keywords: [],
+          icon: "help",
+        };
+        out.push({ ...commandRow(item), group: "Ajuda", tone: "bg-surface-brand text-accent" });
+      }
     }
     return out;
   }, [searching, tab, recent, data, term]);

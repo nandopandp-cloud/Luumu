@@ -222,36 +222,3 @@ export const COMPARE_ROWS: CompareRow[] = [
   row("Onboarding e SLA", "Implantação acompanhada e acordo de nível de serviço.", [false, false, false, false, true], { extra: true }),
   row("Contrato e DPA", "Contrato próprio e acordo de proteção de dados.", [false, false, false, false, true], { extra: true }),
 ];
-
-/* ---------- perguntas frequentes ---------- */
-
-export const FAQ: { q: string; a: string }[] = [
-  {
-    q: "Posso mudar de plano a qualquer momento?",
-    a: "Sim. Você solicita a mudança aqui mesmo e nossa equipe confirma com você os detalhes e a data de início.",
-  },
-  {
-    q: "O que acontece se eu ultrapassar o limite?",
-    a: "Você acompanha o uso do mês nesta página. Se passar do limite, nossa equipe entra em contato para combinar o plano mais adequado — nada é bloqueado sem aviso.",
-  },
-  {
-    q: "Como são contadas as respostas e sessões?",
-    a: "Cada envio de pesquisa conta como uma resposta, somando todos os projetos do workspace no mês do calendário. Sessões contam as visitas registradas pelos heatmaps: uma pessoa navegando pelo seu produto é uma sessão, mesmo passando por várias páginas.",
-  },
-  {
-    q: "Os dados ficam seguros?",
-    a: "Sim. Os dados ficam em banco gerenciado com criptografia, separados por workspace e projeto. Comentários enviados à análise por IA são anonimizados e o provedor não treina modelos com eles.",
-  },
-  {
-    q: "Vocês oferecem desconto anual?",
-    a: "Sim: no plano anual você paga 20% a menos que no mensal, com cobrança única por ano.",
-  },
-  {
-    q: "Posso ter múltiplos workspaces?",
-    a: "Sim. Cada workspace tem seu próprio plano. Dentro de um workspace você pode ter vários projetos e plataformas, sem custo extra.",
-  },
-  {
-    q: "O plano inclui suporte?",
-    a: "Sim, todos os planos incluem suporte. O Enterprise conta com suporte dedicado, onboarding acompanhado e SLA.",
-  },
-];
