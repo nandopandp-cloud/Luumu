@@ -404,8 +404,8 @@ export const HELP: HelpCategory[] = [
       {
         id: "identify",
         q: "Como identifico o usuário logado?",
-        a: "Chame Luumu.identify({ id, email }) depois do login. Isso permite segmentar pesquisas por usuário, mostrar quem respondeu e segmentar tours. Chame Luumu.reset() no logout.",
-        keywords: ["identify", "login", "usuário"],
+        a: "Chame Luumu.identify({ id, email, name, avatar }) depois do login. Isso permite segmentar pesquisas por usuário, mostrar quem respondeu e segmentar tours. Nome e avatar (URL https da foto) são opcionais e aparecem em Analytics → Usuários. Chame Luumu.reset() no logout.",
+        keywords: ["identify", "login", "usuário", "nome", "avatar", "foto"],
       },
       {
         id: "eventos-auto",

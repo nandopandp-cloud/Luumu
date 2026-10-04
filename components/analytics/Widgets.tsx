@@ -132,10 +132,10 @@ export function Panel({
   className?: string;
 }) {
   return (
-    <section className={cn("flex h-full min-w-0 flex-col rounded-2xl border border-line bg-bg-elev p-5 shadow-[var(--shadow-sm)]", className)}>
-      <div className="mb-4 flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="font-display text-[17px] font-bold tracking-tight">{title}</h2>
+    <section className={cn("@container flex h-full min-w-0 flex-col rounded-2xl border border-line bg-bg-elev p-5 shadow-[var(--shadow-sm)]", className)}>
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1 basis-48">
+          <h2 className="font-display text-[17px] font-bold leading-snug tracking-tight">{title}</h2>
           {subtitle && <p className="mt-0.5 text-[13px] text-fg-mut">{subtitle}</p>}
         </div>
         {action}
@@ -157,6 +157,13 @@ function MiniBar({ value, max, color = "var(--accent)" }: { value: number; max: 
   );
 }
 
+// colunas secundárias: só aparecem quando o card tem largura para elas (sem cortar a tabela)
+const BAR_COL = "hidden @[34rem]:table-cell";
+const WIDE_COL = "hidden @[26rem]:table-cell";
+const XWIDE_COL = "hidden @[40rem]:table-cell";
+// 1ª coluna (nome/caminho) fica com a sobra e trunca; as de números ficam do tamanho do conteúdo
+const NAME_CELL = "w-full max-w-0";
+
 const TH = "border-b border-line pb-2 pl-3 text-left align-bottom font-mono text-[10px] font-semibold uppercase leading-tight tracking-[0.06em] text-fg-mut first:pl-0";
 
 function Th({ children, className }: { children?: React.ReactNode; className?: string }) {
@@ -164,11 +171,11 @@ function Th({ children, className }: { children?: React.ReactNode; className?: s
 }
 
 /** Cabeçalho ordenável no estilo das tabelas do Analytics. */
-function STh({ label, k, sort, onSort, right }: { label: string; k: string; sort: SortState; onSort: (k: string) => void; right?: boolean }) {
-  return <SortTh label={label} k={k} sort={sort} onSort={onSort} align={right ? "right" : "left"} className={cn(TH, right && "text-right")} />;
+function STh({ label, k, sort, onSort, right, className }: { label: string; k: string; sort: SortState; onSort: (k: string) => void; right?: boolean; className?: string }) {
+  return <SortTh label={label} k={k} sort={sort} onSort={onSort} align={right ? "right" : "left"} className={cn(TH, right && "text-right", className)} />;
 }
 function Td({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <td className={cn("border-b border-line/60 py-2.5 pl-3 text-[13px] tabular-nums first:pl-0", className)}>{children}</td>;
+  return <td className={cn("whitespace-nowrap border-b border-line/60 py-2.5 pl-3 text-[13px] tabular-nums first:pl-0", className)}>{children}</td>;
 }
 
 /* ---------- KPIs ---------- */
@@ -376,7 +383,7 @@ function UsersTrend({ ctx }: { ctx: WidgetCtx }) {
         <Empty text="Ainda há poucos dias de dados para mostrar a evolução." />
       ) : (
         <ResponsiveContainer width="100%" height={250}>
-          <AreaChart data={rows} margin={{ top: 8, right: 8, left: -10, bottom: 0 }}>
+          <AreaChart data={rows} margin={{ top: 8, right: 20, left: -10, bottom: 0 }}>
             <defs>
               <linearGradient id="an-mau" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="#A78BFA" stopOpacity={0.3} />
@@ -410,7 +417,7 @@ function EngagementFunnel({ ctx }: { ctx: WidgetCtx }) {
       action={
         ctx.canConfigure && ctx.onConfigure ? (
           <button type="button" onClick={ctx.onConfigure} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-accent hover:bg-surface-brand" title="Configurar etapas">
-            <Settings2 className="size-3.5" /> Etapas
+            <Settings2 className="size-3.5" /> <span className="@max-[22rem]:sr-only">Etapas</span>
           </button>
         ) : undefined
       }
@@ -425,17 +432,19 @@ function EngagementFunnel({ ctx }: { ctx: WidgetCtx }) {
               <div key={s.label} className="flex flex-1 items-end gap-1.5">
                 <div className="flex flex-1 flex-col items-center">
                   <span className="mb-1.5 font-display text-[15px] font-extrabold tabular-nums">{fmtInt(s.n)}</span>
-                  <div className="relative flex h-[150px] w-full items-end">
+                  <div className="relative flex h-[150px] w-full flex-col items-center justify-end">
+                    {/* barra baixa demais para o rótulo: ele vai para cima dela */}
+                    {pct < 0.18 && <span className="mb-1 text-[11px] font-bold tabular-nums text-fg-soft">{fmtPct(pct)}</span>}
                     <div
                       className="flex w-full items-end justify-center rounded-t-lg pb-1.5 text-[11px] font-bold text-white"
                       style={{ height: `${Math.max(8, pct * 100)}%`, background: `linear-gradient(180deg, ${PURPLES[i]} 0%, ${PURPLES[i + 1] ?? PURPLES[i]} 100%)`, color: i > 1 ? "#4C1D95" : "#fff" }}
                     >
-                      {fmtPct(pct)}
+                      {pct >= 0.18 && fmtPct(pct)}
                     </div>
                   </div>
                   <span className="mt-2 text-center text-[11px] leading-tight text-fg-soft">{s.label}</span>
                 </div>
-                {i < f.steps.length - 1 && <ArrowRight className="mb-[70px] size-3.5 shrink-0 text-fg-mut" />}
+                {i < f.steps.length - 1 && <ArrowRight className="mb-[70px] size-3.5 shrink-0 text-fg-mut @max-[22rem]:hidden" />}
               </div>
             );
           })}
@@ -469,31 +478,31 @@ function TopPages({ ctx }: { ctx: WidgetCtx }) {
         <Empty />
       ) : (
         <div className="-mx-1 overflow-x-auto px-1">
-          <table className="w-full min-w-[460px]">
+          <table className="w-full min-w-[280px]">
             <thead>
               <tr>
                 <STh label="Página" k="page" sort={sort} onSort={toggle} />
-                <Th className="w-[18%]" />
+                <Th className={cn("w-[18%]", BAR_COL)} />
                 <STh label="Pageviews" k="pv" sort={sort} onSort={toggle} right />
                 <STh label="Usuários únicos" k="users" sort={sort} onSort={toggle} right />
-                <STh label="Tempo médio" k="ms" sort={sort} onSort={toggle} right />
+                <STh label="Tempo médio" k="ms" sort={sort} onSort={toggle} right className={WIDE_COL} />
               </tr>
             </thead>
             <tbody>
               {shown.map((r) => (
                 <tr key={r.host + r.path}>
-                  <Td className="max-w-[220px]">
+                  <Td className={NAME_CELL}>
                     <span className="flex items-center gap-2 truncate font-medium text-fg-soft" title={pagePath(r.host, r.path, ctx.multiHost)}>
                       <FileText className="size-3.5 shrink-0 text-fg-mut" />
                       <span className="truncate">{pagePath(r.host, r.path, ctx.multiHost)}</span>
                     </span>
                   </Td>
-                  <Td className="pr-4">
+                  <Td className={cn("pr-4", BAR_COL)}>
                     <MiniBar value={r.pv} max={max} />
                   </Td>
                   <Td className="text-right">{fmtInt(r.pv)}</Td>
                   <Td className="text-right">{fmtInt(r.users)}</Td>
-                  <Td className="text-right">{formatDuration(r.ms)}</Td>
+                  <Td className={cn("text-right", WIDE_COL)}>{formatDuration(r.ms)}</Td>
                 </tr>
               ))}
             </tbody>
@@ -570,7 +579,7 @@ function SessionTime({ ctx, k }: { ctx: WidgetCtx; k: Kpi }) {
         <Empty text="Poucos dias de dados." />
       ) : (
         <ResponsiveContainer width="100%" height={150}>
-          <AreaChart data={rows} margin={{ top: 10, right: 6, left: -6, bottom: 0 }}>
+          <AreaChart data={rows} margin={{ top: 10, right: 20, left: -6, bottom: 0 }}>
             <defs>
               <linearGradient id="an-st" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="#8B5CF6" stopOpacity={0.25} />
@@ -656,7 +665,7 @@ function RetentionCurveChart({ ctx }: { ctx: WidgetCtx }) {
         <Empty text="A curva aparece com duas semanas de dados." />
       ) : (
         <ResponsiveContainer width="100%" height={250}>
-          <AreaChart data={rows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+          <AreaChart data={rows} margin={{ top: 8, right: 20, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id="an-ret" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="#6B2BD9" stopOpacity={0.3} />
@@ -700,14 +709,14 @@ function EventsTable({ ctx, active, title, features }: { ctx: WidgetCtx; active:
         <Empty text="Nenhum evento registrado neste recorte. Cliques e eventos de Luumu.track aparecem aqui." />
       ) : (
         <div className="-mx-1 overflow-x-auto px-1">
-          <table className="w-full min-w-[480px]">
+          <table className="w-full min-w-[280px]">
             <thead>
               <tr>
                 <STh label={features ? "Funcionalidade" : "Evento"} k="name" sort={sort} onSort={toggle} />
-                <Th className="w-[16%]" />
+                <Th className={cn("w-[16%]", BAR_COL)} />
                 <STh label={features ? "Usuários" : "Total"} k={features ? "users" : "total"} sort={sort} onSort={toggle} right />
                 <STh label={features ? "Taxa de uso" : "Usuários únicos"} k={features ? "rate" : "users"} sort={sort} onSort={toggle} right />
-                <STh label={features ? "Sessões" : "Taxa de conversão"} k={features ? "sessions" : "rate"} sort={sort} onSort={toggle} right />
+                <STh label={features ? "Sessões" : "Taxa de conversão"} k={features ? "sessions" : "rate"} sort={sort} onSort={toggle} right className={WIDE_COL} />
               </tr>
             </thead>
             <tbody>
@@ -716,18 +725,18 @@ function EventsTable({ ctx, active, title, features }: { ctx: WidgetCtx; active:
                 const rate = active ? r.users / active : 0;
                 return (
                   <tr key={r.name}>
-                    <Td className="max-w-[240px]">
+                    <Td className={NAME_CELL}>
                       <span className="flex items-center gap-2 font-medium text-fg-soft" title={r.name}>
                         <Icon className="size-3.5 shrink-0 text-accent" />
                         <span className="truncate">{eventLabel(r.name)}</span>
                       </span>
                     </Td>
-                    <Td className="pr-4">
+                    <Td className={cn("pr-4", BAR_COL)}>
                       <MiniBar value={r.users} max={max} />
                     </Td>
                     <Td className="text-right">{fmtInt(features ? r.users : r.total)}</Td>
                     <Td className="text-right">{features ? fmtPct(rate) : fmtInt(r.users)}</Td>
-                    <Td className="text-right">{features ? fmtInt(r.sessions) : fmtPct(rate)}</Td>
+                    <Td className={cn("text-right", WIDE_COL)}>{features ? fmtInt(r.sessions) : fmtPct(rate)}</Td>
                   </tr>
                 );
               })}
@@ -752,7 +761,7 @@ function ChannelsTrend({ ctx }: { ctx: WidgetCtx }) {
         <div className="flex flex-1 flex-col gap-4 lg:flex-row">
           <div className="min-w-0 flex-1">
             <ResponsiveContainer width="100%" height={240}>
-              <AreaChart data={rows} margin={{ top: 8, right: 4, left: -10, bottom: 0 }}>
+              <AreaChart data={rows} margin={{ top: 8, right: 20, left: -10, bottom: 0 }}>
                 <CartesianGrid vertical={false} stroke="var(--line)" />
                 <XAxis dataKey="d" tickFormatter={shortDay} tick={axis} axisLine={false} tickLine={false} minTickGap={24} />
                 <YAxis tick={axis} axisLine={false} tickLine={false} width={44} tickFormatter={(v) => fmtInt(v)} />
@@ -815,16 +824,16 @@ function ChannelsTable({ ctx }: { ctx: WidgetCtx }) {
         <Empty />
       ) : (
         <div className="-mx-1 overflow-x-auto px-1">
-          <table className="w-full min-w-[620px]">
+          <table className="w-full min-w-[340px]">
             <thead>
               <tr>
                 <STh label="Canal" k="channel" sort={sort} onSort={toggle} />
-                <Th className="w-[14%]" />
+                <Th className={cn("w-[14%]", BAR_COL)} />
                 <STh label="Novos usuários" k="newUsers" sort={sort} onSort={toggle} right />
-                <STh label="Usuários ativos" k="active" sort={sort} onSort={toggle} right />
+                <STh label="Usuários ativos" k="active" sort={sort} onSort={toggle} right className={XWIDE_COL} />
                 <STh label="Taxa de ativação" k="activation" sort={sort} onSort={toggle} right />
-                <STh label="Conversão p/ pesquisa" k="survey" sort={sort} onSort={toggle} right />
-                <STh label="Tempo médio de uso" k="ms" sort={sort} onSort={toggle} right />
+                <STh label="Conv. p/ pesquisa" k="survey" sort={sort} onSort={toggle} right />
+                <STh label="Tempo médio" k="ms" sort={sort} onSort={toggle} right />
               </tr>
             </thead>
             <tbody>
@@ -833,11 +842,11 @@ function ChannelsTable({ ctx }: { ctx: WidgetCtx }) {
                   <Td>
                     <ChannelDot ch={r.channel} />
                   </Td>
-                  <Td className="pr-4">
+                  <Td className={cn("pr-4", BAR_COL)}>
                     <MiniBar value={r.newUsers} max={max} color={CHANNEL_COLOR[r.channel]} />
                   </Td>
                   <Td className="text-right">{fmtInt(r.newUsers)}</Td>
-                  <Td className="text-right">{fmtInt(r.active)}</Td>
+                  <Td className={cn("text-right", XWIDE_COL)}>{fmtInt(r.active)}</Td>
                   <Td className="text-right">{rate(r.activated, r.newUsers)}</Td>
                   <Td className="text-right text-accent">{rate(r.surveyed, r.newUsers)}</Td>
                   <Td className="text-right">{r.ms ? formatDuration(r.ms) : "–"}</Td>
@@ -866,11 +875,11 @@ function EntryPages({ ctx }: { ctx: WidgetCtx }) {
         <Empty />
       ) : (
         <div className="-mx-1 overflow-x-auto px-1">
-          <table className="w-full min-w-[420px]">
+          <table className="w-full min-w-[280px]">
             <thead>
               <tr>
                 <STh label="Página" k="path" sort={sort} onSort={toggle} />
-                <Th className="w-[16%]" />
+                <Th className={cn("w-[16%]", BAR_COL)} />
                 <STh label="Visitas" k="sessions" sort={sort} onSort={toggle} right />
                 <STh label="Novos usuários" k="newUsers" sort={sort} onSort={toggle} right />
                 <STh label="Ativação" k="activation" sort={sort} onSort={toggle} right />
@@ -879,13 +888,13 @@ function EntryPages({ ctx }: { ctx: WidgetCtx }) {
             <tbody>
               {sorted.map((r) => (
                 <tr key={r.path}>
-                  <Td className="max-w-[180px]">
+                  <Td className={NAME_CELL}>
                     <span className="flex items-center gap-2 truncate font-medium text-fg-soft">
                       <LogIn className="size-3.5 shrink-0 text-fg-mut" />
-                      <span className="truncate">{pagePath("", r.path, false)}</span>
+                      <span className="truncate" title={pagePath("", r.path, false)}>{pagePath("", r.path, false)}</span>
                     </span>
                   </Td>
-                  <Td className="pr-4">
+                  <Td className={cn("pr-4", BAR_COL)}>
                     <MiniBar value={r.sessions} max={max} />
                   </Td>
                   <Td className="text-right">{fmtInt(r.sessions)}</Td>
@@ -916,11 +925,11 @@ function ExitPages({ ctx }: { ctx: WidgetCtx }) {
         <Empty />
       ) : (
         <div className="-mx-1 overflow-x-auto px-1">
-          <table className="w-full min-w-[380px]">
+          <table className="w-full min-w-[260px]">
             <thead>
               <tr>
                 <STh label="Página" k="path" sort={sort} onSort={toggle} />
-                <Th className="w-[18%]" />
+                <Th className={cn("w-[18%]", BAR_COL)} />
                 <STh label="Saídas" k="exits" sort={sort} onSort={toggle} right />
                 <STh label="Taxa de saída" k="rate" sort={sort} onSort={toggle} right />
               </tr>
@@ -930,10 +939,10 @@ function ExitPages({ ctx }: { ctx: WidgetCtx }) {
                 const views = pv.get(r.path);
                 return (
                   <tr key={r.path}>
-                    <Td className="max-w-[200px]">
-                      <span className="truncate font-medium text-fg-soft">{pagePath("", r.path, false)}</span>
+                    <Td className={NAME_CELL}>
+                      <span className="block truncate font-medium text-fg-soft" title={pagePath("", r.path, false)}>{pagePath("", r.path, false)}</span>
                     </Td>
-                    <Td className="pr-4">
+                    <Td className={cn("pr-4", BAR_COL)}>
                       <MiniBar value={r.exits} max={max} color="#F59E0B" />
                     </Td>
                     <Td className="text-right">{fmtInt(r.exits)}</Td>
@@ -999,11 +1008,11 @@ function Campaigns({ ctx }: { ctx: WidgetCtx }) {
         <Empty text="Nenhuma campanha com UTM neste recorte. Use utm_campaign nos seus links para vê-las aqui." />
       ) : (
         <div className="-mx-1 overflow-x-auto px-1">
-          <table className="w-full min-w-[420px]">
+          <table className="w-full min-w-[300px]">
             <thead>
               <tr>
                 <STh label="Campanha" k="campaign" sort={sort} onSort={toggle} />
-                <STh label="Canal" k="channel" sort={sort} onSort={toggle} />
+                <STh label="Canal" k="channel" sort={sort} onSort={toggle} className={WIDE_COL} />
                 <STh label="Novos usuários" k="newUsers" sort={sort} onSort={toggle} right />
                 <STh label="Sessões" k="sessions" sort={sort} onSort={toggle} right />
                 <STh label="Ativação" k="activation" sort={sort} onSort={toggle} right />
@@ -1012,10 +1021,10 @@ function Campaigns({ ctx }: { ctx: WidgetCtx }) {
             <tbody>
               {sorted.map((r) => (
                 <tr key={r.campaign + r.channel}>
-                  <Td className="max-w-[180px]">
-                    <span className="truncate font-medium text-fg-soft">{r.campaign}</span>
+                  <Td className={NAME_CELL}>
+                    <span className="block truncate font-medium text-fg-soft" title={r.campaign}>{r.campaign}</span>
                   </Td>
-                  <Td>{CHANNEL_LABEL[r.channel] ?? r.channel}</Td>
+                  <Td className={WIDE_COL}>{CHANNEL_LABEL[r.channel] ?? r.channel}</Td>
                   <Td className="text-right">{fmtInt(r.newUsers)}</Td>
                   <Td className="text-right">{fmtInt(r.sessions)}</Td>
                   <Td className="text-right">{r.activation === null ? "–" : fmtPct(r.activation)}</Td>
@@ -1048,7 +1057,7 @@ function EngagementTrend({ ctx }: { ctx: WidgetCtx }) {
         <Empty text="Ainda há poucos dias de dados." />
       ) : (
         <ResponsiveContainer width="100%" height={250}>
-          <LineChart data={rows} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
+          <LineChart data={rows} margin={{ top: 8, right: 20, left: 0, bottom: 0 }}>
             <CartesianGrid vertical={false} stroke="var(--line)" />
             <XAxis dataKey="d" tickFormatter={shortDay} tick={axis} axisLine={false} tickLine={false} minTickGap={24} />
             <YAxis yAxisId="u" tick={axis} axisLine={false} tickLine={false} width={44} tickFormatter={(v) => fmtInt(v)} />
@@ -1194,7 +1203,7 @@ function DeviceTrend({ ctx }: { ctx: WidgetCtx }) {
         <Empty text="Ainda há poucos dias de dados." />
       ) : (
         <ResponsiveContainer width="100%" height={240}>
-          <AreaChart data={rows} margin={{ top: 8, right: 8, left: -10, bottom: 0 }}>
+          <AreaChart data={rows} margin={{ top: 8, right: 20, left: -10, bottom: 0 }}>
             <CartesianGrid vertical={false} stroke="var(--line)" />
             <XAxis dataKey="d" tickFormatter={shortDay} tick={axis} axisLine={false} tickLine={false} minTickGap={24} />
             <YAxis tick={axis} axisLine={false} tickLine={false} width={44} tickFormatter={(v) => fmtInt(v)} />
@@ -1225,7 +1234,7 @@ function EventsTrend({ ctx }: { ctx: WidgetCtx }) {
         <Empty text="Ainda há poucos dias de dados." />
       ) : (
         <ResponsiveContainer width="100%" height={260}>
-          <LineChart data={rows} margin={{ top: 8, right: 8, left: -10, bottom: 0 }}>
+          <LineChart data={rows} margin={{ top: 8, right: 20, left: -10, bottom: 0 }}>
             <CartesianGrid vertical={false} stroke="var(--line)" />
             <XAxis dataKey="d" tickFormatter={shortDay} tick={axis} axisLine={false} tickLine={false} minTickGap={24} />
             <YAxis tick={axis} axisLine={false} tickLine={false} width={44} tickFormatter={(v) => fmtInt(v)} />

@@ -42,7 +42,26 @@ const SPAN: Record<number, string> = {
   8: "xl:col-span-8",
   12: "xl:col-span-12",
 };
-const KPI_COLS: Record<number, string> = { 1: "xl:grid-cols-1", 2: "xl:grid-cols-2", 3: "xl:grid-cols-3", 4: "xl:grid-cols-4", 5: "xl:grid-cols-5", 6: "xl:grid-cols-6" };
+/*
+  Colunas da faixa de KPIs pela largura REAL da área (container query), não da janela: com a
+  sidebar aberta num notebook a área tem ~950px e 6 cards por linha ficavam com ~140px, estourando
+  título e número. Só vão todos numa linha quando cada card tem ao menos ~190px.
+*/
+const KPI_COLS: Record<number, string> = {
+  1: "",
+  2: "@[30rem]:grid-cols-2",
+  3: "@[30rem]:grid-cols-2 @[44rem]:grid-cols-3",
+  4: "@[30rem]:grid-cols-2 @[56rem]:grid-cols-4",
+  5: "@[30rem]:grid-cols-2 @[44rem]:grid-cols-6 @[64rem]:grid-cols-5",
+  6: "@[30rem]:grid-cols-2 @[44rem]:grid-cols-3 @[76rem]:grid-cols-6",
+};
+/** Sem buracos: na linha incompleta os últimos cards se alargam (5 → 3 + 2 mais largos; ímpar em 2 colunas → o último ocupa a linha). */
+function kpiItemClass(n: number, i: number) {
+  const last = i === n - 1;
+  if (n === 3) return last ? "@[30rem]:col-span-2 @[44rem]:col-span-1" : "";
+  if (n === 5) return i < 3 ? cn("@[44rem]:col-span-2 @[64rem]:col-span-1", last && "@[30rem]:col-span-2") : cn("@[44rem]:col-span-3 @[64rem]:col-span-1", last && "@[30rem]:col-span-2");
+  return "";
+}
 
 export interface Settings {
   northStarEvent: string | null;
@@ -216,10 +235,14 @@ export function AnalyticsShell({
         <div className="flex flex-col gap-5">
           {sections.map((sec, i) =>
             sec.kind === "kpis" ? (
-              <div key={i} className={cn("grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3", KPI_COLS[Math.min(6, sec.items.length)])}>
-                {sec.items.map((b) => (
-                  <Widget key={b.id} id={b.id} ctx={sec.items.length >= 5 ? { ...ctx, dense: true } : ctx} />
-                ))}
+              <div key={i} className="@container">
+                <div className={cn("grid grid-cols-1 gap-4", KPI_COLS[Math.min(6, sec.items.length)])}>
+                  {sec.items.map((b, j) => (
+                    <div key={b.id} className={cn("min-w-0", kpiItemClass(Math.min(6, sec.items.length), j))}>
+                      <Widget id={b.id} ctx={sec.items.length >= 5 ? { ...ctx, dense: true } : ctx} />
+                    </div>
+                  ))}
+                </div>
               </div>
             ) : (
               <div key={i} className="grid grid-cols-1 gap-5 xl:grid-cols-12">

@@ -84,9 +84,9 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
         getAnalytics(scope, settings, new Set(["totals", "newUsers"])),
       ]);
     } catch (e) {
-      // sem a 0021 as colunas de e-mail/nome não existem: avisa qual migração falta em vez de quebrar
+      // sem a 0022 as colunas de e-mail/nome/avatar não existem: avisa qual migração falta em vez de quebrar
       console.error("[analytics] aba Usuários", e);
-      return <AnalyticsUnavailable migration="0021_analytics_users_identity.sql" />;
+      return <AnalyticsUnavailable migration="0022_analytics_users_avatar.sql" />;
     }
     users = {
       ...list,

@@ -616,6 +616,7 @@ export const analyticsUsers = pgTable(
     userId: text("user_id"), // ID informado por Luumu.identify (último visto)
     userEmail: text("user_email"), // e-mail informado por Luumu.identify
     userName: text("user_name"), // nome informado por Luumu.identify (name / first_name + last_name)
+    userAvatar: text("user_avatar"), // URL https da foto informada por Luumu.identify (avatar / picture / photo_url)
     firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull(),
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull(),
     firstChannel: text("first_channel").notNull().default("direct"),

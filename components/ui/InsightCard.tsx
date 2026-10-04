@@ -106,15 +106,24 @@ export function InsightCard({
   const flat = delta && Math.abs(delta.value) < 0.05;
   const good = delta ? (delta.inverted ? delta.value < 0 : delta.value > 0) : false;
   return (
-    <div className="rounded-2xl border border-line bg-bg-elev p-5 shadow-[var(--shadow-sm)]" title={hint}>
+    // o card se mede (container query): número e minigráfico se ajustam à largura que ele tem
+    <div className="@container flex h-full min-w-0 flex-col rounded-2xl border border-line bg-bg-elev p-5 shadow-[var(--shadow-sm)]" title={hint}>
       <div className="flex items-start justify-between gap-3">
-        <span className="text-sm font-semibold text-fg-soft">{label}</span>
+        <span className="min-w-0 text-sm font-semibold leading-snug text-fg-soft [overflow-wrap:anywhere]">{label}</span>
         <span className={cn("grid size-10 shrink-0 place-items-center rounded-full", t.chip)}>{icon}</span>
       </div>
-      <div className="mt-1 flex items-end justify-between gap-3">
+      <div className="mt-auto flex items-end justify-between gap-3 pt-1 @max-[13rem]:flex-col @max-[13rem]:items-stretch @max-[13rem]:gap-2">
         <div className="min-w-0">
-          <div className={cn("whitespace-nowrap font-display font-extrabold leading-none tracking-tight", dense ? "text-[27px]" : "text-[34px]", t.text)}>{value}</div>
-          <div className={cn("mt-2.5 h-9", dense ? "text-[11px]" : "text-xs")}>
+          <div
+            className={cn(
+              "whitespace-nowrap font-display font-extrabold leading-none tracking-tight",
+              dense ? "text-[length:clamp(22px,13cqi,27px)]" : "text-[length:clamp(24px,14cqi,34px)]",
+              t.text
+            )}
+          >
+            {value}
+          </div>
+          <div className={cn("mt-2.5 min-h-9 leading-snug", dense ? "text-[11px]" : "text-xs")}>
             {delta ? (
               <>
                 <span
@@ -127,14 +136,19 @@ export function InsightCard({
                   {Math.abs(delta.value).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}
                   {delta.unit === "%" ? "%" : ` ${delta.unit}`}
                 </span>
-                <div className={cn("text-fg-mut", dense && "whitespace-nowrap")}>vs. período anterior</div>
+                <div className="text-fg-mut">vs. período anterior</div>
               </>
             ) : (
               <span className="text-fg-mut">Sem dados no período anterior</span>
             )}
           </div>
         </div>
-        {chart === "bars" ? <Bars values={series} tone={tone} /> : <Sparkline values={series} tone={tone} className={dense ? "h-9 w-[72px]" : undefined} />}
+        {/* sem série não reserva espaço: no card estreito o gráfico desce e deixaria um vão */}
+        {series.length < 2 ? null : chart === "bars" ? (
+          <Bars values={series} tone={tone} />
+        ) : (
+          <Sparkline values={series} tone={tone} className={cn(dense ? "h-9 w-[72px]" : "h-10 w-28", "@max-[13rem]:h-9 @max-[13rem]:w-full")} />
+        )}
       </div>
     </div>
   );

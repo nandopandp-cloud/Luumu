@@ -79,8 +79,30 @@ function hue(id: string) {
   return h;
 }
 
-function Avatar({ u, size = 36 }: { u: { name: string | null; email: string | null; userId: string | null; anonId: string }; size?: number }) {
+// colunas secundárias: somem quando a área é estreita (o perfil mostra tudo)
+const WIDE = "hidden @[62rem]:table-cell";
+
+function Avatar({ u, size = 36 }: { u: { name: string | null; email: string | null; avatar?: string | null; userId: string | null; anonId: string }; size?: number }) {
+  // foto vinda da plataforma do cliente (Luumu.identify({ avatar })): carregada direto de lá,
+  // sem passar pela Luumu; se não abrir (expirada, privada), voltam as iniciais
+  const [broken, setBroken] = useState<string | null>(null);
   const identified = !!(u.userId || u.email || u.name);
+  if (u.avatar && broken !== u.avatar)
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- imagem externa e pequena: o otimizador da Vercel só custaria
+      <img
+        src={u.avatar}
+        alt=""
+        width={size}
+        height={size}
+        loading="lazy"
+        decoding="async"
+        referrerPolicy="no-referrer"
+        onError={() => setBroken(u.avatar ?? null)}
+        className="shrink-0 rounded-full bg-bg-sunken object-cover"
+        style={{ width: size, height: size }}
+      />
+    );
   const text = (u.name || u.email || "").trim();
   const initials = text
     ? text
@@ -188,9 +210,10 @@ export function UsersView({ data }: { data: UsersData }) {
         />
       </div>
 
-      <section className="rounded-2xl border border-line bg-bg-elev p-5 shadow-[var(--shadow-sm)]">
+      <section className="@container rounded-2xl border border-line bg-bg-elev p-5 shadow-[var(--shadow-sm)]">
         <div className="flex flex-wrap items-center gap-3">
-          <label className="flex min-w-[260px] flex-1 items-center gap-2.5 rounded-xl border border-line-strong bg-bg px-3.5 py-2.5 transition focus-within:border-accent">
+          {/* área estreita (sidebar aberta): a busca ocupa a linha toda e os filtros descem */}
+          <label className="flex min-w-[260px] flex-1 @max-[64rem]:basis-full items-center gap-2.5 rounded-xl border border-line-strong bg-bg px-3.5 py-2.5 transition focus-within:border-accent">
             <Search className="size-4 text-fg-mut" aria-hidden />
             <input
               value={q}
@@ -244,7 +267,8 @@ export function UsersView({ data }: { data: UsersData }) {
           </div>
         ) : (
           <div className="-mx-1 mt-4 overflow-x-auto px-1">
-            <table className="w-full min-w-[980px]">
+            {/* números e datas numa linha só: em tela menor a tabela rola na horizontal em vez de quebrar "30m / 13s" */}
+            <table className="w-full min-w-[760px] @[62rem]:min-w-[980px] [&_td]:whitespace-nowrap">
               <thead>
                 <tr className="text-left font-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-fg-mut">
                   <SortTh label="Usuário" k="name" sort={sortState} onSort={onSort} className="border-b border-line pb-2" />
@@ -253,8 +277,8 @@ export function UsersView({ data }: { data: UsersData }) {
                   <SortTh label="Telas" k="pages" sort={sortState} onSort={onSort} align="right" className={`${thBase} text-right`} />
                   <SortTh label="Tempo ativo" k="time" sort={sortState} onSort={onSort} align="right" className={`${thBase} text-right`} />
                   <SortTh label="Dias ativos" k="days" sort={sortState} onSort={onSort} align="right" className={`${thBase} text-right`} />
-                  <th className={`${thBase} text-right`} title="Contadas só para esta página da lista">Ações</th>
-                  <th className={thBase}>Dispositivo</th>
+                  <th className={`${thBase} ${WIDE} text-right`} title="Contadas só para esta página da lista">Ações</th>
+                  <th className={`${thBase} ${WIDE}`}>Dispositivo</th>
                   <th className={thBase}>Origem</th>
                   <SortTh label="Primeira visita" k="first" sort={sortState} onSort={onSort} className={thBase} />
                 </tr>
@@ -292,8 +316,8 @@ export function UsersView({ data }: { data: UsersData }) {
                       <td className="border-b border-line/60 py-2.5 pl-3 text-right text-[13px] tabular-nums">{fmtInt(u.pageviews)}</td>
                       <td className="border-b border-line/60 py-2.5 pl-3 text-right text-[13px] tabular-nums">{formatDuration(u.ms)}</td>
                       <td className="border-b border-line/60 py-2.5 pl-3 text-right text-[13px] tabular-nums">{fmtInt(u.days)}</td>
-                      <td className="border-b border-line/60 py-2.5 pl-3 text-right text-[13px] tabular-nums">{fmtInt(u.events)}</td>
-                      <td className="border-b border-line/60 py-2.5 pl-3">
+                      <td className={`border-b border-line/60 py-2.5 pl-3 text-right text-[13px] tabular-nums ${WIDE}`}>{fmtInt(u.events)}</td>
+                      <td className={`border-b border-line/60 py-2.5 pl-3 ${WIDE}`}>
                         <span className="inline-flex items-center gap-1.5 text-[13px] text-fg-soft" title={[u.os, u.browser].filter(Boolean).join(" · ")}>
                           <Dev className="size-3.5 text-fg-mut" /> {DEVICE_NAME[u.device] ?? u.device}
                         </span>

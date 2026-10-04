@@ -17,6 +17,7 @@ import type { TourCatalogEntry } from "../lib/tours/types";
 import type { ToursRuntime } from "./tours/runtime";
 import type { HeatmapsRecorder } from "./heatmaps/recorder";
 import type { AnalyticsCollector } from "./analytics/collector";
+import { whoFrom } from "./analytics/identity";
 // = SURVEY_EVENT de lib/analytics/core (repetido aqui para não puxar aquele módulo para o core)
 const SURVEY_EVENT = "luumu_survey_response";
 import {
@@ -897,11 +898,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
           host: HOST,
           device: detectDevice(navigator.userAgent, navigator.maxTouchPoints || 0),
           path: () => routePattern(location.pathname),
-          identity: () => {
-            const s = (v: unknown) => (typeof v === "string" && v ? v : null);
-            const fullName = s(identity.name) ?? s(identity.full_name) ?? ([s(identity.first_name), s(identity.last_name)].filter(Boolean).join(" ") || null);
-            return { id: s(identity.id), email: s(identity.email), name: fullName };
-          },
+          identity: () => whoFrom(identity),
           requestFlush: flushBeacon,
         });
         analytics = c;
@@ -1618,7 +1615,8 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     identify(user: { id?: string; email?: string; [trait: string]: unknown } = {}) {
       const next: typeof identity = {};
       for (const [k, v] of Object.entries(user || {}).slice(0, 30)) {
-        if (typeof v === "string") next[k] = v.slice(0, 200);
+        // URLs (ex.: avatar) podem passar de 200 caracteres; o resto é cortado em 200
+        if (typeof v === "string") next[k] = v.slice(0, /^https:\/\//i.test(v) ? 500 : 200);
         else if (typeof v === "number" || typeof v === "boolean") next[k] = v;
       }
       identity = next;

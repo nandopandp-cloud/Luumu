@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { whoFrom } from "../../sdk/analytics/identity";
 import {
   classifyChannel,
   detectBrowser,
@@ -33,6 +34,11 @@ test("envio do SDK: ids, relógio, limites e eventos validados", () => {
   assert.equal(who.email, "ana@escola.com");
   assert.equal(who.name, "Ana bSouza/b"); // sem < e >: nada de marcação
   assert.equal(parseAnalytics({ ...base, email: "não é e-mail" }, now)!.email, null);
+  assert.equal(who.avatar, null);
+  const pic = "https://cdn.escola.com/fotos/ana.png?s=96";
+  assert.equal(parseAnalytics({ ...base, avatar: pic }, now)!.avatar, pic);
+  for (const bad of ["http://cdn.escola.com/a.png", "data:image/png;base64,AAAA", "javascript:alert(1)", "https://x.com/a b.png", `https://x.com/${"a".repeat(600)}`, 42])
+    assert.equal(parseAnalytics({ ...base, avatar: bad }, now)!.avatar, null, String(bad).slice(0, 40));
   const cont = parseAnalytics({ ...base, pages: [{ id: "pg1", c: true, path: "home", t: now, dur: 1000, ev: [] }] }, now)!;
   assert.equal(cont.pages[0].c, true);
 });
@@ -133,4 +139,16 @@ test("retenção e horários", () => {
   const h = hoursGrid({ hours: [{ dow: 1, h: 9, users: 4 }, { dow: 7, h: 23, users: 8 }] } as never);
   assert.equal(h.norm[0][9], 0.5);
   assert.equal(h.norm[6][23], 1);
+});
+
+test("identify: nome e foto pelos nomes de campo mais comuns", () => {
+  assert.deepEqual(whoFrom({ id: "u1", email: "a@b.com", name: " Ana Souza ", avatar: "https://cdn.x.com/a.png" }), { id: "u1", email: "a@b.com", name: "Ana Souza", avatar: "https://cdn.x.com/a.png" });
+  assert.equal(whoFrom({ firstName: "Ana", lastName: "Souza" }).name, "Ana Souza");
+  assert.equal(whoFrom({ first_name: "Ana" }).name, "Ana");
+  assert.equal(whoFrom({ nome: "Ana", first_name: "Outra" }).name, "Ana"); // nome completo vence as partes
+  assert.equal(whoFrom({ displayName: "ana.s" }).name, "ana.s");
+  assert.equal(whoFrom({ picture: "https://lh3.googleusercontent.com/a/x" }).avatar, "https://lh3.googleusercontent.com/a/x");
+  assert.equal(whoFrom({ photoURL: "https://x.com/p.jpg" }).avatar, "https://x.com/p.jpg");
+  assert.equal(whoFrom({ avatar: "http://x.com/p.jpg" }).avatar, null);
+  assert.deepEqual(whoFrom({}), { id: null, email: null, name: null, avatar: null });
 });

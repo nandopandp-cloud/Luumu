@@ -22,7 +22,7 @@ export function InstallSnippets({ sdkKey }: { sdkKey: string }) {
   Luumu.init({ key: "${sdkKey}" });
 
   // Identifique o usuário logado para segmentar por e-mail ou ID:
-  Luumu.identify({ id: "user_123", email: "joao@exemplo.com" });
+  Luumu.identify({ id: "user_123", email: "joao@exemplo.com", name: "João Silva" });
 
   // exibir uma pesquisa específica (ex.: em um clique):
   // Luumu.show("svy_xxx");

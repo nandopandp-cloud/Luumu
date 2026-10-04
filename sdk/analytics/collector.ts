@@ -24,7 +24,7 @@ export interface AnalyticsBootConfig {
   /** rota normalizada da tela atual */
   path: () => string;
   /** usuário identificado (Luumu.identify), se houver */
-  identity: () => { id: string | null; email: string | null; name: string | null };
+  identity: () => { id: string | null; email: string | null; name: string | null; avatar: string | null };
   /** pede ao core para enviar agora (virada de sessão, muitas telas acumuladas) */
   requestFlush: () => void;
 }
@@ -130,7 +130,7 @@ function collect(): AnalyticsBatch | null {
     aid: anonymousId().replace(/[^A-Za-z0-9_-]/g, "").slice(0, 64).padEnd(6, "0"),
     ...(() => {
       const who = c.identity();
-      return { uid: who.id, email: who.email, name: who.name };
+      return { uid: who.id, email: who.email, name: who.name, avatar: who.avatar };
     })(),
     sid: session.id,
     st: session.st,

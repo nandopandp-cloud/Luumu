@@ -72,8 +72,10 @@ async function handleLoginSuccess(user) {
   await sessionApi.save(user);
 
   Luumu.identify({
-    id: user.id,       // ID interno do seu usuário
-    email: user.email,  // usado para segmentar pesquisas por e-mail
+    id: user.id,         // ID interno do seu usuário
+    email: user.email,   // usado para segmentar pesquisas por e-mail
+    name: user.name,     // opcional: nome exibido no Analytics → Usuários
+    avatar: user.photo,  // opcional: URL https da foto do perfil
   });
 }`;
 
@@ -172,8 +174,10 @@ async function handleLoginSuccess(user) {
               <p className="mt-3 max-w-2xl text-xs text-fg-mut">
                 Onde colar: dentro da função que trata o login com sucesso (ou no carregamento inicial, se a
                 sessão já existir salva). Pode passar <code className="font-mono text-[12px]">id</code>,{" "}
-                <code className="font-mono text-[12px]">email</code>, ou os dois. A identidade fica salva no
-                navegador, não precisa chamar de novo a cada página.
+                <code className="font-mono text-[12px]">email</code>, ou os dois. Com{" "}
+                <code className="font-mono text-[12px]">name</code> e{" "}
+                <code className="font-mono text-[12px]">avatar</code> (opcionais), a aba Analytics → Usuários mostra o nome e a
+                foto de cada pessoa. A identidade fica salva no navegador, não precisa chamar de novo a cada página.
               </p>
             </div>
 

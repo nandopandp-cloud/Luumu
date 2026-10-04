@@ -63,6 +63,17 @@ export async function saveAnalyticsSettings(projectId: string, userId: string, p
 
 /* ---------- gravação ---------- */
 
+/*
+  A coluna do avatar chegou na migração 0022. Se o deploy for ao ar antes dela, o upsert do
+  usuário (que o Drizzle monta com TODAS as colunas da tabela) falharia e a visita inteira se
+  perderia: nesse caso a instância passa a gravar o usuário sem o avatar.
+*/
+let avatarColumn = true;
+const missingColumn = (e: unknown) => {
+  for (let x = e as { code?: string; cause?: unknown } | undefined, i = 0; x && i < 4; x = x.cause as typeof x, i++) if (x.code === "42703") return true;
+  return /column .* does not exist/i.test(String((e as Error)?.message ?? ""));
+};
+
 export async function recordAnalytics(workspaceId: string, projectId: string, host: string, p: AnalyticsPayload) {
   void workspaceId;
   const channel = classifyChannel({ ref: p.ref, host, utmSource: p.utm.source, utmMedium: p.utm.medium });
@@ -74,88 +85,114 @@ export async function recordAnalytics(workspaceId: string, projectId: string, ho
   const dur = p.pages.reduce((a, x) => a + x.dur, 0);
   const exit = p.pages[p.pages.length - 1].path;
 
-  await db.batch([
-    db
-      .insert(analyticsUsers)
-      .values({
-        projectId,
-        anonId: p.aid,
-        userId: p.uid,
-        userEmail: p.email,
-        userName: p.name,
-        firstSeenAt: first,
-        lastSeenAt: last,
-        firstChannel: channel,
-        firstSource: p.utm.source || p.ref,
-        firstCampaign: p.utm.campaign,
-        firstLanding: p.landing,
-        firstHost: host,
-        firstDevice: p.device,
-      })
-      .onConflictDoUpdate({
-        target: [analyticsUsers.projectId, analyticsUsers.anonId],
+  const user = (withAvatar: boolean) =>
+    withAvatar
+      ? db
+          .insert(analyticsUsers)
+          .values({
+            projectId,
+            anonId: p.aid,
+            userId: p.uid,
+            userEmail: p.email,
+            userName: p.name,
+            userAvatar: p.avatar,
+            firstSeenAt: first,
+            lastSeenAt: last,
+            firstChannel: channel,
+            firstSource: p.utm.source || p.ref,
+            firstCampaign: p.utm.campaign,
+            firstLanding: p.landing,
+            firstHost: host,
+            firstDevice: p.device,
+          })
+          .onConflictDoUpdate({
+            target: [analyticsUsers.projectId, analyticsUsers.anonId],
+            set: {
+              lastSeenAt: sql`greatest(${analyticsUsers.lastSeenAt}, excluded.last_seen_at)`,
+              userId: sql`coalesce(excluded.user_id, ${analyticsUsers.userId})`,
+              userEmail: sql`coalesce(excluded.user_email, ${analyticsUsers.userEmail})`,
+              userName: sql`coalesce(excluded.user_name, ${analyticsUsers.userName})`,
+              userAvatar: sql`coalesce(excluded.user_avatar, ${analyticsUsers.userAvatar})`,
+            },
+          })
+      : db.execute(sql`
+          insert into analytics_users (project_id, anon_id, user_id, user_email, user_name, first_seen_at, last_seen_at,
+                                       first_channel, first_source, first_campaign, first_landing, first_host, first_device)
+          values (${projectId}, ${p.aid}, ${p.uid}, ${p.email}, ${p.name}, ${iso(first)}::timestamptz, ${iso(last)}::timestamptz,
+                  ${channel}, ${p.utm.source || p.ref}, ${p.utm.campaign}, ${p.landing}, ${host}, ${p.device})
+          on conflict (project_id, anon_id) do update set
+            last_seen_at = greatest(analytics_users.last_seen_at, excluded.last_seen_at),
+            user_id = coalesce(excluded.user_id, analytics_users.user_id),
+            user_email = coalesce(excluded.user_email, analytics_users.user_email),
+            user_name = coalesce(excluded.user_name, analytics_users.user_name)`);
+
+  const write = (withAvatar: boolean) =>
+    db.batch([
+      user(withAvatar),
+      db
+        .insert(analyticsSessions)
+        .values({
+          id: sessionId,
+          projectId,
+          anonId: p.aid,
+          userId: p.uid,
+          host,
+          device: p.device,
+          os: p.os,
+          browser: p.browser,
+          viewportW: p.vw,
+          startedAt: new Date(p.st),
+          lastSeenAt: last,
+          pageviews: pv,
+          durationMs: dur,
+          landingPath: p.landing,
+          exitPath: exit,
+          channel,
+          referrer: p.ref,
+          utmSource: p.utm.source,
+          utmMedium: p.utm.medium,
+          utmCampaign: p.utm.campaign,
+        })
+        .onConflictDoUpdate({
+          target: analyticsSessions.id,
+          set: {
+            lastSeenAt: sql`greatest(${analyticsSessions.lastSeenAt}, excluded.last_seen_at)`,
+            pageviews: sql`${analyticsSessions.pageviews} + excluded.pageviews`,
+            durationMs: sql`least(${analyticsSessions.durationMs} + excluded.duration_ms, 86400000)`,
+            exitPath: sql`excluded.exit_path`,
+            userId: sql`coalesce(excluded.user_id, ${analyticsSessions.userId})`,
+          },
+        }),
+      db.insert(analyticsPageviews).values(
+        p.pages.map((x) => ({
+          id: `pv_${p.sid}_${x.id}`,
+          projectId,
+          sessionId,
+          anonId: p.aid,
+          host,
+          path: x.path,
+          device: p.device,
+          durationMs: x.dur,
+          events: x.ev,
+          createdAt: new Date(x.t),
+        }))
+      ).onConflictDoUpdate({
+        target: analyticsPageviews.id,
         set: {
-          lastSeenAt: sql`greatest(${analyticsUsers.lastSeenAt}, excluded.last_seen_at)`,
-          userId: sql`coalesce(excluded.user_id, ${analyticsUsers.userId})`,
-          userEmail: sql`coalesce(excluded.user_email, ${analyticsUsers.userEmail})`,
-          userName: sql`coalesce(excluded.user_name, ${analyticsUsers.userName})`,
+          durationMs: sql`least(${analyticsPageviews.durationMs} + excluded.duration_ms, 14400000)`,
+          events: sql`array(select distinct unnest(${analyticsPageviews.events} || excluded.events))`,
         },
       }),
-    db
-      .insert(analyticsSessions)
-      .values({
-        id: sessionId,
-        projectId,
-        anonId: p.aid,
-        userId: p.uid,
-        host,
-        device: p.device,
-        os: p.os,
-        browser: p.browser,
-        viewportW: p.vw,
-        startedAt: new Date(p.st),
-        lastSeenAt: last,
-        pageviews: pv,
-        durationMs: dur,
-        landingPath: p.landing,
-        exitPath: exit,
-        channel,
-        referrer: p.ref,
-        utmSource: p.utm.source,
-        utmMedium: p.utm.medium,
-        utmCampaign: p.utm.campaign,
-      })
-      .onConflictDoUpdate({
-        target: analyticsSessions.id,
-        set: {
-          lastSeenAt: sql`greatest(${analyticsSessions.lastSeenAt}, excluded.last_seen_at)`,
-          pageviews: sql`${analyticsSessions.pageviews} + excluded.pageviews`,
-          durationMs: sql`least(${analyticsSessions.durationMs} + excluded.duration_ms, 86400000)`,
-          exitPath: sql`excluded.exit_path`,
-          userId: sql`coalesce(excluded.user_id, ${analyticsSessions.userId})`,
-        },
-      }),
-    db.insert(analyticsPageviews).values(
-      p.pages.map((x) => ({
-        id: `pv_${p.sid}_${x.id}`,
-        projectId,
-        sessionId,
-        anonId: p.aid,
-        host,
-        path: x.path,
-        device: p.device,
-        durationMs: x.dur,
-        events: x.ev,
-        createdAt: new Date(x.t),
-      }))
-    ).onConflictDoUpdate({
-      target: analyticsPageviews.id,
-      set: {
-        durationMs: sql`least(${analyticsPageviews.durationMs} + excluded.duration_ms, 14400000)`,
-        events: sql`array(select distinct unnest(${analyticsPageviews.events} || excluded.events))`,
-      },
-    }),
-  ]);
+    ]);
+
+  try {
+    await write(avatarColumn);
+  } catch (e) {
+    if (!avatarColumn || !missingColumn(e)) throw e;
+    avatarColumn = false;
+    console.warn("[analytics] coluna user_avatar ausente: rode db/migrations/0022_analytics_users_avatar.sql");
+    await write(false);
+  }
 }
 
 /* ---------- leitura ---------- */
@@ -680,6 +717,7 @@ export interface UserRow {
   userId: string | null;
   email: string | null;
   name: string | null;
+  avatar: string | null;
   firstSeenAt: string;
   lastSeenAt: string;
   channel: Channel;
@@ -730,7 +768,7 @@ export async function listAnalyticsUsers(
                (array_agg(s.browser order by s.started_at desc))[1] browser
           from analytics_sessions s where ${sf(s)} group by s.anon_id
       )
-      select u.anon_id, u.user_id, u.user_email, u.user_name, ${isoTs(sql`u.first_seen_at`)} first_seen, ${isoTs(sql`greatest(u.last_seen_at, act.last)`)} last_seen,
+      select u.anon_id, u.user_id, u.user_email, u.user_name, u.user_avatar, ${isoTs(sql`u.first_seen_at`)} first_seen, ${isoTs(sql`greatest(u.last_seen_at, act.last)`)} last_seen,
              u.first_channel, u.first_landing, act.device, act.os, act.browser, act.sessions, act.pv, act.ms, act.days,
              count(*) over ()::int total
         from act join analytics_users u on u.project_id = ${s.projectId} and u.anon_id = act.anon_id
@@ -760,6 +798,7 @@ export async function listAnalyticsUsers(
       userId: (x.user_id as string) ?? null,
       email: (x.user_email as string) ?? null,
       name: (x.user_name as string) ?? null,
+      avatar: (x.user_avatar as string) ?? null,
       firstSeenAt: String(x.first_seen),
       lastSeenAt: String(x.last_seen),
       channel: x.first_channel as Channel,
@@ -836,6 +875,7 @@ export async function getAnalyticsUserProfile(projectId: string, anonId: string)
     userId: u.userId,
     email: u.userEmail,
     name: u.userName,
+    avatar: u.userAvatar,
     firstSeenAt: u.firstSeenAt.toISOString(),
     lastSeenAt: u.lastSeenAt.toISOString(),
     channel: u.firstChannel as Channel,

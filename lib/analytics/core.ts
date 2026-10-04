@@ -34,6 +34,13 @@ export interface PageHit {
   ev: string[];
 }
 
+/** URL de avatar aceita: https, sem espaços/aspas e curta o bastante (data: e http: ficam de fora). */
+export function avatarUrl(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  const u = v.trim();
+  return u.length <= 500 && /^https:\/\/[a-z0-9.-]+(:\d+)?\/[^\s"'<>\\]*$/i.test(u) ? u : null;
+}
+
 export interface AnalyticsPayload {
   key: string;
   host: string;
@@ -42,6 +49,8 @@ export interface AnalyticsPayload {
   /** e-mail e nome informados em Luumu.identify (para a aba Usuários) */
   email: string | null;
   name: string | null;
+  /** foto do usuário na plataforma do cliente (só https; a imagem é carregada direto de lá) */
+  avatar: string | null;
   sid: string;
   /** início da sessão (ms) */
   st: number;
@@ -92,6 +101,7 @@ export function parseAnalytics(raw: unknown, now = Date.now()): AnalyticsPayload
     uid: str(o.uid, 128) || null,
     email: /^[^\s@<>]{1,64}@[^\s@<>]{1,190}\.[a-z]{2,24}$/i.test(str(o.email, 254)) ? str(o.email, 254).toLowerCase() : null,
     name: str(o.name, 80).replace(/[<>]/g, "") || null,
+    avatar: avatarUrl(o.avatar),
     sid,
     st: clamp(o.st),
     device: ANALYTICS_DEVICES.includes(o.device as AnalyticsDevice) ? (o.device as AnalyticsDevice) : "desktop",
