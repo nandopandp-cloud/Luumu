@@ -107,9 +107,9 @@ async function handleLoginSuccess(user) {
         </Card>
       )}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
-        {/* Coluna principal: os passos */}
-        <div>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+        {/* Coluna principal: os passos (min-w-0: sem isso o conteúdo largo estica a coluna e quebra o layout) */}
+        <div className="min-w-0">
           <Step n={1} title="Cole o script no seu produto">
             <p className="mb-3 max-w-2xl text-sm text-fg-mut">
               Adicione antes do <code className="font-mono text-[12.5px]">&lt;/head&gt;</code>. As pesquisas ativas
@@ -247,7 +247,7 @@ async function handleLoginSuccess(user) {
         </div>
 
         {/* Coluna lateral: chave + como funciona */}
-        <div className="flex flex-col gap-4">
+        <div className="flex min-w-0 flex-col gap-4">
           <IdentityCaptureCard initial={capture} canManage={canManage} status={captureStatus} />
           <Card>
             <div className="mb-3 flex items-center gap-2">

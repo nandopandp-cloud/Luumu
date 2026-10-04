@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Loader2, CheckCircle2, Radio } from "lucide-react";
+import { Loader2, CheckCircle2, ChevronLeft, ChevronRight, Radio } from "lucide-react";
 import { HostBadge } from "@/components/ui/HostBadge";
 
 interface EventRow {
@@ -113,6 +113,12 @@ export function EventDetector({ initial, projectId }: { initial: Status; project
     };
   }, [projectId]);
 
+  const PAGE = 15;
+  const [page, setPage] = useState(1);
+  const pages = Math.max(1, Math.ceil(status.events.length / PAGE));
+  const cur = Math.min(page, pages);
+  const shownEvents = status.events.slice((cur - 1) * PAGE, cur * PAGE);
+
   const allHosts = Array.from(new Set(status.events.flatMap((e) => e.hosts ?? [])));
 
   if (!status.connected) {
@@ -150,12 +156,12 @@ export function EventDetector({ initial, projectId }: { initial: Status; project
         </span>
       </div>
       <ul className="flex flex-col gap-2">
-        {status.events.map((e) => {
+        {shownEvents.map((e) => {
           const hosts = e.hosts ?? [];
           const kind = eventKind(e.name);
           return (
-            <li key={e.name} className="flex items-center justify-between gap-3 text-sm">
-              <div className="flex min-w-0 items-center gap-2">
+            <li key={e.name} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm">
+              <div className="flex min-w-0 flex-1 basis-56 items-center gap-2">
                 <span className="shrink-0 rounded-full bg-surface-brand px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wide text-accent">
                   {kind.label}
                 </span>
@@ -163,16 +169,38 @@ export function EventDetector({ initial, projectId }: { initial: Status; project
                   {kind.detail}
                 </code>
               </div>
-              <div className="flex shrink-0 items-center gap-2 font-mono text-xs text-fg-mut">
-                {hosts.map((h) => (
-                  <HostBadge key={h} host={h} all={allHosts} />
-                ))}
-                <span>{timeAgo(e.lastSeenAt)}</span>
+              <div className="flex min-w-0 max-w-full items-center gap-2 font-mono text-xs text-fg-mut">
+                {/* até 2 plataformas; o resto vira "+N" (a lista completa fica no título) */}
+                <span className="flex min-w-0 items-center gap-1.5 overflow-hidden" title={hosts.join(", ")}>
+                  {hosts.slice(0, 2).map((h) => (
+                    <HostBadge key={h} host={h} all={allHosts} />
+                  ))}
+                  {hosts.length > 2 && <span className="shrink-0 rounded-full bg-bg-elev px-2 py-0.5 font-semibold">+{hosts.length - 2}</span>}
+                </span>
+                <span className="shrink-0">{timeAgo(e.lastSeenAt)}</span>
               </div>
             </li>
           );
         })}
       </ul>
+      {pages > 1 && (
+        <div className="mt-3 flex items-center justify-between border-t border-line pt-3 text-xs text-fg-mut">
+          <span>
+            {(cur - 1) * PAGE + 1}–{Math.min(cur * PAGE, status.events.length)} de {status.events.length}
+          </span>
+          <div className="flex items-center gap-1.5">
+            <button type="button" disabled={cur <= 1} onClick={() => setPage(cur - 1)} aria-label="Página anterior" className="grid size-7 place-items-center rounded-lg border border-line-strong text-fg-soft transition hover:border-accent hover:text-accent disabled:opacity-40 disabled:hover:border-line-strong disabled:hover:text-fg-soft">
+              <ChevronLeft className="size-4" />
+            </button>
+            <span className="min-w-[4.5rem] text-center font-semibold tabular-nums text-fg-soft">
+              {cur} / {pages}
+            </span>
+            <button type="button" disabled={cur >= pages} onClick={() => setPage(cur + 1)} aria-label="Próxima página" className="grid size-7 place-items-center rounded-lg border border-line-strong text-fg-soft transition hover:border-accent hover:text-accent disabled:opacity-40 disabled:hover:border-line-strong disabled:hover:text-fg-soft">
+              <ChevronRight className="size-4" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
