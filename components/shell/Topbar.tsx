@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import Link from "next/link";
+import Link from "@/components/ui/Link";
 import { Bell, Menu, LogOut, ChevronDown, UserRound } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
 import { PlanUsageMenu } from "./PlanUsageMenu";

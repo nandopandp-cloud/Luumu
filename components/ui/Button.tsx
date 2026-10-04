@@ -1,5 +1,5 @@
 import { forwardRef } from "react";
-import Link from "next/link";
+import Link from "@/components/ui/Link";
 import { cn } from "@/lib/utils";
 
 type Variant = "primary" | "green" | "ghost" | "subtle" | "danger";

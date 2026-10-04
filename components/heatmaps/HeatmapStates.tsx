@@ -2,7 +2,7 @@
 
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
+import Link from "@/components/ui/Link";
 import { ArrowDownUp, Check, EyeOff, Loader2, Lock, MousePointerClick, Move, ShieldCheck, Sparkles, Zap } from "lucide-react";
 import { Mascot } from "@/components/ui/Mascot";
 import { useToast } from "@/components/ui/Toast";

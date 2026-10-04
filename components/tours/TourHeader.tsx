@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import Link from "next/link";
+import Link from "@/components/ui/Link";
 import { usePathname, useRouter } from "next/navigation";
 import { Blocks, Users, Palette, History, BarChart3, Play, Rocket, Loader2, MousePointerClick } from "lucide-react";
 import { Button } from "@/components/ui/Button";

@@ -7,6 +7,12 @@ const nextConfig: NextConfig = {
   images: {
     // logos do workspace hospedadas no Vercel Blob
     remotePatterns: [{ protocol: "https", hostname: "*.public.blob.vercel-storage.com" }],
+    /*
+      31 dias em vez das 4 h padrão: cada expiração é uma nova transformação cobrada. É seguro
+      porque nenhuma imagem otimizada muda sem mudar de URL — logos, avatares e imagens de tour
+      vão para o Blob com timestamp no nome a cada upload, e a arte do login é fixa.
+    */
+    minimumCacheTTL: 2678400,
   },
   async headers() {
     return [
@@ -24,6 +30,21 @@ const nextConfig: NextConfig = {
         */
         source: "/sdk.js",
         headers: [{ key: "Cache-Control", value: "public, max-age=3600, stale-while-revalidate=86400" }],
+      },
+      {
+        /*
+          Arte da marca em public/ (mascotes, emojis de sentimento, animações, painel do login).
+          O padrão de `public/` é max-age=0: o navegador revalidava CADA imagem a cada página
+          (o mascote dos estados vazios, os 5 emojis do Insights...), e cada revalidação é uma
+          Edge Request, mesmo respondendo 304. São arquivos que praticamente nunca mudam: 7 dias
+          de cache. Se um deles for trocado, publique com outro nome (ou espere a semana).
+        */
+        source: "/:dir(mascot|mascot-anim)/:path*",
+        headers: [{ key: "Cache-Control", value: "public, max-age=604800, stale-while-revalidate=2592000" }],
+      },
+      {
+        source: "/login-panel.png",
+        headers: [{ key: "Cache-Control", value: "public, max-age=604800, stale-while-revalidate=2592000" }],
       },
       {
         /*

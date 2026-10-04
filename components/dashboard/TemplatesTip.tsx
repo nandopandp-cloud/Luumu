@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/ui/Link";
 import { ArrowRight } from "lucide-react";
 
 /** Card "Dica Luumu" da Dashboard: atalho para criar pesquisa a partir de template. */

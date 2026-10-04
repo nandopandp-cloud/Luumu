@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/ui/Link";
 import { MessageSquareText, MessagesSquare, Smile, Star, ChevronDown } from "lucide-react";
 import { DataFilters } from "@/components/ui/DataFilters";
 import { EmptyState } from "@/components/ui/EmptyState";

@@ -69,7 +69,7 @@ async function type(text: string) {
     setter.call(input, text);
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
-  await React.act(async () => wait(220)); // debounce + resposta
+  await React.act(async () => wait(320)); // debounce (250 ms) + resposta
 }
 
 test("⌘K abre; sem termo mostra ações e páginas; Esc fecha", async () => {

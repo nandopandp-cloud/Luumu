@@ -436,7 +436,7 @@ export function CommandPalette({ projectName, onClose }: { projectName: string |
       } finally {
         if (!ctrl.signal.aborted) setLoading(false);
       }
-    }, 160);
+    }, 250); // espera a pessoa parar de digitar: cada termo intermediário era uma invocação
     return () => {
       ctrl.abort();
       window.clearTimeout(t);

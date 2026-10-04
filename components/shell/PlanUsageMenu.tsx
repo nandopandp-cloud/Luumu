@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import Link from "next/link";
+import Link from "@/components/ui/Link";
 import { usePathname } from "next/navigation";
 import { Activity, ArrowRight, BarChart3, ChevronDown, ClipboardList, Crown, Info, MessageSquare, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";

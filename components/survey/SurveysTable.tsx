@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { SortTh, useTableSort } from "@/components/ui/SortableHeader";
 import { createPortal } from "react-dom";
-import Link from "next/link";
+import Link from "@/components/ui/Link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Search, MoreHorizontal, Pause, Play, Square, Eye, Pencil, Type, Trash2, Loader2, AlertTriangle, Copy, CalendarRange } from "lucide-react";

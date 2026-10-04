@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/ui/Link";
 import { Drawer } from "@/components/ui/Drawer";
 import type { TopicInsight } from "@/lib/insights/types";
 import { CommentItem, ThemeIcon } from "./shared";

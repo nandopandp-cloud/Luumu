@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/ui/Link";
 import { CalendarDays, MessagesSquare, Plus, Smile, Timer } from "lucide-react";
 import { DataFilters } from "@/components/ui/DataFilters";
 import { InsightCard, pctDelta, scoreDelta } from "@/components/ui/InsightCard";

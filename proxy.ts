@@ -93,6 +93,18 @@ export const config = {
     precise de sessão.
   */
   matcher: [
-    "/((?!api|_next/static|_next/image|favicon.ico|sdk.js|mascot|s/|r/|demo|.*\\.[\\w]+$).*)",
+    {
+      source: "/((?!api|_next/static|_next/image|favicon.ico|sdk.js|mascot|s/|r/|demo|.*\\.[\\w]+$).*)",
+      /*
+        Prefetch de link (RSC em segundo plano) não passa pelo proxy: ele não renderiza a
+        página nem expõe dado — o layout do app chama requireUser() e é quem protege o
+        conteúdo —, então validar o JWT aqui só dobrava a conta (uma invocação do proxy + uma
+        da rota por prefetch). A navegação de verdade (sem estes headers) continua passando.
+      */
+      missing: [
+        { type: "header", key: "next-router-prefetch" },
+        { type: "header", key: "purpose", value: "prefetch" },
+      ],
+    },
   ],
 };

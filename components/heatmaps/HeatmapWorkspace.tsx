@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import Link from "next/link";
+import Link from "@/components/ui/Link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { AlertCircle, ArrowDownUp, MousePointerClick, Move } from "lucide-react";
 import { cn } from "@/lib/utils";
