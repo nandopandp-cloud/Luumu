@@ -16,6 +16,9 @@ import { detectDevice } from "../lib/device";
 import type { TourCatalogEntry } from "../lib/tours/types";
 import type { ToursRuntime } from "./tours/runtime";
 import type { HeatmapsRecorder } from "./heatmaps/recorder";
+import type { AnalyticsCollector } from "./analytics/collector";
+// = SURVEY_EVENT de lib/analytics/core (repetido aqui para não puxar aquele módulo para o core)
+const SURVEY_EVENT = "luumu_survey_response";
 import {
   isFirstSession,
   readActive,
@@ -157,6 +160,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     tours: TourCatalogEntry[];
     sdk: string | null; // versão atual dos bundles sob demanda (vem do servidor)
     heatmaps: boolean; // coleta de heatmaps ativa no projeto
+    analytics: boolean; // coleta de analytics de produto ativa no projeto
   };
   let eventsOpen: boolean | null = null;
   let serverKnown: Record<string, 1> = {};
@@ -371,6 +375,8 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
             device: detectDevice(navigator.userAgent, navigator.maxTouchPoints || 0),
           }),
         });
+        // conversão para pesquisa no Analytics
+        safe(() => analytics?.event(SURVEY_EVENT));
       } catch {}
       markSeen(survey.id);
     }
@@ -640,6 +646,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
         tours?: unknown;
         sdk?: unknown;
         heatmaps?: unknown;
+        analytics?: unknown;
       };
       if (!parsed || typeof parsed.t !== "number" || !Array.isArray(parsed.surveys)) return null;
       if (Date.now() - parsed.t > CATALOG_TTL_MS) return null;
@@ -650,6 +657,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
         tours: Array.isArray(parsed.tours) ? (parsed.tours as TourCatalogEntry[]) : [],
         sdk: typeof parsed.sdk === "string" ? parsed.sdk : null,
         heatmaps: parsed.heatmaps === true,
+        analytics: parsed.analytics === true,
       };
     } catch {
       // localStorage indisponível (modo privado, storage bloqueado) ou JSON corrompido:
@@ -670,6 +678,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
           tours: catalog.tours,
           sdk: catalog.sdk,
           heatmaps: catalog.heatmaps,
+          analytics: catalog.analytics,
         })
       );
     } catch {}
@@ -694,6 +703,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
           tours: Array.isArray(d.tours) ? (d.tours as TourCatalogEntry[]) : [],
           sdk: typeof d.sdk === "string" ? d.sdk : null,
           heatmaps: d.heatmaps === true,
+          analytics: d.analytics === true,
         },
         status: r.status,
       };
@@ -720,6 +730,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     maybeAnnounceHost(key);
     safe(maybeLoadTours);
     if (catalog.heatmaps) safe(() => loadHeatmaps(key));
+    if (catalog.analytics) safe(() => loadAnalytics(key));
   }
 
   /* ---------- Product Tours: ponte com o runtime carregado sob demanda ----------
@@ -787,6 +798,32 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
         });
     }
     return runtimeLoading;
+  }
+
+  /* ---------- Analytics: coletor baixado só quando o projeto ativou a coleta ---------- */
+  let analytics: AnalyticsCollector | null = null;
+  let analyticsLoading = false;
+
+  function loadAnalytics(key: string) {
+    // o administrador montando tour ou vendo preview não é uso real do produto
+    if (analytics || analyticsLoading || builderToken || previewToken) return;
+    analyticsLoading = true;
+    loadScript("sdk-analytics.js")
+      .then(() => {
+        const c = (window as unknown as { __luumuAnalytics?: AnalyticsCollector }).__luumuAnalytics || null;
+        c?.boot({
+          api: API,
+          key,
+          host: HOST,
+          device: detectDevice(navigator.userAgent, navigator.maxTouchPoints || 0),
+          path: () => routePattern(location.pathname),
+          uid: () => (typeof identity.id === "string" && identity.id ? identity.id : null),
+        });
+        analytics = c;
+      })
+      .catch(() => {
+        analyticsLoading = false;
+      });
   }
 
   /* ---------- Heatmaps: gravador baixado só quando o projeto ativou a coleta ---------- */
@@ -1139,6 +1176,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     if (!key || !rawEvent) return;
     const name = slug(rawEvent);
     if (!name) return;
+    safe(() => analytics?.event(name));
     // ingestão (agrupada, best-effort, não bloqueia o disparo)
     enqueueEvent(name);
     // disparo por gatilho (qualquer evento da lista que case)
@@ -1252,6 +1290,8 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
 
   function autoTrack(name: string) {
     if (!name) return;
+    // o analytics vê TODA ocorrência por tela (o dedupe abaixo vale por carregamento de página)
+    safe(() => analytics?.event(name));
     // dedupe por nome: cada evento automático só é processado uma vez por carregamento de página.
     // (eventos diferentes disparados no mesmo instante, ex: form_submit + form_submit_x, passam ambos)
     if (autoSeen.has(name)) return;
@@ -1388,6 +1428,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     const notifyRouteChange = () => {
       trackPageView();
       safe(() => heatmaps?.route());
+      safe(() => analytics?.route());
     };
     const origPush = history.pushState;
     const origReplace = history.replaceState;

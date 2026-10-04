@@ -53,7 +53,7 @@ export const NAV: NavGroup[] = [
   {
     title: "Inteligência",
     items: [
-      { href: "/analytics", label: "Analytics", icon: BarChart3, locked: locked("/analytics") },
+      { href: "/analytics", label: "Analytics", icon: BarChart3, badge: "Novo" },
       { href: "/insights", label: "Insights IA", icon: Sparkles, locked: locked("/insights") },
       { href: "/reports", label: "Relatórios", icon: FileText },
     ],

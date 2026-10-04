@@ -108,6 +108,7 @@ const COMMAND_ICON: Record<string, LucideIcon> = {
   crown: Crown,
   flame: Flame,
   help: CircleHelp,
+  chart: BarChart3,
 };
 
 const RECENT_ICON: Record<RecentEntry["kind"], LucideIcon> = {

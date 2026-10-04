@@ -589,6 +589,106 @@ export const heatmapSnapshots = pgTable(
 );
 
 export type HeatmapPageview = typeof heatmapPageviews.$inferSelect;
+
+/**
+ * Analytics de produto por projeto: liga/desliga a coleta e as métricas escolhidas pelo time
+ * (North Star, ativação, início/conclusão de tarefa = nomes de eventos). Sem linha = desligado.
+ */
+export const analyticsSettings = pgTable("analytics_settings", {
+  projectId: text("project_id").primaryKey().references(() => projects.id, { onDelete: "cascade" }),
+  enabled: boolean("enabled").notNull().default(false),
+  northStarEvent: text("north_star_event"),
+  activationEvent: text("activation_event"),
+  taskStartEvent: text("task_start_event"),
+  taskDoneEvent: text("task_done_event"),
+  updatedBy: text("updated_by").references(() => users.id, { onDelete: "set null" }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Um usuário (anônimo, por navegador) visto no projeto: primeira visita e de onde veio. */
+export const analyticsUsers = pgTable(
+  "analytics_users",
+  {
+    projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    anonId: text("anon_id").notNull(),
+    userId: text("user_id"), // ID informado por Luumu.identify (último visto)
+    firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull(),
+    firstChannel: text("first_channel").notNull().default("direct"),
+    firstSource: text("first_source").notNull().default(""),
+    firstCampaign: text("first_campaign").notNull().default(""),
+    firstLanding: text("first_landing").notNull().default(""),
+    firstHost: text("first_host").notNull().default(""),
+    firstDevice: text("first_device").notNull().default("desktop"),
+  },
+  (t) => [
+    uniqueIndex("analytics_users_pk").on(t.projectId, t.anonId),
+    index("analytics_users_first_idx").on(t.projectId, t.firstSeenAt),
+  ]
+);
+
+/** Uma sessão (30 min sem atividade encerra). Atualizada a cada envio do SDK. */
+export const analyticsSessions = pgTable(
+  "analytics_sessions",
+  {
+    id: text("id").primaryKey(), // project_id + ":" + sid do SDK
+    projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    anonId: text("anon_id").notNull(),
+    userId: text("user_id"),
+    host: text("host").notNull().default(""),
+    device: text("device").notNull().default("desktop"),
+    os: text("os").notNull().default("Outro"),
+    browser: text("browser").notNull().default("Outro"),
+    viewportW: integer("viewport_w").notNull().default(0),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull(),
+    pageviews: integer("pageviews").notNull().default(0),
+    durationMs: integer("duration_ms").notNull().default(0),
+    landingPath: text("landing_path").notNull().default(""),
+    exitPath: text("exit_path").notNull().default(""),
+    channel: text("channel").notNull().default("direct"),
+    referrer: text("referrer").notNull().default(""),
+    utmSource: text("utm_source").notNull().default(""),
+    utmMedium: text("utm_medium").notNull().default(""),
+    utmCampaign: text("utm_campaign").notNull().default(""),
+  },
+  (t) => [index("analytics_sessions_started_idx").on(t.projectId, t.startedAt), index("analytics_sessions_anon_idx").on(t.projectId, t.anonId)]
+);
+
+/** Uma tela vista numa sessão, com o tempo ativo e os eventos que aconteceram nela. */
+export const analyticsPageviews = pgTable(
+  "analytics_pageviews",
+  {
+    id: text("id").primaryKey(),
+    projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    sessionId: text("session_id").notNull(),
+    anonId: text("anon_id").notNull(),
+    host: text("host").notNull().default(""),
+    path: text("path").notNull(),
+    device: text("device").notNull().default("desktop"),
+    durationMs: integer("duration_ms").notNull().default(0),
+    events: text("events").array().notNull().default([]),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [index("analytics_pv_project_idx").on(t.projectId, t.createdAt)]
+);
+
+/** Visões salvas do Analytics (aba + filtros + blocos), pessoais ou do time. */
+export const analyticsViews = pgTable(
+  "analytics_views",
+  {
+    id: text("id").primaryKey(),
+    projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    userId: text("user_id").references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    goal: text("goal").notNull().default(""),
+    shared: boolean("shared").notNull().default(false),
+    config: jsonb("config").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("analytics_views_project_idx").on(t.projectId)]
+);
 export type Workspace = typeof workspaces.$inferSelect;
 export type Survey = typeof surveys.$inferSelect;
 export type ScheduledReport = typeof scheduledReports.$inferSelect;

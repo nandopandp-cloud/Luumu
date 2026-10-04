@@ -3,6 +3,7 @@ import { eventCatalogForSdk } from "@/lib/db/events";
 import { hostStateForSdk, normalizeHost } from "@/lib/db/hosts";
 import { listPublishedToursForSdk } from "@/lib/db/tours";
 import { isHeatmapsEnabled } from "@/lib/db/heatmaps";
+import { getAnalyticsSettings } from "@/lib/db/analytics";
 import { SDK_BUNDLE_VERSION } from "@/lib/tours/sdk-version";
 import { normalizeAppearance } from "@/lib/builder";
 import { resolveKey } from "@/lib/api/keys";
@@ -70,7 +71,7 @@ export async function GET(req: Request) {
   }
 
   const host = normalizeHost(searchParams.get("host"));
-  const [active, eventCatalog, hostState, tours, heatmaps] = await Promise.all([
+  const [active, eventCatalog, hostState, tours, heatmaps, analytics] = await Promise.all([
     listActiveSurveysForSdk(resolved.projectId),
     eventCatalogForSdk(resolved.projectId, host),
     hostStateForSdk(resolved.projectId, host),
@@ -81,6 +82,7 @@ export async function GET(req: Request) {
     listPublishedToursForSdk(resolved.projectId, host).catch(() => []),
     // idem: sem a migração dos heatmaps (ou com falha), a coleta só fica desligada
     isHeatmapsEnabled(resolved.projectId).catch(() => false),
+    getAnalyticsSettings(resolved.projectId).then((a) => a.enabled).catch(() => false),
   ]);
   const forHost = active.filter((s) => {
     const targets = (s.targetHosts as string[] | null) ?? [];
@@ -109,6 +111,8 @@ export async function GET(req: Request) {
       tours,
       // coleta de heatmaps ativa neste projeto: o SDK baixa sdk-heatmaps.js só se for true
       heatmaps: heatmaps,
+      // coleta de analytics de produto ativa: o SDK baixa sdk-analytics.js só se for true
+      analytics,
       // versão atual de sdk-tours.js / sdk-builder.js (o core pode estar em cache e ser mais velho)
       sdk: SDK_BUNDLE_VERSION,
     },

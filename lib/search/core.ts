@@ -99,6 +99,7 @@ export const COMMANDS: CommandItem[] = [
   { id: "p-responses", kind: "page", title: "Respostas", subtitle: "Feed de respostas e comentários", href: "/responses", keywords: ["feedback", "comentarios"], icon: "responses" },
   { id: "p-heatmaps", kind: "page", title: "Heatmaps", subtitle: "Cliques, movimento e rolagem das suas páginas", href: "/heatmaps", keywords: ["mapa de calor", "cliques", "scroll", "rolagem", "comportamento"], icon: "flame" },
   { id: "p-tours", kind: "page", title: "Tours", subtitle: "Product tours e onboarding", href: "/tours", keywords: ["onboarding", "guia"], icon: "route" },
+  { id: "p-analytics", kind: "page", title: "Analytics", subtitle: "Aquisição, engajamento, retenção, páginas e eventos", href: "/analytics", keywords: ["dau", "mau", "retencao", "aquisicao", "engajamento", "funil", "cohort"], icon: "chart" },
   { id: "p-insights", kind: "page", title: "Insights IA", subtitle: "Temas, sentimento e conversa com a Luumu", href: "/insights", keywords: ["ia", "inteligencia", "temas", "sentimento"], icon: "sparkles" },
   { id: "p-reports", kind: "page", title: "Relatórios", subtitle: "Relatórios e envios por e-mail", href: "/reports", keywords: ["exportar", "pdf", "email"], icon: "reports" },
   { id: "p-sdk", kind: "page", title: "SDK & Eventos", subtitle: "Configurações: instalação, chave e eventos rastreados", href: "/settings/sdk", keywords: ["instalar", "script", "api", "eventos", "chave"], icon: "code" },

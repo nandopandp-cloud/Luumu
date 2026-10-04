@@ -246,7 +246,7 @@ export const HELP: HelpCategory[] = [
   {
     id: "insights",
     title: "Analytics e Insights",
-    subtitle: "Entenda os números e converse com seus dados.",
+    subtitle: "Uso do produto, indicadores e conversa com seus dados.",
     icon: "sparkles",
     articles: [
       {
@@ -291,7 +291,26 @@ export const HELP: HelpCategory[] = [
       {
         id: "analytics",
         q: "O que é a área Analytics?",
-        a: "Uma área de análise de uso do produto que ainda está em construção, por isso aparece bloqueada na barra lateral. Enquanto isso, o Dashboard, os Insights e os Heatmaps cobrem a análise de feedback e de comportamento.",
+        a: "O analytics de produto da Luumu: aquisição (canais, campanhas, páginas de entrada), engajamento (DAU, MAU, tempo de uso, frequência, horários), retenção (cohorts e D1/D7/D30), páginas, dispositivos e eventos. Um dono ou administrador ativa a coleta na própria página; o SDK que já está instalado passa a medir, com um único envio por carregamento de página.",
+        link: { label: "Abrir Analytics", href: "/analytics" },
+      },
+      {
+        id: "visoes",
+        q: "Posso salvar uma visão do Analytics?",
+        a: "Sim. Monte a aba, o período, a plataforma, o dispositivo (e, na aba Personalizada, os blocos) e clique em Nova visão. Dê um nome e um objetivo e, se quiser, compartilhe com o time. As visões ficam no seletor ao lado do título, e Compartilhar copia o link da visão.",
+        keywords: ["salvar", "visão", "dashboard", "personalizada", "compartilhar"],
+      },
+      {
+        id: "north-star",
+        q: "Como defino a North Star e o Task Success?",
+        a: "Em Analytics → Métricas, escolha entre os eventos reais do seu produto: o evento North Star (a ação que mais representa valor), o evento de ativação e os eventos de início e conclusão da tarefa principal. Enquanto não forem escolhidos, os cards pedem a configuração em vez de mostrar um número.",
+        keywords: ["north star", "task success", "ativação", "métricas", "funil"],
+      },
+      {
+        id: "canal-aquisicao",
+        q: "Como o canal de aquisição é identificado?",
+        a: "Pela origem da primeira página da sessão: UTMs da URL (utm_source, utm_medium, utm_campaign) e, sem elas, o site de onde a pessoa veio (buscadores = orgânico, redes sociais = social, outros sites = indicação). Sem nenhuma origem, a sessão é direta.",
+        keywords: ["utm", "canal", "origem", "campanha", "orgânico"],
       },
     ],
   },

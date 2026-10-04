@@ -89,6 +89,7 @@ export function InsightCard({
   chart = "line",
   delta,
   hint,
+  dense = false,
 }: {
   label: string;
   value: string;
@@ -98,6 +99,8 @@ export function InsightCard({
   chart?: "line" | "bars";
   delta: Delta | null;
   hint?: string;
+  /** faixas com muitos cards (5–6 por linha): número e minigráfico menores */
+  dense?: boolean;
 }) {
   const t = TONE[tone];
   const flat = delta && Math.abs(delta.value) < 0.05;
@@ -110,8 +113,8 @@ export function InsightCard({
       </div>
       <div className="mt-1 flex items-end justify-between gap-3">
         <div className="min-w-0">
-          <div className={cn("font-display text-[34px] font-extrabold leading-none tracking-tight", t.text)}>{value}</div>
-          <div className="mt-2.5 h-9 text-xs">
+          <div className={cn("whitespace-nowrap font-display font-extrabold leading-none tracking-tight", dense ? "text-[27px]" : "text-[34px]", t.text)}>{value}</div>
+          <div className={cn("mt-2.5 h-9", dense ? "text-[11px]" : "text-xs")}>
             {delta ? (
               <>
                 <span
@@ -124,14 +127,14 @@ export function InsightCard({
                   {Math.abs(delta.value).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}
                   {delta.unit === "%" ? "%" : ` ${delta.unit}`}
                 </span>
-                <div className="text-fg-mut">vs. período anterior</div>
+                <div className={cn("text-fg-mut", dense && "whitespace-nowrap")}>vs. período anterior</div>
               </>
             ) : (
               <span className="text-fg-mut">Sem dados no período anterior</span>
             )}
           </div>
         </div>
-        {chart === "bars" ? <Bars values={series} tone={tone} /> : <Sparkline values={series} tone={tone} />}
+        {chart === "bars" ? <Bars values={series} tone={tone} /> : <Sparkline values={series} tone={tone} className={dense ? "h-9 w-[72px]" : undefined} />}
       </div>
     </div>
   );

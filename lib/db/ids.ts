@@ -28,3 +28,4 @@ const nanoToken = customAlphabet("23456789abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNP
 export const publicReportToken = () => nanoToken();
 export const heatmapPageviewId = () => newId("hpv");
 export const heatmapSnapshotId = () => newId("hsn");
+export const analyticsViewId = () => newId("avw");
