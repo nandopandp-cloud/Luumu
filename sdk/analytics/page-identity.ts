@@ -84,6 +84,34 @@ const SVG_DEFAULTS: Record<string, string> = {
   "stroke-width": "1px", opacity: "1", "stop-opacity": "1", display: "inline", visibility: "visible", transform: "none", stroke: "none",
 };
 
+/** Clone do SVG com os estilos computados no próprio desenho (sem classes) e sem nada que execute. */
+export function styledSvgClone(svg: SVGElement): SVGElement {
+  const clone = svg.cloneNode(true) as SVGElement;
+  inlineStyles(svg, clone);
+  clone.querySelectorAll("script, foreignObject").forEach((n) => n.remove());
+  return clone;
+}
+
+/** Copia os estilos computados de `from` (e descendentes) para `to` (mesma estrutura). */
+export function inlineStyles(from: Element, to: Element) {
+  const src = [from, ...Array.from(from.querySelectorAll("*"))];
+  const dst = [to, ...Array.from(to.querySelectorAll("*"))];
+  src.forEach((el, i) => {
+    if (!dst[i]) return;
+    const cs = window.getComputedStyle(el);
+    const text = /^(text|tspan|textPath)$/i.test(el.tagName);
+    const style = SVG_PROPS.map((p) => {
+      if (!text && /^(font-|text-anchor|dominant-baseline)/.test(p)) return "";
+      const v = cs.getPropertyValue(p).trim();
+      return v && v !== "normal" && SVG_DEFAULTS[p] !== v ? `${p}:${v}` : "";
+    })
+      .filter(Boolean)
+      .join(";");
+    if (style) dst[i].setAttribute("style", style);
+    dst[i].removeAttribute("class");
+  });
+}
+
 function copySvg(svg: SVGSVGElement): string | null {
   try {
     const clone = svg.cloneNode(true) as SVGSVGElement;

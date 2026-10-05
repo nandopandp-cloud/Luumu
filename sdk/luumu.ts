@@ -1642,34 +1642,30 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
       Diagnóstico da captura de nome/foto, para rodar no console do produto logado:
       Luumu.debugIdentity() → o que o identify mandou, o que a tela mostra e o que vai ao painel.
     */
-    debugIdentity() {
+    async debugIdentity() {
       if (!analytics) return { ok: false, motivo: catalogLoaded ? "O Analytics não está ativo neste projeto (ative em Analytics no painel da Luumu)." : "O SDK ainda está carregando; tente de novo em alguns segundos." };
-      const d = analytics.peek();
+      const d = await analytics.peek();
       const logged = !!(d.identify.id || d.identify.email);
+      const snap = d.snap;
+      const foto = d.identify.avatar ?? snap?.url ?? (snap?.svg ? "(avatar fotografado da tela — vai como imagem para o painel)" : null) ?? d.page?.avatar ?? null;
       const name = d.identify.name ?? d.page?.name ?? null;
-      const avatar = d.identify.avatar ?? d.page?.avatar ?? null;
       return {
-        ok: logged && !!(name || avatar || d.page?.avatarSvg),
+        ok: logged && !!(name || foto),
         usuarioIdentificado: logged ? d.identify.id || d.identify.email : "não (o produto ainda não chamou Luumu.identify)",
         capturaAtiva: !!d.capture,
         modo: d.capture ? (d.capture.n || d.capture.a ? "seletores" : "automático") : "desligada (Configurações → SDK & Eventos)",
         nomeLidoDaTela: d.page?.name ?? null,
-        fotoLidaDaTela: d.page?.avatar ?? (d.page?.avatarSvg ? "(desenho SVG copiado da tela — vai como imagem para o painel)" : null),
-        // por que a foto não veio (seletor não achou, só iniciais, SVG embutido, sem https...)
-        motivoFoto: d.page ? d.page.avatarReason : null,
+        fotoLidaDaTela: foto,
+        // por que a foto não veio (seletor não achou, só iniciais, outro domínio sem permissão...)
+        motivoFoto: snap ? snap.reason : d.page ? d.page.avatarReason : null,
+        camadasDoAvatar: snap?.layers ?? [],
         // HTML do elemento apontado como foto (para ajustar o seletor quando a foto não vem)
-        htmlDaFoto: d.page?.avatar || d.page?.avatarSvg ? undefined : d.page?.avatarHtml ?? null,
+        htmlDaFoto: foto ? undefined : d.page?.avatarHtml ?? null,
         seletores: d.capture && (d.capture.n || d.capture.a) ? { nome: d.capture.n || "(automático)", foto: d.capture.a || "(automático)" } : null,
-        // modo automático: só vai ao painel depois de aparecer igual em 2 telas diferentes
-        confirmadoNoNavegador: (() => {
-          try {
-            const c = JSON.parse(localStorage.getItem("luumu_idc_ok") || "null");
-            return c ? { nome: c.name, foto: c.avatar } : null;
-          } catch {
-            return null;
-          }
-        })(),
-        vaiParaOPainel: logged ? { nome: name, foto: avatar } : null,
+        confirmadoNoNavegador: d.confirmed,
+        vaiParaOPainel: logged ? { nome: name, foto } : null,
+        // para ver o avatar fotografado: abra este endereço numa aba (cole na barra de endereço)
+        verAvatar: snap?.svg ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(snap.svg)}` : undefined,
       };
     },
     // limpa a identidade (ex.: logout)

@@ -50,9 +50,10 @@ before(async () => {
   col.boot({ api: "https://luumu.test/api/v1", key: "pk_x", host: "squad.jovensgenios.com", device: "desktop", path: () => "inicio", identity: () => ({ id: "u-9", email: null, name: null, avatar: null }), requestFlush: () => {}, capture: { n: "", a: "header button" } });
 });
 
-test("coletor: o desenho vai no 1º envio; depois, só a impressão digital", () => {
+test("coletor: fotografa em segundo plano; o desenho vai no 1º envio, depois só a impressão", async () => {
   document.body.innerHTML = AVATAR;
-  col.route();
+  // a fotografia roda ~2,5 s depois do boot (a tela do usuário monta depois do SDK)
+  await new Promise((r) => setTimeout(r, 3000));
   const first = col.collect();
   assert.match(first.avsvgh, /^[0-9a-f]{16}$/);
   assert.ok(first.avsvg?.startsWith("<svg"));

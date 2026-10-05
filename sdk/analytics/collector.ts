@@ -14,7 +14,8 @@
   servidor (não vira uma visualização nova).
 */
 import { anonymousId } from "../shared/memory";
-import { readPageIdentity, type CaptureConfig, type PageIdentity } from "./page-identity";
+import { queryTolerant, readPageIdentity, type CaptureConfig, type PageIdentity } from "./page-identity";
+import { snapshotAvatar, type Snapshot } from "./avatar-snapshot";
 import { svgHash } from "../../lib/analytics/svg-avatar";
 import { detectBrowser, detectOS, SESSION_IDLE_MS, LIMITS, type AnalyticsDevice, type AnalyticsPayload } from "../../lib/analytics/core";
 
@@ -43,7 +44,13 @@ export interface AnalyticsCollector {
   /** entrega o que está pendente ao core, que faz UM envio junto com os heatmaps */
   collect(): AnalyticsBatch | null;
   /** diagnóstico (Luumu.debugIdentity): o que o identify mandou e o que a página mostra agora */
-  peek(): { capture: CaptureConfig | null; identify: { id: string | null; email: string | null; name: string | null; avatar: string | null }; page: PageIdentity | null };
+  peek(): Promise<{
+    capture: CaptureConfig | null;
+    identify: { id: string | null; email: string | null; name: string | null; avatar: string | null };
+    page: PageIdentity | null;
+    snap: Snapshot | null;
+    confirmed: { avatar: string | null; desenho: boolean } | null;
+  }>;
 }
 
 interface Page {
@@ -170,13 +177,7 @@ function pageIdentity(c: AnalyticsBootConfig, who: string, email: string | null)
   if (c.capture.n || c.capture.a) {
     // seletores escolhidos pelo cliente: confia no que eles apontam
     ok.name = found.name ?? ok.name;
-    if (found.avatar) {
-      ok.avatar = found.avatar;
-      ok.avsel = found.avatarFromSelector;
-    } else if (found.avatarSvg && !ok.avatar) {
-      ok.svg = found.avatarSvg;
-      ok.svgh = svgHash(found.avatarSvg);
-    }
+    // a foto (com seletor) vem da "fotografia" feita em segundo plano (prepareAvatar)
   } else {
     const route = c.path();
     const prev = readJson<Seen>(sessionStorage, SEEN);
@@ -196,6 +197,52 @@ function pageIdentity(c: AnalyticsBootConfig, who: string, email: string | null)
   }
   writeJson(localStorage, CONFIRMED, ok);
   return ok;
+}
+
+/*
+  "Fotografia" do avatar apontado pelo seletor (camadas, desenhos e imagens embutidas): leva tempo
+  (baixa imagens), então roda em segundo plano enquanto a pessoa usa a tela — ao abrir e a cada
+  troca de tela, até conseguir. O envio só usa o que já estiver pronto.
+*/
+let snapTimer = 0;
+let snapping = false;
+let lastSnapshot: Snapshot | null = null;
+
+async function prepareAvatar() {
+  const c = cfg;
+  if (!c?.capture?.a || snapping) return;
+  const who = c.identity();
+  const key = who.id || who.email;
+  if (!key || who.avatar) return;
+  const sig = `${c.capture.n}|${c.capture.a}`;
+  const saved = readJson<Confirmed>(localStorage, CONFIRMED);
+  const ok: Confirmed = saved?.who === key && saved.sig === sig ? saved : { who: key, sig, name: null, avatar: null };
+  if (ok.avatar || ok.svgh) return;
+  const el = queryTolerant(document, c.capture.a);
+  if (!el) return;
+  snapping = true;
+  try {
+    const snap = await snapshotAvatar(el);
+    lastSnapshot = snap;
+    if (snap.url) {
+      ok.avatar = snap.url;
+      ok.avsel = true;
+    } else if (snap.svg) {
+      ok.svg = snap.svg;
+      ok.svgh = svgHash(snap.svg);
+    } else return;
+    writeJson(localStorage, CONFIRMED, ok);
+  } catch {
+    // nunca quebra o produto do cliente
+  } finally {
+    snapping = false;
+  }
+}
+
+function scheduleAvatar(delay: number) {
+  if (!cfg?.capture?.a) return;
+  window.clearTimeout(snapTimer);
+  snapTimer = window.setTimeout(() => void prepareAvatar(), delay);
 }
 
 function collect(): AnalyticsBatch | null {
@@ -243,6 +290,8 @@ const collector: AnalyticsCollector = {
   boot(c) {
     if (cfg) return;
     cfg = c;
+    // a tela do usuário logado costuma montar depois do SDK: dá um tempo antes de fotografar
+    scheduleAvatar(2500);
     touchSession();
     startPage();
     const input = () => {
@@ -267,6 +316,7 @@ const collector: AnalyticsCollector = {
     if (!cfg) return;
     const cur = pages[pages.length - 1];
     if (cur && cur.path === cfg.path()) return; // replaceState na mesma tela
+    scheduleAvatar(2000);
     touchSession();
     startPage();
   },
@@ -276,10 +326,18 @@ const collector: AnalyticsCollector = {
     if (cur && cur.ev.size < LIMITS.events) cur.ev.add(name.slice(0, LIMITS.name));
   },
   collect,
-  peek() {
+  async peek() {
     const c = cfg;
     const who = c ? c.identity() : { id: null, email: null, name: null, avatar: null };
-    return { capture: c?.capture ?? null, identify: who, page: c?.capture ? readPageIdentity(c.capture, document, who.email) : null };
+    const page = c?.capture ? readPageIdentity(c.capture, document, who.email) : null;
+    // diagnóstico: fotografa agora (sem gravar), para mostrar o que vai ao painel
+    let snap: Snapshot | null = null;
+    if (c?.capture?.a) {
+      const el = queryTolerant(document, c.capture.a);
+      snap = el ? await snapshotAvatar(el) : { reason: "o seletor da foto não encontrou nenhum elemento nesta tela", layers: [] };
+    }
+    const saved = readJson<Confirmed>(localStorage, CONFIRMED);
+    return { capture: c?.capture ?? null, identify: who, page, snap: snap ?? lastSnapshot, confirmed: saved ? { avatar: saved.avatar, desenho: !!saved.svgh } : null };
   },
 };
 
