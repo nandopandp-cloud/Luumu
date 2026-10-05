@@ -5,7 +5,6 @@ import { ScheduleReports, type ScheduledItem } from "@/components/reports/Schedu
 import { PublicLinks, type PublicLinkItem } from "@/components/reports/PublicLinks";
 import { getCurrentProjectId } from "@/lib/auth/current";
 import { listSurveys, listSurveyOptions, resolveSurveyScope } from "@/lib/db/surveys";
-import { listHosts } from "@/lib/db/hosts";
 import { normalizeHost } from "@/lib/hosts";
 import { getStats } from "@/lib/db/responses";
 import { listScheduledReports, listPublicReports } from "@/lib/db/reports";
@@ -28,10 +27,9 @@ export default async function ReportsPage({
   // sem filtro na URL, abre já na última pesquisa vigente/criada (da plataforma, se filtrada)
   const { surveyId: scopedSurveyId, defaultSurveyId } = await resolveSurveyScope(projectId, surveyId, host);
 
-  const [surveys, filterOptions, hosts, stats, scheduled, publicLinks] = await Promise.all([
+  const [surveys, filterOptions, stats, scheduled, publicLinks] = await Promise.all([
     listSurveys(projectId),
     listSurveyOptions(projectId, host),
-    listHosts(projectId),
     // contagem do recorte exato que a exportação vai baixar (mesmos filtros do topo)
     getStats({ projectId, surveyId: scopedSurveyId, dateFrom, dateTo, host }),
     listScheduledReports(projectId),
@@ -83,7 +81,7 @@ export default async function ReportsPage({
       />
 
       <div className="mb-4">
-        <DataFilters surveys={filterOptions} defaultSurveyId={defaultSurveyId} hosts={hosts} defaultPeriod={REPORTS_DEFAULT_PERIOD} />
+        <DataFilters surveys={filterOptions} defaultSurveyId={defaultSurveyId} defaultPeriod={REPORTS_DEFAULT_PERIOD} />
       </div>
 
       {/* Export manual */}

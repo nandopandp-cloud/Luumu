@@ -13,7 +13,6 @@ import { FeaturedComments } from "@/components/insights/FeaturedComments";
 import { InsightEmptyState } from "@/components/insights/InsightEmptyState";
 import { getInsights } from "@/lib/insights/service";
 import { listSurveyOptions } from "@/lib/db/surveys";
-import { listHosts } from "@/lib/db/hosts";
 import { getCurrentProjectId, requireUser } from "@/lib/auth/current";
 import { getUserById } from "@/lib/db/users";
 import { normalizeHost } from "@/lib/hosts";
@@ -39,14 +38,13 @@ export default async function InsightsPage({
   // padrões de tema pedem volume: por padrão a análise olha TODAS as pesquisas do projeto
   const surveyId = sp.surveyId && sp.surveyId !== "all" ? sp.surveyId : undefined;
 
-  const [data, surveyOptions, hosts, me] = await Promise.all([
+  const [data, surveyOptions, me] = await Promise.all([
     getInsights({ projectId, surveyId, host, period, from: sp.from, to: sp.to }),
     listSurveyOptions(projectId, host),
-    listHosts(projectId),
     getUserById(session.userId),
   ]);
   const label = periodLabel(period, sp.from, sp.to).toLowerCase();
-  const filtersSlot = <DataFilters surveys={surveyOptions} defaultSurveyId="all" hosts={hosts} defaultPeriod={INSIGHTS_DEFAULT_PERIOD} />;
+  const filtersSlot = <DataFilters surveys={surveyOptions} defaultSurveyId="all" defaultPeriod={INSIGHTS_DEFAULT_PERIOD} />;
 
   if (data.totalResponses < MIN_RESPONSES) {
     return (

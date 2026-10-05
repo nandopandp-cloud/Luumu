@@ -46,6 +46,7 @@ export default async function ResponsesPage({
         scope={{ projectId, surveyId, dateFrom, dateTo, host }}
         params={{ view: sp.view, sort: sp.sort, limit: sp.limit }}
         hosts={hosts}
+        hostInFilters={false}
         surveyFilter={{ options: surveyOptions, defaultSurveyId }}
         hrefBase="/responses"
       />

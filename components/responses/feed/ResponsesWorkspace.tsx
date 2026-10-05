@@ -41,12 +41,15 @@ export async function ResponsesWorkspace({
   scope,
   params,
   hosts,
+  hostInFilters = true,
   surveyFilter,
   hrefBase,
 }: {
   scope: Scope;
   params: WorkspaceParams;
   hosts: string[];
+  /** seletor de plataforma junto dos filtros (nas telas com o seletor do header, fica de fora) */
+  hostInFilters?: boolean;
   /** seletor de pesquisa no topo (só na tela geral) */
   surveyFilter?: { options: { id: string; name: string }[]; defaultSurveyId?: string };
   hrefBase: string;
@@ -88,7 +91,7 @@ export async function ResponsesWorkspace({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <DataFilters surveys={surveyFilter?.options} defaultSurveyId={surveyFilter?.defaultSurveyId} hosts={hosts} defaultPeriod="all" />
+        <DataFilters surveys={surveyFilter?.options} defaultSurveyId={surveyFilter?.defaultSurveyId} hosts={hostInFilters ? hosts : undefined} defaultPeriod="all" />
         <SortMenu value={sort} />
       </div>
 

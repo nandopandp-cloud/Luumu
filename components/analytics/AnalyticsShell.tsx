@@ -205,7 +205,7 @@ export function AnalyticsShell({
           <Plus className="size-4" /> Nova visão
         </Button>
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          <DataFilters hosts={hosts} />
+          <DataFilters />
           <CollectionPill enabled={enabled} canManage={canManage} since={since} />
         </div>
       </div>

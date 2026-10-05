@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Image from "next/image";
 import Link from "@/components/ui/Link";
-import { Menu, LogOut, ChevronDown, UserRound } from "lucide-react";
-import { ThemeToggle } from "./ThemeToggle";
+import { Menu, LogOut, ChevronDown, UserRound, Moon, Sun } from "lucide-react";
+import { useTheme } from "./ThemeToggle";
+import { PlatformPicker } from "./PlatformPicker";
+import { cn } from "@/lib/utils";
 import { PlanUsageMenu } from "./PlanUsageMenu";
 import { SearchTrigger } from "@/components/search/SearchTrigger";
 import { logoutAction } from "@/app/(auth)/actions";
@@ -12,11 +14,14 @@ import { logoutAction } from "@/app/(auth)/actions";
 export function Topbar({
   onMenu,
   user,
+  hosts = [],
 }: {
   onMenu: () => void;
   user: { name: string; email: string; avatarUrl: string | null };
+  hosts?: string[];
 }) {
   const [open, setOpen] = useState(false);
+  const [theme, setTheme] = useTheme();
   const firstName = user.name.split(" ")[0];
   const initial = user.name.charAt(0).toUpperCase();
   return (
@@ -34,7 +39,10 @@ export function Topbar({
 
       <div className="flex items-center gap-2">
         <PlanUsageMenu />
-        <ThemeToggle />
+        {/* lê ?host= da URL (useSearchParams pede um limite de Suspense) */}
+        <Suspense>
+          <PlatformPicker hosts={hosts} />
+        </Suspense>
         <div className="relative">
         <button
           onClick={() => setOpen((v) => !v)}
@@ -72,6 +80,31 @@ export function Topbar({
               >
                 <UserRound className="size-4" /> Meu perfil
               </Link>
+              <div className="flex items-center justify-between gap-3 px-4 py-2">
+                <span className="text-sm font-medium text-fg-soft">Aparência</span>
+                <div role="radiogroup" aria-label="Aparência" className="inline-flex rounded-lg bg-bg-sunken p-0.5">
+                  {(
+                    [
+                      ["light", "Claro", Sun],
+                      ["dark", "Escuro", Moon],
+                    ] as const
+                  ).map(([v, label, Icon]) => (
+                    <button
+                      key={v}
+                      type="button"
+                      role="radio"
+                      aria-checked={theme === v}
+                      aria-label={label}
+                      title={label}
+                      onClick={() => setTheme(v)}
+                      className={cn("grid size-7 place-items-center rounded-md transition", theme === v ? "bg-bg-elev text-accent shadow-[var(--shadow-sm)]" : "text-fg-mut hover:text-fg")}
+                    >
+                      <Icon className="size-3.5" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="my-1 border-t border-line" />
               <form action={logoutAction}>
                 <button
                   type="submit"

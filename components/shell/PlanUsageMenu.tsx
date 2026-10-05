@@ -110,7 +110,6 @@ export function PlanUsageMenu() {
   if (!u) {
     return (
       <div className="hidden items-center gap-2 md:flex" aria-hidden>
-        <span className="h-10 w-[104px] animate-pulse rounded-full bg-bg-sunken max-lg:hidden" />
         <span className="h-10 w-[150px] animate-pulse rounded-full bg-bg-sunken" />
       </div>
     );
@@ -118,14 +117,6 @@ export function PlanUsageMenu() {
 
   return (
     <div ref={wrap} className="relative hidden items-center gap-2 md:flex">
-      <Link
-        href="/billing"
-        title={`Seu plano: ${u.planLabel}`}
-        className="hidden items-center gap-2 rounded-full bg-surface-brand px-4 py-2 text-sm font-semibold text-accent transition hover:brightness-95 lg:inline-flex"
-      >
-        <Crown className="size-4" aria-hidden />
-        {u.planLabel}
-      </Link>
 
       <button
         ref={button}

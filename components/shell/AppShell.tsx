@@ -18,6 +18,7 @@ export function AppShell({
   activeProjectId,
   initialCollapsed = false,
   usage,
+  hosts = [],
 }: {
   children: React.ReactNode;
   user: { name: string; email: string; avatarUrl: string | null };
@@ -28,6 +29,8 @@ export function AppShell({
   initialCollapsed?: boolean;
   /** uso do plano para o card da sidebar (promise: não atrasa a página) */
   usage?: Promise<WorkspaceUsage | null>;
+  /** plataformas do projeto ativo (seletor do header) */
+  hosts?: string[];
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(initialCollapsed);
@@ -93,7 +96,7 @@ export function AppShell({
 
         {/* Conteúdo */}
         <div className="flex min-w-0 flex-1 flex-col">
-          <Topbar onMenu={() => setMobileOpen(true)} user={user} />
+          <Topbar onMenu={() => setMobileOpen(true)} user={user} hosts={hosts} />
           {/* com a bandeja recolhida, o conteúdo ganha o espaço de volta */}
           <main className={cn("mx-auto w-full flex-1 px-4 py-7 md:px-8", collapsed ? "max-w-[1480px]" : "max-w-[1280px]")}>
             {children}

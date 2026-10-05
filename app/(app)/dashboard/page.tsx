@@ -9,7 +9,6 @@ import { TemplatesTip } from "@/components/dashboard/TemplatesTip";
 import { listSurveys, listSurveyOptions, resolveSurveyScope } from "@/lib/db/surveys";
 import { getScoreDistribution } from "@/lib/db/responses";
 import { getOverview, getScoreSeries, previousScope } from "@/lib/db/overview";
-import { listHosts } from "@/lib/db/hosts";
 import { requireUser, getCurrentProjectId } from "@/lib/auth/current";
 import { formatScore } from "@/lib/scoring";
 import { normalizeHost } from "@/lib/hosts";
@@ -52,12 +51,11 @@ export default async function DashboardPage({
   const { surveyId: scopedSurveyId, defaultSurveyId } = await resolveSurveyScope(projectId, surveyId ?? "all", host);
   const scope = { projectId, surveyId: scopedSurveyId, dateFrom, dateTo, host };
 
-  const [projectSurveys, surveyOptions, overview, distribution, hosts] = await Promise.all([
+  const [projectSurveys, surveyOptions, overview, distribution] = await Promise.all([
     listSurveys(projectId),
     listSurveyOptions(projectId, host),
     getOverview(scope),
     getScoreDistribution(scope),
-    listHosts(projectId),
   ]);
   const series = await getScoreSeries(scope, overview.mainScore);
   const { counts, prevCounts, mainScore, prevScore, positivePct, prevPositivePct, daily } = overview;
@@ -111,7 +109,7 @@ export default async function DashboardPage({
         </div>
       </div>
 
-      <DataFilters surveys={surveyOptions} defaultSurveyId={defaultSurveyId} hosts={hosts} defaultPeriod={DASHBOARD_DEFAULT_PERIOD} />
+      <DataFilters surveys={surveyOptions} defaultSurveyId={defaultSurveyId} defaultPeriod={DASHBOARD_DEFAULT_PERIOD} />
 
       {/* Métricas */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">

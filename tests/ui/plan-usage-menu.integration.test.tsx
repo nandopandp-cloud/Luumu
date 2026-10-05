@@ -42,9 +42,9 @@ async function mount() {
   return { host, unmount: () => React.act(() => root.unmount()) };
 }
 
-test("mostra o selo do plano e abre o painel com o uso da workspace", async () => {
+test("sem selo do plano no header; o plano aparece no painel de uso da workspace", async () => {
   const { host, unmount } = await mount();
-  assert.match(host.textContent ?? "", /Growth/);
+  assert.doesNotMatch(host.textContent ?? "", /Growth/);
   const btn = Array.from(host.querySelectorAll("button")).find((b) => b.textContent?.includes("Uso do plano"))!;
   assert.equal(btn.getAttribute("aria-expanded"), "false");
 
@@ -52,6 +52,7 @@ test("mostra o selo do plano e abre o painel com o uso da workspace", async () =
   const panel = host.querySelector("[role=dialog]")!;
   const text = panel.textContent ?? "";
   assert.match(text, /Seu plano atual/);
+  assert.match(text, /Growth/);
   assert.match(text, /8 \/ 10\.000/);
   assert.match(text, /<1%/); // 8 de 10 mil: não arredonda para "0%" com uso existente
   assert.match(text, /1 \/ ilimitado/);
