@@ -14,11 +14,22 @@
   servidor (não vira uma visualização nova).
 */
 import { anonymousId } from "../shared/memory";
-import { queryTolerantAll, readPageIdentity, type CaptureConfig, type PageIdentity } from "./page-identity";
+import { readPageIdentity, type CaptureConfig, type PageIdentity } from "./page-identity";
 import { looksLikeAvatarBox, snapshotAvatar, type Snapshot } from "./avatar-snapshot";
 
-/** O avatar desta tela: o 1º candidato do seletor que parece mesmo um avatar (não um botão de ajuda). */
-const avatarElement = (sel: string) => queryTolerantAll(document, sel).find(looksLikeAvatarBox) ?? null;
+/*
+  O avatar desta tela: SÓ o que o seletor casa por inteiro (e que parece mesmo um avatar). Nada de
+  versões "encurtadas" do seletor: em outras telas elas casavam com o botão de voltar, o ícone de
+  olho, a moeda — e esses viravam o avatar de vários alunos. O perfil aparece numa tela fixa
+  (a inicial do Exploradores); a fotografia acontece quando o aluno passa por ela e fica guardada.
+*/
+const avatarElement = (sel: string) => {
+  try {
+    return Array.from(document.querySelectorAll(sel)).find(looksLikeAvatarBox) ?? null;
+  } catch {
+    return null;
+  }
+};
 import { svgHash } from "../../lib/analytics/svg-avatar";
 import { detectBrowser, detectOS, SESSION_IDLE_MS, LIMITS, type AnalyticsDevice, type AnalyticsPayload } from "../../lib/analytics/core";
 
@@ -170,7 +181,7 @@ function writeJson(store: Storage, key: string, v: unknown) {
 function pageIdentity(c: AnalyticsBootConfig, who: string, email: string | null): Confirmed | null {
   if (!c.capture) return null;
   // trocou a configuração (ex.: automático → seletores): o que foi confirmado antes não vale
-  const sig = `v3|${c.capture.n}|${c.capture.a}`;
+  const sig = `v4|${c.capture.n}|${c.capture.a}`;
   const saved = readJson<Confirmed>(localStorage, CONFIRMED);
   const ok: Confirmed = saved?.who === who && saved.sig === sig ? saved : { who, sig, name: null, avatar: null };
   if ((ok.name && (ok.avatar || ok.svgh)) || Date.now() - lastScan < 15_000) return ok;
@@ -217,7 +228,7 @@ async function prepareAvatar() {
   const who = c.identity();
   const key = who.id || who.email;
   if (!key || who.avatar) return;
-  const sig = `v3|${c.capture.n}|${c.capture.a}`;
+  const sig = `v4|${c.capture.n}|${c.capture.a}`;
   const saved = readJson<Confirmed>(localStorage, CONFIRMED);
   const ok: Confirmed = saved?.who === key && saved.sig === sig ? saved : { who: key, sig, name: null, avatar: null };
   if (ok.avatar || ok.svgh) return;

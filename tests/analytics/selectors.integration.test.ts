@@ -102,13 +102,13 @@ test("servidor: foto de seletor vale mesmo sendo SVG; do automático, não", asy
   assert.equal(parseAnalytics({ ...base, avatar: svg }, now)!.avatar, null);
 });
 
-test("caminho completo copiado de OUTRA tela ainda acha o elemento pelo final do seletor", () => {
-  // copiado numa tela com 4 contêineres antes do header; nesta há só 1
+test("seletor de NOME tolera outra tela; o de FOTO é exato (senão casa com ícone de outra tela)", () => {
   const copied = "body > div.flex.h-full.min-h-0 > div > div > div > div > div.relative.min-h-screen > header > div > div:nth-child(1) > div > button";
-  document.body.innerHTML = `<div class="app"><header><div><div><div><button><img src="https://files-s3.jovensgenios.com/eu.png"></button></div></div><div>sair</div></div></header></div>`;
-  const r = readFull({ n: "", a: copied }, document);
-  assert.equal(r.avatar, "https://files-s3.jovensgenios.com/eu.png");
-  // sem nada parecido na tela: não inventa
-  document.body.innerHTML = `<main><p>quiz</p></main>`;
+  // tela com um contêiner a menos, onde o botão de VOLTAR ocupa o lugar do avatar
+  document.body.innerHTML = `<div class="app"><header><div><div><div><button><svg viewBox="0 0 24 24"><path d="M19 12H5"/></svg></button></div></div></div></header></div>`;
+  assert.equal(readFull({ n: "", a: copied }, document).avatarSvg, undefined); // não confunde o botão de voltar com o avatar
   assert.equal(readFull({ n: "", a: copied }, document).avatar, null);
+  // o nome continua achando pelo final do seletor
+  document.body.innerHTML = `<div class="app"><main><div><div class="gap"><h2>MARIA SILVA SOUZA</h2></div></div></main></div>`;
+  assert.equal(readFull({ n: "body > div.x > div > div > div > main > div > div.gap > h2", a: "" }, document).name, "MARIA SILVA SOUZA");
 });

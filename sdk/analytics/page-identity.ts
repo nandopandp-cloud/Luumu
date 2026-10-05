@@ -333,7 +333,8 @@ export function readPageIdentity(cfg: CaptureConfig, doc: Document = document, e
     if (cfg.n) name = looksLikeName(nameEl?.textContent) ?? textOf(nameEl);
     else if (marked) name = looksLikeName(marked.getAttribute("data-luumu-name") || marked.textContent);
 
-    const av = cfg.a ? queryTolerant(doc, cfg.a) : autoAvatar(doc);
+    // avatar: seletor INTEIRO (a versão tolerante casava com ícones de outras telas)
+    const av = cfg.a ? doc.querySelector(cfg.a) : autoAvatar(doc);
     avatarEl = av;
     const found = cfg.a ? findImage(av) : av ? findImage(av) : { url: null, reason: "nenhuma foto de perfil reconhecida (modo automático)" };
     avatar = found.url;
