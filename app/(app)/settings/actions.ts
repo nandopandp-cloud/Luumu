@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireUser, canManageWorkspace, getCurrentRole } from "@/lib/auth/current";
+import { requireUser, canManageWorkspace, getCurrentRole, getCurrentProjectId } from "@/lib/auth/current";
 import { updateWorkspace } from "@/lib/db/workspace";
 import {
   addMemberToWorkspace,
@@ -12,7 +12,8 @@ import {
   updateMemberRole,
 } from "@/lib/db/users";
 import { setMembershipProjects } from "@/lib/db/member-projects";
-import { cleanSelector, saveIdentityCapture } from "@/lib/db/identity-capture";
+import { cleanSelector, deleteCaptureRule, saveCaptureRule, setIdentityCaptureEnabled } from "@/lib/db/identity-capture";
+import { listHosts } from "@/lib/db/hosts";
 
 export type ActionResult = { ok: boolean; error?: string };
 
@@ -226,27 +227,52 @@ export async function removeMemberAction(targetUserId: string): Promise<ActionRe
   return { ok: true };
 }
 
-const captureSchema = z.object({
-  enabled: z.boolean(),
-  nameSelector: z.string().max(300),
-  avatarSelector: z.string().max(300),
-});
-
-/** Captura de nome e foto da página (toda a workspace). Só owner/admin. */
-export async function saveIdentityCaptureAction(input: unknown): Promise<ActionResult> {
+/** Liga/desliga a captura de nome e foto em toda a workspace. Só owner/admin. */
+export async function setIdentityCaptureAction(enabled: boolean): Promise<ActionResult> {
   const session = await requireUser();
   if (!(await canManageWorkspace())) return { ok: false, error: "Só donos e administradores podem mudar esta configuração." };
-  const p = captureSchema.safeParse(input);
-  if (!p.success) return { ok: false, error: "Configuração inválida." };
-  const nameSelector = cleanSelector(p.data.nameSelector);
-  const avatarSelector = cleanSelector(p.data.avatarSelector);
-  if ((p.data.nameSelector.trim() && !nameSelector) || (p.data.avatarSelector.trim() && !avatarSelector)) {
-    return { ok: false, error: "Seletor não aceito: use só o seletor CSS copiado do navegador (sem <, { } ou ;)." };
-  }
   try {
-    await saveIdentityCapture(session.workspaceId, session.userId, { enabled: p.data.enabled, nameSelector, avatarSelector });
+    await setIdentityCaptureEnabled(session.workspaceId, session.userId, enabled === true);
   } catch {
     return { ok: false, error: "Não foi possível salvar. A migração 0023 já foi aplicada?" };
+  }
+  revalidatePath("/settings/sdk");
+  return { ok: true };
+}
+
+const ruleSchema = z.object({
+  host: z.string().max(253),
+  // "inherit" = a plataforma volta a seguir o padrão do projeto
+  mode: z.enum(["auto", "selectors", "inherit"]),
+  nameSelector: z.string().max(300).default(""),
+  avatarSelector: z.string().max(300).default(""),
+});
+
+/** Onde estão nome e foto na tela deste projeto (host '') ou de uma plataforma dele. Só owner/admin. */
+export async function saveCaptureRuleAction(input: unknown): Promise<ActionResult> {
+  const session = await requireUser();
+  if (!(await canManageWorkspace())) return { ok: false, error: "Só donos e administradores podem mudar esta configuração." };
+  const p = ruleSchema.safeParse(input);
+  if (!p.success) return { ok: false, error: "Configuração inválida." };
+  const projectId = await getCurrentProjectId();
+  const host = p.data.host.trim().toLowerCase();
+  // plataforma precisa ser deste projeto (o mesmo hostname pode existir em outro projeto)
+  if (host && !(await listHosts(projectId)).includes(host)) return { ok: false, error: "Plataforma não encontrada neste projeto." };
+  if (p.data.mode === "inherit" && !host) return { ok: false, error: "Escolha automático ou seletores para o padrão do projeto." };
+
+  const nameSelector = cleanSelector(p.data.nameSelector);
+  const avatarSelector = cleanSelector(p.data.avatarSelector);
+  if (p.data.mode === "selectors") {
+    if ((p.data.nameSelector.trim() && !nameSelector) || (p.data.avatarSelector.trim() && !avatarSelector)) {
+      return { ok: false, error: "Seletor não aceito: use só o seletor CSS copiado do navegador (sem <, { } ou ;)." };
+    }
+    if (!nameSelector && !avatarSelector) return { ok: false, error: "Informe o seletor do nome, da foto ou dos dois." };
+  }
+  try {
+    if (p.data.mode === "inherit") await deleteCaptureRule(projectId, host);
+    else await saveCaptureRule(projectId, session.userId, { host, mode: p.data.mode, nameSelector, avatarSelector });
+  } catch {
+    return { ok: false, error: "Não foi possível salvar. A migração 0025 já foi aplicada?" };
   }
   revalidatePath("/settings/sdk");
   return { ok: true };

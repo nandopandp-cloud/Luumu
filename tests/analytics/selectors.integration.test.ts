@@ -6,7 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { installDom } from "../tours/support/dom-env";
-import { isSafeSelector, stabilizeSelector } from "../../lib/analytics/selectors";
+import { isSafeSelector, resolveCaptureRule, stabilizeSelector, type CaptureRule } from "../../lib/analytics/selectors";
 import { readPageIdentity } from "../../sdk/analytics/page-identity";
 
 installDom("https://preparasp.jovensgenios.com/home");
@@ -41,4 +41,17 @@ test("os seletores convertidos acham nome e foto no menu do usuário — mesmo c
     </li></ul></aside>`;
   const r = readPageIdentity({ n: stabilizeSelector(NAME).value, a: stabilizeSelector(PHOTO).value }, document);
   assert.deepEqual(r, { name: "MARIA EDUARDA LIMA", avatar: "https://files-s3.jovensgenios.com/avatar_77.png" });
+});
+
+test("cada plataforma usa a própria regra; sem ela, o padrão do projeto; sem padrão, automático", () => {
+  const geniex: CaptureRule[] = [
+    { host: "", mode: "selectors", nameSelector: "span.nome", avatarSelector: "div.foto" },
+    { host: "matematicaem.jovensgenios.com", mode: "selectors", nameSelector: "header .user", avatarSelector: "" },
+    { host: "estudantes.jovensgenios.com", mode: "auto", nameSelector: "", avatarSelector: "" },
+  ];
+  assert.deepEqual(resolveCaptureRule(geniex, "preparasp.jovensgenios.com"), { n: "span.nome", a: "div.foto" }); // padrão do projeto
+  assert.deepEqual(resolveCaptureRule(geniex, "matematicaem.jovensgenios.com"), { n: "header .user", a: "" }); // própria
+  assert.deepEqual(resolveCaptureRule(geniex, "estudantes.jovensgenios.com"), { n: "", a: "" }); // própria: automático
+  assert.deepEqual(resolveCaptureRule([], "squad.jovensgenios.com"), { n: "", a: "" }); // projeto sem regra (Exploradores)
+  assert.deepEqual(resolveCaptureRule(geniex, ""), { n: "span.nome", a: "div.foto" }); // SDK antigo sem host
 });

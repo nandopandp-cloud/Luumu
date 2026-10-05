@@ -25,3 +25,22 @@ export function stabilizeSelector(raw: string): { value: string; changed: boolea
 export function isSafeSelector(s: string): boolean {
   return s.length > 0 && s.length <= 300 && !/[<{};`]|javascript:|expression\(/i.test(s);
 }
+
+export type CaptureMode = "auto" | "selectors";
+export interface CaptureRule {
+  /** '' = padrão para todas as plataformas do projeto */
+  host: string;
+  mode: CaptureMode;
+  nameSelector: string;
+  avatarSelector: string;
+}
+
+/**
+ * Seletores que valem numa plataforma: a regra DELA, senão o padrão do projeto (host ''), senão
+ * detecção automática ({ n: "", a: "" }). Cada produto tem seu HTML — Geniex ≠ Exploradores.
+ */
+export function resolveCaptureRule(rules: CaptureRule[], host: string): { n: string; a: string } {
+  const rule = (host ? rules.find((r) => r.host === host) : undefined) ?? rules.find((r) => r.host === "");
+  if (!rule || rule.mode === "auto") return { n: "", a: "" };
+  return { n: rule.nameSelector, a: rule.avatarSelector };
+}

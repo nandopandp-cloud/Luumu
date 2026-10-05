@@ -8,6 +8,7 @@ import {
   real,
   index,
   uniqueIndex,
+  primaryKey,
 } from "drizzle-orm/pg-core";
 
 /* =====================================================================
@@ -619,6 +620,24 @@ export const identityCaptureSettings = pgTable("identity_capture_settings", {
   updatedBy: text("updated_by").references(() => users.id, { onDelete: "set null" }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * Onde estão nome e foto do usuário NA TELA de cada produto: por projeto (host '' = todas as
+ * plataformas dele) e, quando uma plataforma é diferente, por plataforma. Sem linha = automático.
+ */
+export const identityCaptureRules = pgTable(
+  "identity_capture_rules",
+  {
+    projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    host: text("host").notNull().default(""),
+    mode: text("mode").notNull().default("auto"), // "auto" | "selectors"
+    nameSelector: text("name_selector").notNull().default(""),
+    avatarSelector: text("avatar_selector").notNull().default(""),
+    updatedBy: text("updated_by").references(() => users.id, { onDelete: "set null" }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.projectId, t.host] })]
+);
 
 /** Um usuário (anônimo, por navegador) visto no projeto: primeira visita e de onde veio. */
 export const analyticsUsers = pgTable(

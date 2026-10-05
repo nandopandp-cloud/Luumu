@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/Button";
 import { CodeBlock } from "@/components/ui/CodeBlock";
 import { InstallSnippets } from "@/components/sdk/InstallSnippets";
 import { EventDetector } from "@/components/sdk/EventDetector";
-import { canManageWorkspace, getCurrentProjectId, requireUser } from "@/lib/auth/current";
-import { getIdentityCapture, identityCaptureStatus } from "@/lib/db/identity-capture";
+import { canManageWorkspace, getCurrentProject, getCurrentProjectId, requireUser } from "@/lib/auth/current";
+import { getIdentityCapture, identityCaptureStatus, listCaptureRules } from "@/lib/db/identity-capture";
 import { IdentityCaptureCard } from "@/components/sdk/IdentityCaptureCard";
 import { getPrimaryPublicKey } from "@/lib/db/keys";
 import { listEvents } from "@/lib/db/events";
@@ -36,7 +36,7 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
 
 export default async function SdkPage() {
   const [projectId, session] = await Promise.all([getCurrentProjectId(), requireUser()]);
-  const [sdkKey, events, activeSurveys, hosts, capture, canManage, captureStatus] = await Promise.all([
+  const [sdkKey, events, activeSurveys, hosts, capture, canManage, captureStatus, captureRules, project] = await Promise.all([
     getPrimaryPublicKey(projectId),
     listEvents(projectId),
     listActiveSurveys(projectId),
@@ -44,7 +44,10 @@ export default async function SdkPage() {
     // sem a migração 0023 o card avisa em vez de quebrar a página
     getIdentityCapture(session.workspaceId, true).catch(() => null),
     canManageWorkspace(),
-    identityCaptureStatus(session.workspaceId).catch(() => null),
+    identityCaptureStatus(session.workspaceId, projectId).catch(() => null),
+    // sem a migração 0025 o card avisa
+    listCaptureRules(projectId, true).catch(() => null),
+    getCurrentProject(),
   ]);
 
   const initialStatus = {
@@ -248,7 +251,15 @@ async function handleLoginSuccess(user) {
 
         {/* Coluna lateral: chave + como funciona */}
         <div className="flex min-w-0 flex-col gap-4">
-          <IdentityCaptureCard initial={capture} canManage={canManage} status={captureStatus} />
+          <IdentityCaptureCard
+            enabled={!!capture?.enabled}
+            unavailable={!capture}
+            canManage={canManage}
+            projectName={project?.name ?? "deste projeto"}
+            hosts={hosts}
+            rules={captureRules}
+            status={captureStatus}
+          />
           <Card>
             <div className="mb-3 flex items-center gap-2">
               <Key className="size-4 text-accent" />
