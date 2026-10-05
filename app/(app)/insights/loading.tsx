@@ -1,5 +1,5 @@
-import { InsightSkeleton } from "@/components/insights/InsightSkeleton";
+import { RouteLoading } from "@/components/page-loader/RouteLoading";
 
 export default function Loading() {
-  return <InsightSkeleton />;
+  return <RouteLoading />;
 }

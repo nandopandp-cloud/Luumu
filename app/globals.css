@@ -301,3 +301,20 @@ h1, h2, h3, h4, h5 {
 @media (prefers-reduced-motion: reduce) {
   .ill-float, .ill-leaf-l, .ill-leaf-r, .ill-bob-a, .ill-bob-b, .ill-bob-c, .ill-drift, .ill-drift-b, .ill-sparks, .ill-unplug { animation: none; }
 }
+
+/* ---- Loading entre páginas (components/page-loader) ----
+   Cobre só a área de conteúdo (menu e topo nítidos); abaixo de menus e modais (z 50+). */
+.pl-root { position: absolute; inset: -1.75rem -1rem 0; z-index: 5; overflow: hidden; pointer-events: none; }
+@media (min-width: 768px) { .pl-root { inset: -1.75rem -2rem 0; } }
+.pl-veil { position: absolute; inset: 0; background: color-mix(in srgb, var(--bg) 74%, transparent); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); opacity: var(--pl-veil, 0); }
+.pl-runner { position: absolute; left: 0; top: 0; width: 150px; height: 150px; margin: -75px 0 0 -75px; opacity: 0; will-change: transform; }
+.pl-runner svg { width: 100%; height: 100%; overflow: visible; display: block; }
+.pl-shadow { position: absolute; left: 0; top: 0; width: 110px; height: 12px; margin: -6px 0 0 -55px; border-radius: 50%; background: color-mix(in srgb, var(--luumu-roxo-claro) 32%, transparent); opacity: 0; }
+.pl-trail { position: absolute; left: 0; top: 0; height: 42px; margin-top: -21px; border-radius: 42px; opacity: 0; background: linear-gradient(90deg, rgb(203 186 250 / 0), rgb(203 186 250 / .55) 70%, rgb(178 152 246 / .75)); }
+.pl-trail2 { height: 4px; margin-top: -2px; background: linear-gradient(90deg, rgb(255 255 255 / 0), #fff 80%); }
+.pl-speed { position: absolute; left: 0; top: 0; height: 3px; border-radius: 3px; opacity: 0; background: linear-gradient(90deg, rgb(167 139 250 / 0), rgb(167 139 250 / .7)); }
+.pl-chip { position: absolute; left: 0; top: 0; display: flex; align-items: center; gap: 8px; padding: 9px 13px 9px 10px; border-radius: 14px; background: var(--bg-elev); box-shadow: 0 8px 18px rgb(74 47 168 / .14); font-weight: 700; font-size: 13px; color: var(--text); white-space: nowrap; opacity: 0; transform-origin: 50% 100%; }
+.pl-chip svg { width: 22px; height: 22px; flex: none; }
+.pl-brand { position: absolute; left: 50%; top: min(62%, 58vh); transform: translateX(-50%); text-align: center; opacity: 0; color: var(--accent); }
+.pl-brand p { margin: 8px 0 0; color: var(--text-mut); font-size: 14px; font-weight: 500; }
+@media (prefers-reduced-motion: reduce) { .pl-root { display: none; } }

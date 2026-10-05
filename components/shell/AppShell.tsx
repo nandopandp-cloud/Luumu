@@ -1,5 +1,6 @@
 "use client";
 
+import { PageLoader } from "@/components/page-loader/PageLoader";
 import { useCallback, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Sidebar } from "./Sidebar";
@@ -102,7 +103,11 @@ export function AppShell({
           <Topbar onMenu={() => setMobileOpen(true)} user={user} hosts={hosts} projectId={activeProjectId} platform={platform} />
           {/* com a bandeja recolhida, o conteúdo ganha o espaço de volta */}
           <main className={cn("mx-auto w-full flex-1 px-4 py-7 md:px-8", collapsed ? "max-w-[1480px]" : "max-w-[1280px]")}>
-            {children}
+            {/* a ameixa corre por cima do conteúdo enquanto a próxima página carrega */}
+            <div className="relative">
+              {children}
+              <PageLoader />
+            </div>
           </main>
         </div>
       </div>

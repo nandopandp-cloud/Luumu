@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Luumu — loading entre páginas (protótipo)</title>
+<style>
+  :root { --bg:#f7f5fd; --panel:#fff; --text:#1a1530; --mut:#6b6880; --border:#ebe6f8; --brand:#5b21d0; --accent:#6b2bd9; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:#eeeaf8; color:var(--text); font:14px/1.45 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
+  .bar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:center; padding:18px 16px 4px; }
+  button { font:inherit; font-weight:600; border:1px solid var(--border); background:var(--panel); color:var(--text); padding:9px 15px; border-radius:999px; cursor:pointer; }
+  button:hover { border-color:#8b5cf6; color:#7c3aed; }
+  button.primary { background:#6b2bd9; color:#fff; border:0; }
+  .scrub { display:flex; align-items:center; gap:12px; max-width:1100px; margin:10px auto 0; padding:0 16px; color:var(--mut); font-size:12px; }
+  .scrub input { flex:1; accent-color:#7c3aed; }
+  .scrub b { color:var(--text); min-width:250px; }
+  .hint { text-align:center; color:var(--mut); font-size:12px; margin:6px 16px 0; }
+
+  /* ---- app de exemplo ---- */
+  .app { position:relative; max-width:1100px; height:620px; margin:14px auto 30px; border:1px solid var(--border); border-radius:20px; overflow:hidden; display:grid; grid-template-columns:210px 1fr; background:var(--bg); box-shadow:0 16px 40px rgb(76 40 160 / .10); }
+  .side { background:#fff; border-right:1px solid var(--border); padding:22px 14px; z-index:2; }
+  .side .logo { height:24px; color:var(--brand); margin:0 0 24px 6px; display:block; }
+  .side a { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:10px; color:#8a86a0; font-size:13px; text-decoration:none; margin-bottom:2px; cursor:pointer; }
+  .side a i { width:13px; height:13px; border-radius:4px; border:2px solid currentColor; }
+  .side a.on { background:#ece4ff; color:var(--brand); font-weight:700; }
+  .col { display:flex; flex-direction:column; min-width:0; }
+  .top { height:62px; border-bottom:1px solid var(--border); background:#fff; display:flex; align-items:center; padding:0 22px; gap:12px; z-index:2; }
+  .top .search { flex:0 1 420px; height:36px; border-radius:10px; background:#f4f1fb; border:1px solid var(--border); }
+  .main { position:relative; flex:1; overflow:hidden; }
+  .page { position:absolute; inset:0; padding:26px 28px; will-change:filter, opacity, transform; }
+  .page h1 { margin:0; font-size:26px; letter-spacing:-.02em; }
+  .page p.sub { margin:4px 0 18px; color:var(--mut); font-size:13px; }
+  .grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+  .kpi { background:#fff; border:1px solid var(--border); border-radius:14px; padding:14px; font-size:12px; color:var(--mut); }
+  .kpi b { display:block; font-size:24px; color:var(--text); margin-top:4px; }
+  .chart { margin-top:12px; height:250px; background:#fff; border:1px solid var(--border); border-radius:14px; padding:14px; display:flex; align-items:flex-end; gap:12px; }
+  .chart i { flex:1; border-radius:6px; background:linear-gradient(to top,#6b2bd9,#a78bfa); opacity:.85; }
+  .line { margin-top:12px; height:250px; background:#fff; border:1px solid var(--border); border-radius:14px; position:relative; overflow:hidden; }
+  .line svg { position:absolute; inset:0; width:100%; height:100%; }
+
+  /* ---- loader ---- */
+  .veil { position:absolute; inset:0; background:rgb(247 245 253 / .74); opacity:0; pointer-events:none; }
+  .stage { position:absolute; inset:0; pointer-events:none; overflow:hidden; }
+  .runner { position:absolute; left:0; top:0; width:150px; height:150px; margin:-75px 0 0 -75px; will-change:transform; }
+  .runner svg { width:100%; height:100%; overflow:visible; display:block; }
+  .trail { position:absolute; left:0; top:0; height:42px; margin-top:-21px; border-radius:30px; background:linear-gradient(90deg, rgb(203 186 250 / 0), rgb(203 186 250 / .55) 70%, rgb(178 152 246 / .75)); will-change:transform, width, opacity; }
+  .trail.t2 { height:4px; margin-top:-2px; background:linear-gradient(90deg, rgb(255 255 255 / 0), #fff 80%); }
+  .speed { position:absolute; left:0; top:0; height:3px; border-radius:3px; background:linear-gradient(90deg, rgb(167 139 250 / 0), rgb(167 139 250 / .7)); }
+  .chip { position:absolute; left:0; top:0; display:flex; align-items:center; gap:8px; padding:9px 13px 9px 10px; border-radius:14px; background:#fff; box-shadow:0 8px 18px rgb(74 47 168 / .14); font-weight:700; font-size:13px; color:#2b1a5e; white-space:nowrap; transform-origin:50% 100%; opacity:0; will-change:transform, opacity; }
+  .chip svg { width:22px; height:22px; flex:none; }
+  .shadow { position:absolute; left:0; top:0; width:110px; height:12px; margin:-6px 0 0 -55px; border-radius:50%; background:#dcd2f7; opacity:0; }
+  .brand { position:absolute; left:50%; top:62%; transform:translateX(-50%); text-align:center; opacity:0; }
+  .brand svg { height:34px; color:var(--brand); display:block; margin:0 auto; }
+  .brand p { margin:8px 0 0; color:#7a63c9; font-size:14px; font-weight:500; }
+</style>
+</head>
+<body>
+<div class="bar">
+  <button class="primary" id="fast">▶ Navegar (rápido · ~700 ms)</button>
+  <button id="slow">Navegar (lento · 2,5 s)</button>
+  <button id="slowmo">Câmera lenta: não</button>
+  <button id="variant">Variação: A · correndo</button>
+</div>
+<div class="scrub">
+  <span>Linha do tempo</span>
+  <input id="t" type="range" min="0" max="760" step="1" value="0" />
+  <b id="tl">0 ms</b>
+</div>
+<p class="hint">Clique também nos itens do menu do app de exemplo. Abaixo de ~150 ms nada aparece (navegação instantânea continua instantânea).</p>
+
+<div class="app">
+  <aside class="side">
+    <svg class="logo" viewBox="0 440 736 150"><path d="M459.585 454.713L460.6 454.658C479.355 453.738 490.475 456.163 504.505 469.008C522.41 450.673 560.33 449.048 579.035 466.918C591.08 478.433 592.04 500.033 592.165 515.728L592.23 545.678C592.245 555.853 593.99 570.838 586.335 578.288C577.47 586.918 559.04 584.628 554.845 572.058C552.675 565.558 553.225 559.908 553.26 553.293L553.435 523.748C553.465 516.498 554.005 508.748 552.54 501.613C551.765 497.848 550.35 494.083 547.665 491.253C543.975 487.373 538.725 486.193 533.56 486.028C528.13 485.858 523.965 487.373 520.12 491.183C518.165 493.123 516.465 495.403 515.58 498.033C511.53 510.018 513.25 547.483 513.305 561.183C513.3 566.623 513 571.013 509.9 575.823C507.32 579.853 503.16 582.608 498.445 583.413C492.785 584.413 486.245 582.733 481.58 579.418C473.19 573.458 474.23 562.228 474.29 553.093L474.51 523.818C474.625 509.963 476.73 486.873 456.135 486.243C435.84 485.623 435.69 504.558 435.72 519.548L435.79 546.443C435.82 559.233 437.675 580.208 421.225 582.923C392.4 587.408 394.695 563.678 394.835 543.753C395.275 523.423 393.92 502.738 395.645 482.478C397.31 462.923 418.65 452.378 434.525 464.238C441.255 458.398 450.965 455.953 459.585 454.713Z" fill="currentColor"/> <path d="M735.175 526.768C736.05 536.493 731.47 553.188 726.31 561.548C708.535 590.313 655.235 591.743 630.555 572.888C603.96 552.573 612.669 508.843 610.829 479.788C610.514 474.758 611.609 467.013 614.969 463.043C620.949 456.288 635.51 455.553 642.25 461.613C649.63 468.268 648.079 480.758 648.284 489.738C648.399 501.913 647.859 514.128 648.399 526.298C649.174 543.823 661.079 552.938 678.149 550.633C699.224 547.783 697.86 525.493 697.86 509.558C697.82 501.203 697.845 492.843 697.94 484.488C698.065 477.518 697.665 469.878 702.36 463.978C707.945 456.363 724.334 457.063 730.779 462.843C736.379 467.868 735.385 481.913 735.36 488.998L735.185 517.573C735.205 520.393 735.32 524.028 735.175 526.768Z" fill="currentColor"/> <path d="M734.08 510.603C734.57 512.693 734.875 515.403 735.185 517.573C735.205 520.393 735.32 524.028 735.175 526.768L734.325 526.073C733.16 523.493 733.92 513.923 734.08 510.603Z" fill="currentColor"/> <path d="M16.3089 385.243C24.7814 383.992 36.2784 387.048 37.9694 396.183C40.5594 410.183 39.6929 427.773 39.7159 442.058L39.9404 500.218C40.0014 507.513 39.6124 522.268 41.7479 528.353C50.0169 551.923 89.8379 543.308 108.114 551.983C111.754 553.908 115.217 557.543 116.22 561.593C119.177 573.533 107.918 578.173 98.6874 580.413C62.0929 587.663 9.09044 586.638 2.16844 539.998C0.0624418 525.808 0.363941 513.168 0.398941 498.883L0.361938 455.883L0.301437 419.958C0.285937 404.668 -3.51356 387.548 16.3089 385.243Z" fill="currentColor"/> <path d="M292.193 516.298C292.433 534.848 295.369 552.933 320.676 550.088C338.69 548.068 338.325 529.328 338.397 515.093C338.495 506.348 338.489 497.603 338.378 488.863C338.293 482.488 337.866 475.518 338.576 469.368C339.603 460.478 346.295 455.888 354.598 454.903C359.435 454.328 365.21 455.963 369.085 458.898C373.375 462.148 374.42 468.018 374.72 473.048C374.96 482.743 374.96 492.613 374.905 502.383C374.78 524.498 377.12 549.718 361.535 567.688C351.516 579.243 333.976 584.663 319.229 585.208C303.315 585.798 285.941 582.848 273.881 571.658C259.98 558.758 257.312 542.903 256.737 524.763C256.429 515.053 256.566 505.178 256.563 495.418C256.56 486.038 255.814 475.383 257.289 466.223C257.665 463.858 258.788 462.058 260.436 460.368C269.02 451.578 289.572 452.998 291.554 467.308C293.109 478.533 292.329 491.303 292.227 502.748C292.326 507.268 292.315 511.783 292.193 516.298Z" fill="currentColor"/> <path d="M292.193 516.297L291.179 515.422C290.603 512.712 290.532 501.122 290.915 498.407L291.415 498.342L291.211 497.958C291.816 499.803 291.93 500.812 292.227 502.747C292.326 507.267 292.315 511.782 292.193 516.297Z" fill="currentColor"/> <path d="M133.803 455.213C154.155 452.803 154.29 469.752 154.202 484.107L154.129 508.347C154.117 519.847 152.429 535.693 161.411 544.398C168.194 550.973 180.728 551.738 188.478 546.433C200.54 538.173 198.761 521.273 198.705 508.583L198.574 483.152C198.5 468.307 197.7 455.903 217.075 455.068C227.754 454.498 234.498 461.258 234.752 471.873C235.017 482.928 234.845 494.143 234.795 505.213C234.866 524.328 236.759 548.768 224.707 564.763C206.591 588.833 162.132 591.323 138.962 574.078C114.15 555.613 117.935 520.293 117.747 493.063C117.693 485.278 117.282 476.352 118.15 468.662C119.111 460.147 125.933 456.258 133.803 455.213Z" fill="currentColor"/> <path d="M679.36 457.223C678.24 457.683 678.329 457.678 677.149 457.423C676.389 455.828 675.849 451.453 675.789 449.648C674.904 422.503 705.139 411.698 727.599 410.948C729.519 410.888 729.44 410.748 730.695 411.928C724.32 441.623 710.915 455.718 679.36 457.223Z" fill="#88D029"/> <path d="M679.36 457.223C678.24 457.683 678.329 457.678 677.149 457.423C676.389 455.828 675.849 451.453 675.789 449.648C674.904 422.503 705.139 411.698 727.599 410.948C729.519 410.888 729.44 410.748 730.695 411.928C717.715 415.988 684.395 444.888 679.125 456.743L679.36 457.223Z" fill="#469C2B"/></svg>
+    <a data-go="dash" class="on"><i></i>Início</a>
+    <a data-go="dash"><i></i>Pesquisas</a>
+    <a data-go="ana"><i></i>Analytics</a>
+    <a data-go="dash"><i></i>Respostas</a>
+    <a data-go="ana"><i></i>Relatórios</a>
+  </aside>
+  <div class="col">
+    <div class="top"><div class="search"></div></div>
+    <div class="main" id="main">
+      <div class="page" id="pageA">
+        <h1>Dashboard</h1><p class="sub">Aqui você acompanha os principais resultados da sua conta.</p>
+        <div class="grid"><div class="kpi">CSAT<b>92,4</b></div><div class="kpi">Pesquisas ativas<b>12</b></div><div class="kpi">Respostas<b>1.248</b></div><div class="kpi">Comentários<b>318</b></div></div>
+        <div class="chart"><i style="height:38%"></i><i style="height:62%"></i><i style="height:48%"></i><i style="height:80%"></i><i style="height:66%"></i><i style="height:92%"></i><i style="height:74%"></i><i style="height:58%"></i></div>
+      </div>
+      <div class="page" id="pageB" style="opacity:0">
+        <h1>Analytics</h1><p class="sub">Acompanhe a evolução do feedback e descubra insights valiosos.</p>
+        <div class="grid"><div class="kpi">Sessões<b>8.107</b></div><div class="kpi">Usuários<b>2.657</b></div><div class="kpi">Tempo médio<b>10m 24s</b></div><div class="kpi">Conversão<b>4,8%</b></div></div>
+        <div class="line"><svg viewBox="0 0 400 100" preserveAspectRatio="none"><path d="M0 85 C 50 80 80 60 130 66 S 220 30 280 36 S 360 14 400 10" fill="none" stroke="#8b5cf6" stroke-width="2"/><path d="M0 85 C 50 80 80 60 130 66 S 220 30 280 36 S 360 14 400 10 L400 100 L0 100Z" fill="#8b5cf6" opacity=".08"/></svg></div>
+      </div>
+      <div class="veil" id="veil"></div>
+      <div class="stage" id="stage">
+        <div class="speed" id="sp1"></div><div class="speed" id="sp2"></div>
+        <div class="trail" id="trail"></div><div class="trail t2" id="trail2"></div>
+        <div class="shadow" id="shadow"></div>
+        <div id="chips"></div>
+        <div class="runner" id="runner">
+          <svg viewBox="-90 -110 180 190">
+            <defs><clipPath id="cb"><circle r="62"/></clipPath></defs>
+            <g id="bob">
+              <!-- pernas (correndo) -->
+              <g id="legB"><ellipse cx="-14" cy="62" rx="16" ry="10" fill="#4f1db8"/></g>
+              <g id="armB"><ellipse cx="-58" cy="20" rx="14" ry="17" fill="#5a22c7"/></g>
+              <circle r="62" fill="#6a2fe0"/>
+              <circle cx="-9" cy="-10" r="58" fill="#7f45f2" clip-path="url(#cb)"/>
+              <ellipse cx="-30" cy="-30" rx="13" ry="7.5" fill="#a47cff" transform="rotate(-38 -30 -30)"/>
+              <circle cx="-43" cy="-14" r="3.6" fill="#a47cff"/>
+              <path d="M-9 -60 Q0 -54 9 -60" stroke="#5422b8" stroke-width="3" fill="none" stroke-linecap="round"/>
+              <path d="M1 -57 C 1 -66 4 -72 9 -78" stroke="#8a3b34" stroke-width="6" stroke-linecap="round" fill="none"/>
+              <g transform="translate(2 -58) scale(1.18) translate(-2 58)">
+                <g id="leafL"><path d="M-2 -60 C -14 -82 -44 -90 -64 -76 C -48 -58 -22 -50 -2 -60Z" fill="#7fd34e"/><path d="M-2 -60 C -22 -64 -42 -70 -64 -76 C -48 -58 -22 -50 -2 -60Z" fill="#4cae3c"/></g>
+                <g id="leafR"><path d="M5 -62 C 16 -94 52 -104 72 -88 C 60 -64 30 -54 5 -62Z" fill="#8ad95a"/><path d="M5 -62 C 28 -70 50 -78 72 -88 C 60 -64 30 -54 5 -62Z" fill="#52b541"/></g>
+              </g>
+              <!-- rosto: determinada, olhando para frente -->
+              <ellipse cx="-36" cy="18" rx="11" ry="6.5" fill="#ff8dbd"/><ellipse cx="38" cy="18" rx="11" ry="6.5" fill="#ff8dbd"/>
+              <g id="eyes">
+                <ellipse cx="-18" cy="-2" rx="12.5" ry="14" fill="#fff"/><ellipse cx="24" cy="-2" rx="12.5" ry="14" fill="#fff"/>
+                <g id="pupils"><circle cx="-13" cy="1" r="9" fill="#1c1033"/><circle cx="29" cy="1" r="9" fill="#1c1033"/>
+                <circle cx="-9.5" cy="-3" r="3.2" fill="#fff"/><circle cx="32.5" cy="-3" r="3.2" fill="#fff"/></g>
+              </g>
+              <path d="M-30 -24 Q -20 -30 -8 -24" stroke="#1c1033" stroke-width="4.2" fill="none" stroke-linecap="round"/>
+              <path d="M14 -26 Q 24 -32 36 -26" stroke="#1c1033" stroke-width="4.2" fill="none" stroke-linecap="round"/>
+              <g id="mouth"><path d="M-4 13 Q 10 34 22 13 Q 10 16 -4 13Z" fill="#2a0f4a"/><path d="M3 24 Q 10 30 16 24 Q 10 20 3 24Z" fill="#ff5d8f"/></g>
+              <!-- celular com os dados na mão -->
+              <g id="phone" transform="translate(46 34) rotate(16)">
+                <rect x="-20" y="-30" width="42" height="58" rx="9" fill="#fff"/>
+                <rect x="-14" y="6" width="7" height="14" rx="2" fill="#a78bfa"/><rect x="-4" y="-2" width="7" height="22" rx="2" fill="#8b5cf6"/><rect x="6" y="-10" width="7" height="30" rx="2" fill="#7c3aed"/>
+              </g>
+              <g id="armF"><ellipse cx="62" cy="28" rx="13" ry="16" fill="#7238e6"/></g>
+              <g id="legF"><ellipse cx="18" cy="62" rx="16" ry="10" fill="#5a22c7"/></g>
+            </g>
+          </svg>
+        </div>
+        <div class="brand" id="brand"><svg viewBox="0 440 736 150"><path d="M459.585 454.713L460.6 454.658C479.355 453.738 490.475 456.163 504.505 469.008C522.41 450.673 560.33 449.048 579.035 466.918C591.08 478.433 592.04 500.033 592.165 515.728L592.23 545.678C592.245 555.853 593.99 570.838 586.335 578.288C577.47 586.918 559.04 584.628 554.845 572.058C552.675 565.558 553.225 559.908 553.26 553.293L553.435 523.748C553.465 516.498 554.005 508.748 552.54 501.613C551.765 497.848 550.35 494.083 547.665 491.253C543.975 487.373 538.725 486.193 533.56 486.028C528.13 485.858 523.965 487.373 520.12 491.183C518.165 493.123 516.465 495.403 515.58 498.033C511.53 510.018 513.25 547.483 513.305 561.183C513.3 566.623 513 571.013 509.9 575.823C507.32 579.853 503.16 582.608 498.445 583.413C492.785 584.413 486.245 582.733 481.58 579.418C473.19 573.458 474.23 562.228 474.29 553.093L474.51 523.818C474.625 509.963 476.73 486.873 456.135 486.243C435.84 485.623 435.69 504.558 435.72 519.548L435.79 546.443C435.82 559.233 437.675 580.208 421.225 582.923C392.4 587.408 394.695 563.678 394.835 543.753C395.275 523.423 393.92 502.738 395.645 482.478C397.31 462.923 418.65 452.378 434.525 464.238C441.255 458.398 450.965 455.953 459.585 454.713Z" fill="currentColor"/> <path d="M735.175 526.768C736.05 536.493 731.47 553.188 726.31 561.548C708.535 590.313 655.235 591.743 630.555 572.888C603.96 552.573 612.669 508.843 610.829 479.788C610.514 474.758 611.609 467.013 614.969 463.043C620.949 456.288 635.51 455.553 642.25 461.613C649.63 468.268 648.079 480.758 648.284 489.738C648.399 501.913 647.859 514.128 648.399 526.298C649.174 543.823 661.079 552.938 678.149 550.633C699.224 547.783 697.86 525.493 697.86 509.558C697.82 501.203 697.845 492.843 697.94 484.488C698.065 477.518 697.665 469.878 702.36 463.978C707.945 456.363 724.334 457.063 730.779 462.843C736.379 467.868 735.385 481.913 735.36 488.998L735.185 517.573C735.205 520.393 735.32 524.028 735.175 526.768Z" fill="currentColor"/> <path d="M734.08 510.603C734.57 512.693 734.875 515.403 735.185 517.573C735.205 520.393 735.32 524.028 735.175 526.768L734.325 526.073C733.16 523.493 733.92 513.923 734.08 510.603Z" fill="currentColor"/> <path d="M16.3089 385.243C24.7814 383.992 36.2784 387.048 37.9694 396.183C40.5594 410.183 39.6929 427.773 39.7159 442.058L39.9404 500.218C40.0014 507.513 39.6124 522.268 41.7479 528.353C50.0169 551.923 89.8379 543.308 108.114 551.983C111.754 553.908 115.217 557.543 116.22 561.593C119.177 573.533 107.918 578.173 98.6874 580.413C62.0929 587.663 9.09044 586.638 2.16844 539.998C0.0624418 525.808 0.363941 513.168 0.398941 498.883L0.361938 455.883L0.301437 419.958C0.285937 404.668 -3.51356 387.548 16.3089 385.243Z" fill="currentColor"/> <path d="M292.193 516.298C292.433 534.848 295.369 552.933 320.676 550.088C338.69 548.068 338.325 529.328 338.397 515.093C338.495 506.348 338.489 497.603 338.378 488.863C338.293 482.488 337.866 475.518 338.576 469.368C339.603 460.478 346.295 455.888 354.598 454.903C359.435 454.328 365.21 455.963 369.085 458.898C373.375 462.148 374.42 468.018 374.72 473.048C374.96 482.743 374.96 492.613 374.905 502.383C374.78 524.498 377.12 549.718 361.535 567.688C351.516 579.243 333.976 584.663 319.229 585.208C303.315 585.798 285.941 582.848 273.881 571.658C259.98 558.758 257.312 542.903 256.737 524.763C256.429 515.053 256.566 505.178 256.563 495.418C256.56 486.038 255.814 475.383 257.289 466.223C257.665 463.858 258.788 462.058 260.436 460.368C269.02 451.578 289.572 452.998 291.554 467.308C293.109 478.533 292.329 491.303 292.227 502.748C292.326 507.268 292.315 511.783 292.193 516.298Z" fill="currentColor"/> <path d="M292.193 516.297L291.179 515.422C290.603 512.712 290.532 501.122 290.915 498.407L291.415 498.342L291.211 497.958C291.816 499.803 291.93 500.812 292.227 502.747C292.326 507.267 292.315 511.782 292.193 516.297Z" fill="currentColor"/> <path d="M133.803 455.213C154.155 452.803 154.29 469.752 154.202 484.107L154.129 508.347C154.117 519.847 152.429 535.693 161.411 544.398C168.194 550.973 180.728 551.738 188.478 546.433C200.54 538.173 198.761 521.273 198.705 508.583L198.574 483.152C198.5 468.307 197.7 455.903 217.075 455.068C227.754 454.498 234.498 461.258 234.752 471.873C235.017 482.928 234.845 494.143 234.795 505.213C234.866 524.328 236.759 548.768 224.707 564.763C206.591 588.833 162.132 591.323 138.962 574.078C114.15 555.613 117.935 520.293 117.747 493.063C117.693 485.278 117.282 476.352 118.15 468.662C119.111 460.147 125.933 456.258 133.803 455.213Z" fill="currentColor"/> <path d="M679.36 457.223C678.24 457.683 678.329 457.678 677.149 457.423C676.389 455.828 675.849 451.453 675.789 449.648C674.904 422.503 705.139 411.698 727.599 410.948C729.519 410.888 729.44 410.748 730.695 411.928C724.32 441.623 710.915 455.718 679.36 457.223Z" fill="#88D029"/> <path d="M679.36 457.223C678.24 457.683 678.329 457.678 677.149 457.423C676.389 455.828 675.849 451.453 675.789 449.648C674.904 422.503 705.139 411.698 727.599 410.948C729.519 410.888 729.44 410.748 730.695 411.928C717.715 415.988 684.395 444.888 679.125 456.743L679.36 457.223Z" fill="#469C2B"/></svg><p>Carregando sua experiência…</p></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/*
+  Loading entre páginas — micro-momento de marca (~700 ms):
+    0–100    página atual recebe blur sutil
+    100–250  a ameixa entra correndo
+    250–450  CSAT → Pesquisa → Dados → Insights (~100 ms cada)
+    450–600  cruza o centro com rastro lavanda
+    600–700  sai da tela → conteúdo novo aparece
+  Se a página demorar, a ameixa dá mais voltas; passado 1 s aparece o nome da Luumu.
+  Sem barra de progresso.
+*/
+const $ = (id) => document.getElementById(id);
+const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+const seg = (t, a, b) => (t <= a ? 0 : t >= b ? 1 : (t - a) / (b - a));
+const eo = (p) => 1 - (1 - p) ** 3;
+const lerp = (a, b, p) => a + (b - a) * p;
+
+const ICONS = {
+  csat: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="#7b3ff2"/><circle cx="8.5" cy="10" r="1.6" fill="#fff"/><circle cx="15.5" cy="10" r="1.6" fill="#fff"/><path d="M7.5 14 Q12 18.5 16.5 14" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/></svg>',
+  pesq: '<svg viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="6" fill="#ede6ff"/><rect x="6" y="7" width="3" height="3" rx="1" fill="#8b5cf6"/><rect x="11" y="7.5" width="8" height="2" rx="1" fill="#a78bfa"/><rect x="6" y="13" width="3" height="3" rx="1" fill="#8b5cf6"/><rect x="11" y="13.5" width="6" height="2" rx="1" fill="#a78bfa"/></svg>',
+  dados: '<svg viewBox="0 0 24 24"><rect x="3" y="12" width="4.5" height="9" rx="1.5" fill="#5b7cff"/><rect x="9.75" y="7" width="4.5" height="14" rx="1.5" fill="#3f63ff"/><rect x="16.5" y="3" width="4.5" height="18" rx="1.5" fill="#2f53f0"/></svg>',
+  ins: '<svg viewBox="0 0 24 24"><path d="M12 1.5 C13 8 16 11 22.5 12 C16 13 13 16 12 22.5 C11 16 8 13 1.5 12 C8 11 11 8 12 1.5Z" fill="#8b5cf6"/><circle cx="20" cy="4" r="2" fill="#ffc233"/></svg>',
+};
+// cada um aparece ~100 ms quando a ameixa passa; acima/abaixo do caminho
+const CHIPS = [
+  { k: "csat", label: "CSAT", at: 250, x: 0.27, dy: -118 },
+  { k: "pesq", label: "Pesquisa", at: 310, x: 0.38, dy: 96 },
+  { k: "dados", label: "Dados", at: 370, x: 0.5, dy: -126 },
+  { k: "ins", label: "Insights", at: 430, x: 0.6, dy: 100 },
+];
+const chipEls = CHIPS.map((c) => {
+  const el = document.createElement("div");
+  el.className = "chip";
+  el.innerHTML = ICONS[c.k] + c.label;
+  $("chips").appendChild(el);
+  return el;
+});
+
+/* uma passada da ameixa: entra pela esquerda (100), cruza o centro (450–600), sai (700) */
+const PASS = 600;
+function runX(p, W) {
+  // rápida na entrada, um tiquinho mais lenta no centro (dá para vê-la), acelera na saída
+  const k = p < 0.25 ? lerp(-0.12, 0.3, eo(p / 0.25)) : p < 0.83 ? lerp(0.3, 0.68, (p - 0.25) / 0.58) : lerp(0.68, 1.15, ((p - 0.83) / 0.17) ** 1.6);
+  return k * W;
+}
+
+let doneAt = 700; // quando a página nova está pronta (≥ 600: a saída sempre fecha a passada)
+function render(t) {
+  const W = $("main").clientWidth, H = $("main").clientHeight, cy = H * 0.46;
+  const passes = Math.max(1, Math.ceil((doneAt - 100) / PASS));
+  const end = 100 + passes * PASS;               // fim da última passada
+  const revealAt = end - 100;                    // a página nova aparece enquanto ela sai
+  const inLoop = t >= 100 && t < end;
+  const p = inLoop ? ((t - 100) % PASS) / PASS : t >= end ? 1 : 0;
+  const pass = Math.floor((t - 100) / PASS);
+
+  // 0–100: blur sutil na página atual; some quando a nova entra
+  const out = seg(t, revealAt, revealAt + 100);
+  const blurIn = seg(t, 0, 100) * (1 - out);
+  $("pageA").style.filter = `blur(${(3 * blurIn).toFixed(2)}px)`;
+  $("pageA").style.opacity = (1 - out).toFixed(3);
+  $("veil").style.opacity = (blurIn).toFixed(3);
+  // conteúdo novo nasce: blur 4→0, 6px→0
+  $("pageB").style.opacity = eo(out).toFixed(3);
+  $("pageB").style.filter = out > 0 && out < 1 ? `blur(${(4 * (1 - eo(out))).toFixed(2)}px)` : "";
+  $("pageB").style.transform = `translateY(${(6 * (1 - eo(out))).toFixed(2)}px)`;
+
+  // ameixa correndo
+  const x = runX(p, W);
+  const stride = (t / 1000) * 2 * Math.PI * 7;   // ~7 passadas por segundo
+  const bob = -Math.abs(Math.sin(stride)) * 9;
+  const visible = inLoop ? 1 : 0;
+  $("runner").style.opacity = visible;
+  $("runner").style.transform = `translate(${x.toFixed(1)}px, ${(cy + bob).toFixed(1)}px) rotate(8deg) scale(1.1)`;
+  const sw = Math.sin(stride);
+  $("legF").setAttribute("transform", `rotate(${(sw * 28).toFixed(1)} 18 50) translate(${(sw * 6).toFixed(1)} ${(-Math.max(0, sw) * 6).toFixed(1)})`);
+  $("legB").setAttribute("transform", `rotate(${(-sw * 28).toFixed(1)} -14 50) translate(${(-sw * 6).toFixed(1)} ${(-Math.max(0, -sw) * 6).toFixed(1)})`);
+  $("armF").setAttribute("transform", `rotate(${(-sw * 22).toFixed(1)} 52 18)`);
+  $("armB").setAttribute("transform", `rotate(${(sw * 22).toFixed(1)} -50 16)`);
+  $("leafL").setAttribute("transform", `rotate(${(-6 - Math.sin(stride * 0.5) * 6).toFixed(1)} 0 -58)`);
+  $("leafR").setAttribute("transform", `rotate(${(-10 + Math.sin(stride * 0.5 + 1) * 6).toFixed(1)} 4 -60)`);
+  $("shadow").style.opacity = (visible * 0.9).toFixed(2);
+  $("shadow").style.transform = `translate(${x.toFixed(1)}px, ${(cy + 92).toFixed(1)}px) scale(${(1.1 + bob / 60).toFixed(3)})`;
+
+  // rastro lavanda (mais forte enquanto cruza o centro)
+  const trailLen = visible * lerp(180, 380, clamp((p - 0.15) / 0.5)) * (1 - 0.4 * seg(p, 0.85, 1));
+  const tOp = visible * (0.55 + 0.45 * Math.sin(Math.PI * clamp((p - 0.3) / 0.6)));
+  for (const [id, dy, k] of [["trail", 22, 1], ["trail2", 16, 0.8]]) {
+    const L = trailLen * k;
+    $(id).style.width = `${L.toFixed(1)}px`;
+    $(id).style.opacity = tOp.toFixed(3);
+    $(id).style.transform = `translate(${(x - L - 10).toFixed(1)}px, ${(cy + dy).toFixed(1)}px)`;
+  }
+  [["sp1", -24, 70], ["sp2", 48, 50]].forEach(([id, dy, len], i) => {
+    $(id).style.width = `${len}px`;
+    $(id).style.opacity = (visible * 0.8 * Math.abs(Math.sin(stride * 0.5 + i))).toFixed(3);
+    $(id).style.transform = `translate(${(x - len - 70 - i * 20).toFixed(1)}px, ${(cy + dy).toFixed(1)}px)`;
+  });
+
+  // CSAT → Pesquisa → Dados → Insights: ~100 ms cada, só na primeira passada
+  CHIPS.forEach((c, i) => {
+    const a = pass === 0 ? seg(t, c.at - 20, c.at + 110) : 0;
+    const o = a > 0 && a < 1 ? Math.sin(a * Math.PI) ** 0.6 : 0;
+    const s = 0.7 + 0.3 * eo(clamp(a * 2.2)) - 0.08 * seg(a, 0.7, 1);
+    chipEls[i].style.opacity = o.toFixed(3);
+    chipEls[i].style.transform = `translate(${(c.x * W - 50).toFixed(1)}px, ${(cy + c.dy - (1 - a) * 8).toFixed(1)}px) scale(${s.toFixed(3)})`;
+  });
+
+  // espera longa: o nome da Luumu aparece depois de 1 s
+  const brand = seg(t, 1000, 1250) * (1 - seg(t, revealAt - 150, revealAt));
+  $("brand").style.opacity = brand.toFixed(3);
+
+  $("tl").textContent = `${Math.round(t)} ms` + (t < 100 ? " · blur sutil" : t < 250 ? " · entra correndo" : t < 450 && pass === 0 ? " · CSAT → Pesquisa → Dados → Insights" : t < revealAt - 150 ? " · cruza o centro com rastro" : t < end ? " · sai → página nova" : " · página nova");
+}
+
+/* ---------------------------------------------------------------- variação B: parada, itens em volta
+    0–100    blur sutil
+    100–220  a ameixa surge no centro (pulinho com mola)
+    200–560  Relatórios, Pesquisa, CSAT, Produtos, Análises, IA: um de cada vez, ~150 ms cada;
+             os olhos acompanham cada item, a folha dá um peteleco, uma piscada no meio
+    560–700  sorriso, encolhe e some → página nova
+   Espera longa: os itens seguem em roda; após 1 s, o nome da Luumu. */
+const ORBIT = [
+  { k: "rel", label: "Relatórios", a: -150 }, { k: "pesq", label: "Pesquisa", a: -60 }, { k: "csat", label: "CSAT", a: 15 },
+  { k: "prod", label: "Produtos", a: 150 }, { k: "dados", label: "Análises", a: -20 }, { k: "ins", label: "IA", a: 200 },
+];
+ICONS.rel = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#6a3ef0"/><path d="M12 12 L12 2 A10 10 0 0 1 21.5 15Z" fill="#ff6fa3"/></svg>';
+ICONS.prod = '<svg viewBox="0 0 24 24"><path d="M3 7 L12 2.5 L21 7 L21 17 L12 21.5 L3 17Z" fill="#3f63ff"/><path d="M3 7 L12 11.5 L21 7 L12 2.5Z" fill="#8aa2ff"/><path d="M12 11.5 L12 21.5 L21 17 L21 7Z" fill="#2f4fe0"/></svg>';
+const orbitEls = ORBIT.map((c) => {
+  const el = document.createElement("div");
+  el.className = "chip";
+  el.innerHTML = ICONS[c.k] + c.label;
+  $("chips").appendChild(el);
+  return el;
+});
+const back = (p, k = 1.8) => (p <= 0 ? 0 : 1 + (k + 1) * (p - 1) ** 3 + k * (p - 1) ** 2);
+const STEP = 44, SHOW = 130;
+
+function renderB(t) {
+  const W = $("main").clientWidth, H = $("main").clientHeight, cx = W / 2, cy = H * 0.46;
+  const minEnd = 700;
+  const end = Math.max(minEnd, doneAt + 100);
+  const revealAt = end - 100;
+
+  const out = seg(t, revealAt, revealAt + 100);
+  const blurIn = seg(t, 0, 100) * (1 - out);
+  $("pageA").style.filter = `blur(${(3 * blurIn).toFixed(2)}px)`;
+  $("pageA").style.opacity = (1 - out).toFixed(3);
+  $("veil").style.opacity = blurIn.toFixed(3);
+  $("pageB").style.opacity = eo(out).toFixed(3);
+  $("pageB").style.filter = out > 0 && out < 1 ? `blur(${(4 * (1 - eo(out))).toFixed(2)}px)` : "";
+  $("pageB").style.transform = `translateY(${(6 * (1 - eo(out))).toFixed(2)}px)`;
+
+  // a ameixa: surge com mola, respira, encolhe ao sair
+  const pin = seg(t, 100, 230), pout = seg(t, revealAt - 60, revealAt + 40);
+  const sc = back(pin) * (1 - eo(pout)) * (1 + 0.025 * Math.sin(t / 90));
+  const hop = -10 * Math.sin(Math.PI * pin) - 6 * Math.sin(Math.PI * seg(t, revealAt - 110, revealAt - 30));
+  $("runner").style.opacity = t >= 100 && t < revealAt + 40 ? 1 : 0;
+  $("runner").style.transform = `translate(${cx.toFixed(1)}px, ${(cy + hop).toFixed(1)}px) scale(${(1.15 * Math.max(0, sc)).toFixed(3)})`;
+  ["legF", "legB"].forEach((id, i) => $(id).setAttribute("transform", `translate(${i ? -2 : 2} 0)`));
+  $("armF").setAttribute("transform", `rotate(${(-10 + 6 * Math.sin(t / 70)).toFixed(1)} 52 18)`);
+  $("armB").setAttribute("transform", "rotate(0)");
+  $("phone").style.display = "none";
+
+  // qual item está na tela agora (os olhos vão até ele)
+  const loopT = Math.max(0, t - 200);
+  const idx = Math.floor(loopT / STEP);
+  const active = ORBIT[idx % ORBIT.length];
+  const look = active && t < revealAt - 70 ? active.a * Math.PI / 180 : Math.PI / 2;
+  const lx = Math.cos(look) * 4.5, ly = Math.sin(look) * 3.5;
+  $("pupils").setAttribute("transform", `translate(${lx.toFixed(2)} ${ly.toFixed(2)})`);
+  // piscada no meio; piscadinha extra se a espera for longa
+  const blink = Math.max(1 - Math.sin(Math.PI * seg(t, 380, 440)), 1 - Math.sin(Math.PI * seg((t - 1100) % 1400, 0, 70)) * (t > 1100 ? 1 : 0));
+  $("eyes").setAttribute("transform", `translate(0 -2) scale(1 ${clamp(blink, 0.08, 1).toFixed(3)}) translate(0 2)`);
+  // sorriso cresce no final
+  const smile = 1 + 0.25 * seg(t, revealAt - 140, revealAt - 80);
+  $("mouth").setAttribute("transform", `translate(9 18) scale(${smile.toFixed(3)}) translate(-9 -18)`);
+  // a folha dá um peteleco a cada item novo
+  const since = loopT % STEP;
+  const flick = t > 200 && t < revealAt - 70 ? Math.exp(-since / 40) * Math.sin(since / 9) * 12 : 0;
+  $("leafL").setAttribute("transform", `rotate(${(-4 - flick * 0.6 + Math.sin(t / 160) * 3).toFixed(1)} 0 -58)`);
+  $("leafR").setAttribute("transform", `rotate(${(-6 + flick + Math.sin(t / 140 + 1) * 3).toFixed(1)} 4 -60)`);
+  $("shadow").style.opacity = (Math.min(1, sc) * 0.9).toFixed(2);
+  $("shadow").style.transform = `translate(${cx.toFixed(1)}px, ${(cy + 96).toFixed(1)}px) scale(${(1.15 * Math.max(0, sc)).toFixed(3)})`;
+  ["trail", "trail2", "sp1", "sp2"].forEach((id) => ($(id).style.opacity = 0));
+  chipEls.forEach((el) => (el.style.opacity = 0));
+
+  // itens: um de cada vez, ~150 ms, saltando do centro para a sua posição em volta
+  orbitEls.forEach((el, i) => {
+    const c = ORBIT[i];
+    let o = 0, s = 0.6, r = 0;
+    for (let k = i; 200 + k * STEP + SHOW <= revealAt - 40; k += ORBIT.length) {
+      const st = 200 + k * STEP;
+      const a = seg(t, st, st + SHOW);
+      if (a > 0 && a < 1) { o = Math.sin(a * Math.PI) ** 0.5; s = 0.6 + 0.4 * back(clamp(a * 2.5), 2) - 0.1 * seg(a, 0.6, 1); r = (1 - a) * 18; }
+    }
+    const rad = c.a * Math.PI / 180, R = 150 + r;
+    el.style.opacity = o.toFixed(3);
+    el.style.transform = `translate(${(cx + Math.cos(rad) * R * 1.45 - 52).toFixed(1)}px, ${(cy + Math.sin(rad) * R * 0.78 - 18).toFixed(1)}px) scale(${s.toFixed(3)})`;
+  });
+
+  const brand = seg(t, 1000, 1250) * (1 - seg(t, revealAt - 150, revealAt));
+  $("brand").style.opacity = brand.toFixed(3);
+  $("tl").textContent = `${Math.round(t)} ms` + (t < 100 ? " · blur sutil" : t < 230 ? " · surge no centro" : t < revealAt - 60 ? " · itens em volta (olhos acompanham)" : t < end ? " · sorri e some → página nova" : " · página nova");
+}
+
+let variant = "A";
+const renderA = render;
+function draw(t) {
+  if (variant === "A") {
+    orbitEls.forEach((el) => (el.style.opacity = 0));
+    $("phone").style.display = "";
+    $("pupils").removeAttribute("transform"); $("eyes").removeAttribute("transform"); $("mouth").removeAttribute("transform");
+    renderA(t);
+  } else renderB(t);
+}
+$("variant").onclick = (e) => {
+  variant = variant === "A" ? "B" : "A";
+  e.target.textContent = variant === "A" ? "Variação: A · correndo" : "Variação: B · parada";
+  draw(0);
+};
+
+/* ---------------------------------------------------------------- reprodução */
+let raf = 0, slowmo = 1, current = "A";
+function navigate(loadMs) {
+  cancelAnimationFrame(raf);
+  // reinicia com a página A visível
+  doneAt = Math.max(600, loadMs);
+  const start = performance.now();
+  const tick = (now) => {
+    const t = (now - start) / slowmo;
+    draw(t);
+    $("t").value = Math.min(t, 760);
+    const endA = 100 + Math.ceil((doneAt - 100) / PASS) * PASS + 40;
+    const endB = Math.max(700, doneAt + 100) + 120;
+    if (t < (variant === "A" ? endA : endB)) raf = requestAnimationFrame(tick);
+  };
+  raf = requestAnimationFrame(tick);
+}
+$("fast").onclick = () => navigate(700);
+$("slow").onclick = () => navigate(2500);
+$("slowmo").onclick = (e) => { slowmo = slowmo === 1 ? 3 : 1; e.target.textContent = `Câmera lenta: ${slowmo === 1 ? "não" : "sim (3×)"}`; };
+$("t").oninput = (e) => { cancelAnimationFrame(raf); doneAt = 700; draw(Number(e.target.value)); };
+document.querySelectorAll("[data-go]").forEach((a) => a.addEventListener("click", () => {
+  document.querySelectorAll(".side a").forEach((x) => x.classList.toggle("on", x === a));
+  navigate(700);
+}));
+window.seek = (t, d, v) => { cancelAnimationFrame(raf); if (v) variant = v; doneAt = d ?? 600; draw(t); };
+draw(0);
+</script>
+</body>
+</html>
