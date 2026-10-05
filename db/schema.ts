@@ -639,6 +639,18 @@ export const identityCaptureRules = pgTable(
   (t) => [primaryKey({ columns: [t.projectId, t.host] })]
 );
 
+/** Avatar desenhado em SVG embutido (sem endereço): uma cópia por desenho e projeto. */
+export const avatarSvgs = pgTable(
+  "avatar_svgs",
+  {
+    projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    hash: text("hash").notNull(),
+    svg: text("svg").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.projectId, t.hash] })]
+);
+
 /** Um usuário (anônimo, por navegador) visto no projeto: primeira visita e de onde veio. */
 export const analyticsUsers = pgTable(
   "analytics_users",

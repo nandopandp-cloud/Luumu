@@ -10,6 +10,7 @@
    - por tela: rota normalizada, tempo ativo e os eventos que aconteceram nela.
 */
 import { isJunkAvatar, stripNameNoise } from "./identity-filter";
+import { SVG_MAX } from "./svg-avatar";
 
 import { fold } from "../search/core";
 
@@ -54,6 +55,9 @@ export interface AnalyticsPayload {
   avatar: string | null;
   /** a foto veio de um seletor configurado pelo cliente: vale mesmo sendo ilustração/SVG */
   avsel?: boolean;
+  /** avatar desenhado em SVG: impressão digital (sempre) e o desenho (só no 1º envio do navegador) */
+  avsvgh?: string;
+  avsvg?: string;
   sid: string;
   /** início da sessão (ms) */
   st: number;
@@ -109,6 +113,9 @@ export function parseAnalytics(raw: unknown, now = Date.now()): AnalyticsPayload
     // tenha apontado o lugar da foto (no Exploradores o avatar do aluno é um personagem em SVG)
     avatar: ((a) => (a && (o.avsel === true || !isJunkAvatar(a)) ? a : null))(avatarUrl(o.avatar)),
     avsel: o.avsel === true,
+    ...(typeof o.avsvgh === "string" && /^[0-9a-f]{16}$/.test(o.avsvgh)
+      ? { avsvgh: o.avsvgh, ...(typeof o.avsvg === "string" && o.avsvg.length <= SVG_MAX ? { avsvg: o.avsvg } : {}) }
+      : {}),
     sid,
     st: clamp(o.st),
     device: ANALYTICS_DEVICES.includes(o.device as AnalyticsDevice) ? (o.device as AnalyticsDevice) : "desktop",

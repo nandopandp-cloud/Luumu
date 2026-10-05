@@ -15,6 +15,7 @@
 */
 
 import { isJunkAvatar, isJunkName, stripNameNoise } from "../../lib/analytics/identity-filter";
+import { SVG_MAX } from "../../lib/analytics/svg-avatar";
 
 export interface CaptureConfig {
   /** seletor CSS do nome (vazio = automático) */
@@ -68,7 +69,51 @@ const fullName = (raw: string | null | undefined) => {
   (Tailwind bg-[url(...)]), que só aparece no estilo computado. Fotos servidas pelo otimizador
   do Next (/_next/image?url=…) viram o endereço original.
 */
-type Found = { url: string | null; reason: string };
+type Found = { url: string | null; reason: string; svg?: string };
+
+/*
+  Cópia do avatar desenhado em SVG embutido: o desenho com as cores/estilos JÁ APLICADOS (muitos
+  vêm de classes CSS da página, que não existiriam fora dela), tamanho explícito e sem nada que
+  execute. O servidor limpa de novo e guarda uma cópia por desenho.
+*/
+const SVG_PROPS = ["fill", "fill-opacity", "fill-rule", "stroke", "stroke-width", "stroke-opacity", "stroke-linecap", "stroke-linejoin", "opacity", "stop-color", "stop-opacity", "color", "display", "visibility", "transform", "font-family", "font-size", "font-weight", "text-anchor", "dominant-baseline"];
+
+// valores padrão do SVG: não precisam ir na cópia (só aumentariam o envio)
+const SVG_DEFAULTS: Record<string, string> = {
+  "fill-opacity": "1", "fill-rule": "nonzero", "stroke-opacity": "1", "stroke-linecap": "butt", "stroke-linejoin": "miter",
+  "stroke-width": "1px", opacity: "1", "stop-opacity": "1", display: "inline", visibility: "visible", transform: "none", stroke: "none",
+};
+
+function copySvg(svg: SVGSVGElement): string | null {
+  try {
+    const clone = svg.cloneNode(true) as SVGSVGElement;
+    const src = [svg, ...Array.from(svg.querySelectorAll("*"))];
+    const dst = [clone, ...Array.from(clone.querySelectorAll("*"))];
+    src.forEach((el, i) => {
+      const cs = window.getComputedStyle(el);
+      const text = /^(text|tspan|textPath)$/i.test(el.tagName);
+      const style = SVG_PROPS.map((p) => {
+        if (!text && /^(font-|text-anchor|dominant-baseline)/.test(p)) return "";
+        const v = cs.getPropertyValue(p).trim();
+        return v && v !== "normal" && SVG_DEFAULTS[p] !== v ? `${p}:${v}` : "";
+      })
+        .filter(Boolean)
+        .join(";");
+      if (style) dst[i].setAttribute("style", style);
+      dst[i].removeAttribute("class");
+    });
+    clone.querySelectorAll("script, foreignObject").forEach((n) => n.remove());
+    const r = svg.getBoundingClientRect();
+    if (!clone.getAttribute("viewBox") && r.width && r.height) clone.setAttribute("viewBox", `0 0 ${Math.round(r.width)} ${Math.round(r.height)}`);
+    clone.setAttribute("width", String(Math.round(r.width) || 64));
+    clone.setAttribute("height", String(Math.round(r.height) || 64));
+    clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    const out = clone.outerHTML.replace(/\s+/g, " ").trim();
+    return out.length <= SVG_MAX ? out : null;
+  } catch {
+    return null;
+  }
+}
 
 const firstUrlOf = (srcset: string | null) => (srcset ?? "").split(",")[0]?.trim().split(/\s+/)[0] ?? "";
 
@@ -116,7 +161,11 @@ function findImage(el: Element | null): Found {
     const src = rawImageSrc(n) || backgroundOf(n);
     if (src) return toHttps(src);
   }
-  if (el.querySelector("svg") || el.tagName.toLowerCase() === "svg") return { url: null, reason: "a foto é um desenho SVG embutido na página (sem endereço de imagem)" };
+  const svg = (el.tagName.toLowerCase() === "svg" ? el : el.querySelector("svg")) as SVGSVGElement | null;
+  if (svg) {
+    const copy = copySvg(svg);
+    return copy ? { url: null, reason: "ok (desenho SVG copiado)", svg: copy } : { url: null, reason: "a foto é um desenho SVG grande demais para copiar" };
+  }
   return { url: null, reason: "o elemento não tem imagem (só iniciais/texto?)" };
 }
 
@@ -195,6 +244,28 @@ function nameNearEmail(doc: Document, email: string): string | null {
   return null;
 }
 
+/*
+  "Copiar seletor" do navegador gera caminhos completos a partir do <body>
+  (body > div > div > … > header > div > button) que só casam na tela EXATA de onde foram
+  copiados: em outra tela, com um contêiner a mais ou a menos, não acham nada. Se o seletor
+  inteiro não casa, tenta versões cada vez mais curtas — tirando segmentos do COMEÇO e mantendo
+  sempre o final (o elemento em si e seus pais imediatos), com no mínimo 3 segmentos.
+*/
+export function queryTolerant(doc: Document, selector: string): Element | null {
+  const exact = doc.querySelector(selector);
+  if (exact) return exact;
+  const parts = selector.split(/\s*>\s*/).filter(Boolean);
+  for (let i = 1; parts.length - i >= 3; i++) {
+    try {
+      const el = doc.querySelector(parts.slice(i).join(" > "));
+      if (el) return el;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 export interface PageIdentity {
   name: string | null;
   avatar: string | null;
@@ -202,21 +273,31 @@ export interface PageIdentity {
   avatarFromSelector: boolean;
   /** por que a foto não veio (diagnóstico do Luumu.debugIdentity) */
   avatarReason: string;
+  /** começo do HTML do elemento da foto (diagnóstico: mostra como a foto é montada) */
+  avatarHtml?: string;
+  /** avatar desenhado em SVG embutido (sem endereço): a cópia do desenho */
+  avatarSvg?: string;
 }
 
 export function readPageIdentity(cfg: CaptureConfig, doc: Document = document, email?: string | null): PageIdentity {
   let name: string | null = null;
   let avatar: string | null = null;
   let avatarReason = "";
+  let avatarEl: Element | null = null;
+  let avatarSvg: string | undefined;
   try {
     const marked = doc.querySelector("[data-luumu-name]");
-    if (cfg.n) name = looksLikeName(doc.querySelector(cfg.n)?.textContent) ?? textOf(doc.querySelector(cfg.n));
+    const nameEl = cfg.n ? queryTolerant(doc, cfg.n) : null;
+    if (cfg.n) name = looksLikeName(nameEl?.textContent) ?? textOf(nameEl);
     else if (marked) name = looksLikeName(marked.getAttribute("data-luumu-name") || marked.textContent);
 
-    const av = cfg.a ? doc.querySelector(cfg.a) : autoAvatar(doc);
+    const av = cfg.a ? queryTolerant(doc, cfg.a) : autoAvatar(doc);
+    avatarEl = av;
     const found = cfg.a ? findImage(av) : av ? findImage(av) : { url: null, reason: "nenhuma foto de perfil reconhecida (modo automático)" };
     avatar = found.url;
     avatarReason = found.reason;
+    // desenho embutido: só pelo seletor (no automático, ícones/ilustrações não são perfil)
+    if (!avatar && found.svg && cfg.a) avatarSvg = found.svg;
     // automático: ilustração/ícone não é foto de gente. Com seletor, o cliente apontou: vale
     // (no Exploradores o avatar escolhido pelo aluno é um personagem em SVG)
     if (avatar && !cfg.a && isJunkAvatar(avatar)) {
@@ -231,7 +312,14 @@ export function readPageIdentity(cfg: CaptureConfig, doc: Document = document, e
     // seletor inválido ou DOM estranho: fica sem, nunca quebra o produto do cliente
     avatarReason ||= "seletor inválido";
   }
-  return { name, avatar, avatarFromSelector: !!cfg.a && !!avatar, avatarReason: avatar ? "ok" : avatarReason };
+  return {
+    name,
+    avatar,
+    avatarFromSelector: !!cfg.a && !!avatar,
+    avatarReason: avatar || avatarSvg ? "ok" : avatarReason,
+    avatarSvg,
+    avatarHtml: avatarEl ? avatarEl.outerHTML.replace(/\s+/g, " ").slice(0, 600) : undefined,
+  };
 }
 
 /** Seletor escolhido pelo cliente: aceita o texto como está (curto, sem @), mesmo fora do padrão de nome. */

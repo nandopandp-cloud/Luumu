@@ -1,8 +1,9 @@
 import "server-only";
 import { and, desc, eq, sql, type SQL } from "drizzle-orm";
 import { db } from "./client";
-import { analyticsPageviews, analyticsSessions, analyticsSettings, analyticsUsers, analyticsViews } from "@/db/schema";
+import { analyticsPageviews, analyticsSessions, analyticsSettings, analyticsUsers, analyticsViews, avatarSvgs } from "@/db/schema";
 import { analyticsViewId } from "./ids";
+import { sanitizeSvg, svgHash } from "@/lib/analytics/svg-avatar";
 import {
   classifyChannel,
   frequencyOf,
@@ -74,8 +75,33 @@ const missingColumn = (e: unknown) => {
   return /column .* does not exist/i.test(String((e as Error)?.message ?? ""));
 };
 
+/** Endereço (no painel) do avatar desenhado guardado. */
+export const avatarSvgPath = (projectId: string, hash: string) => `/api/v1/avatars/${projectId}/${hash}.svg`;
+
+/*
+  Avatar desenhado em SVG embutido: o desenho chega só no 1º envio de cada navegador. Confere que a
+  impressão bate com o conteúdo (ninguém grava um desenho sob a impressão de outro), limpa e guarda
+  uma cópia por desenho. Falha aqui (ex.: sem a migração 0026) não derruba a visita: fica sem foto.
+*/
+async function storeAvatarSvg(projectId: string, p: AnalyticsPayload): Promise<string | null> {
+  if (!p.avsvgh) return null;
+  if (p.avsvg) {
+    if (svgHash(p.avsvg) !== p.avsvgh) return null;
+    const clean = sanitizeSvg(p.avsvg);
+    if (!clean) return null;
+    try {
+      await db.insert(avatarSvgs).values({ projectId, hash: p.avsvgh, svg: clean }).onConflictDoNothing();
+    } catch {
+      return null;
+    }
+  }
+  return avatarSvgPath(projectId, p.avsvgh);
+}
+
 export async function recordAnalytics(workspaceId: string, projectId: string, host: string, p: AnalyticsPayload) {
   void workspaceId;
+  // sem foto com endereço, mas com o desenho do avatar: vira a foto deste usuário
+  if (!p.avatar && p.avsvgh) p = { ...p, avatar: await storeAvatarSvg(projectId, p) };
   const channel = classifyChannel({ ref: p.ref, host, utmSource: p.utm.source, utmMedium: p.utm.medium });
   const first = new Date(Math.min(p.st, ...p.pages.map((x) => x.t)));
   const last = new Date(Math.max(...p.pages.map((x) => x.t + x.dur)));

@@ -1649,14 +1649,16 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
       const name = d.identify.name ?? d.page?.name ?? null;
       const avatar = d.identify.avatar ?? d.page?.avatar ?? null;
       return {
-        ok: logged && !!(name || avatar),
+        ok: logged && !!(name || avatar || d.page?.avatarSvg),
         usuarioIdentificado: logged ? d.identify.id || d.identify.email : "não (o produto ainda não chamou Luumu.identify)",
         capturaAtiva: !!d.capture,
         modo: d.capture ? (d.capture.n || d.capture.a ? "seletores" : "automático") : "desligada (Configurações → SDK & Eventos)",
         nomeLidoDaTela: d.page?.name ?? null,
-        fotoLidaDaTela: d.page?.avatar ?? null,
+        fotoLidaDaTela: d.page?.avatar ?? (d.page?.avatarSvg ? "(desenho SVG copiado da tela — vai como imagem para o painel)" : null),
         // por que a foto não veio (seletor não achou, só iniciais, SVG embutido, sem https...)
         motivoFoto: d.page ? d.page.avatarReason : null,
+        // HTML do elemento apontado como foto (para ajustar o seletor quando a foto não vem)
+        htmlDaFoto: d.page?.avatar || d.page?.avatarSvg ? undefined : d.page?.avatarHtml ?? null,
         seletores: d.capture && (d.capture.n || d.capture.a) ? { nome: d.capture.n || "(automático)", foto: d.capture.a || "(automático)" } : null,
         // modo automático: só vai ao painel depois de aparecer igual em 2 telas diferentes
         confirmadoNoNavegador: (() => {

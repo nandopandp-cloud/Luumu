@@ -15,6 +15,7 @@
 */
 import { anonymousId } from "../shared/memory";
 import { readPageIdentity, type CaptureConfig, type PageIdentity } from "./page-identity";
+import { svgHash } from "../../lib/analytics/svg-avatar";
 import { detectBrowser, detectOS, SESSION_IDLE_MS, LIMITS, type AnalyticsDevice, type AnalyticsPayload } from "../../lib/analytics/core";
 
 export interface AnalyticsBootConfig {
@@ -137,7 +138,9 @@ function startPage() {
 */
 const CONFIRMED = "luumu_idc_ok";
 const SEEN = "luumu_idc_seen";
-type Confirmed = { who: string; sig?: string; name: string | null; avatar: string | null; avsel?: boolean };
+type Confirmed = { who: string; sig?: string; name: string | null; avatar: string | null; avsel?: boolean; svg?: string; svgh?: string };
+// desenhos (SVG) já enviados deste navegador: depois da 1ª vez vai só a impressão digital
+const SVG_SENT = "luumu_svg_sent";
 type Seen = { who: string; n: Record<string, string[]>; a: Record<string, string[]> };
 let lastScan = 0;
 
@@ -160,7 +163,7 @@ function pageIdentity(c: AnalyticsBootConfig, who: string, email: string | null)
   const sig = `${c.capture.n}|${c.capture.a}`;
   const saved = readJson<Confirmed>(localStorage, CONFIRMED);
   const ok: Confirmed = saved?.who === who && saved.sig === sig ? saved : { who, sig, name: null, avatar: null };
-  if ((ok.name && ok.avatar) || Date.now() - lastScan < 15_000) return ok;
+  if ((ok.name && (ok.avatar || ok.svgh)) || Date.now() - lastScan < 15_000) return ok;
   lastScan = Date.now();
 
   const found = readPageIdentity(c.capture, document, email);
@@ -170,6 +173,9 @@ function pageIdentity(c: AnalyticsBootConfig, who: string, email: string | null)
     if (found.avatar) {
       ok.avatar = found.avatar;
       ok.avsel = found.avatarFromSelector;
+    } else if (found.avatarSvg && !ok.avatar) {
+      ok.svg = found.avatarSvg;
+      ok.svgh = svgHash(found.avatarSvg);
     }
   } else {
     const route = c.path();
@@ -203,7 +209,14 @@ function collect(): AnalyticsBatch | null {
       const who = c.identity();
       const page = (who.id || who.email) && (!who.name || !who.avatar) ? pageIdentity(c, who.id || who.email || "", who.email) : null;
       const avatar = who.avatar ?? page?.avatar ?? null;
-      return { uid: who.id, email: who.email, name: who.name ?? page?.name ?? null, avatar, avsel: !who.avatar && !!page?.avsel && !!avatar };
+      // avatar desenhado (SVG embutido): o desenho vai uma vez por navegador; depois, só a impressão
+      let svg: { avsvgh?: string; avsvg?: string } = {};
+      if (!avatar && page?.svgh) {
+        const sent = readJson<string[]>(localStorage, SVG_SENT) ?? [];
+        svg = sent.includes(page.svgh) ? { avsvgh: page.svgh } : { avsvgh: page.svgh, avsvg: page.svg };
+        if (!sent.includes(page.svgh)) writeJson(localStorage, SVG_SENT, [...sent, page.svgh].slice(-20));
+      }
+      return { uid: who.id, email: who.email, name: who.name ?? page?.name ?? null, avatar, avsel: !who.avatar && !!page?.avsel && !!avatar, ...svg };
     })(),
     sid: session.id,
     st: session.st,
