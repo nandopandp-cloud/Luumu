@@ -14,12 +14,13 @@ import { usePageLoading } from "./store";
     1350–1800 cruza o centro com rastro lavanda
     1800–2100 sai da tela (e, se ainda carregando, volta a passar; após ~1,8 s, o nome da Luumu)
 
-  Sem atrasar o produto: só aparece se a página demorar mais de 150 ms; quando a página
+  Sem atrasar o produto: só aparece se a página demorar mais de 700 ms (antes disso, o esqueleto); quando a página
   fica pronta, a ameixa acelera e sai (fica no mínimo 600 ms na tela, para não piscar).
   Menu e topo continuam nítidos. Quem pede movimento reduzido não vê a animação.
 */
 const K = 3;
-const SHOW_DELAY = 150;
+// só quando a página demora de verdade: abaixo disso o esqueleto discreto basta
+const SHOW_DELAY = 700;
 const MIN_VISIBLE = 600;
 const EXIT = 320;
 const BLUR = 100 * K;
