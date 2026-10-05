@@ -62,22 +62,67 @@ const fullName = (raw: string | null | undefined) => {
   return n && n.split(" ").length >= 2 ? n : null;
 };
 
-/** Endereço https absoluto da imagem (img, imagem dentro do elemento ou fundo em CSS). */
-function imageUrl(el: Element | null): string | null {
-  if (!el) return null;
-  const img = el.tagName === "IMG" ? (el as HTMLImageElement) : el.querySelector("img");
-  let src = img ? img.currentSrc || img.getAttribute("src") || "" : "";
-  if (!src) {
-    const bg = (el as HTMLElement).style?.backgroundImage || "";
-    src = /url\(["']?([^"')]+)["']?\)/.exec(bg)?.[1] ?? "";
+/*
+  Foto de um elemento, onde quer que ela esteja: <img> (src, srcset, currentSrc, data-src),
+  <picture><source>, <svg><image href>, ou fundo em CSS — inclusive o vindo de CLASSE
+  (Tailwind bg-[url(...)]), que só aparece no estilo computado. Fotos servidas pelo otimizador
+  do Next (/_next/image?url=…) viram o endereço original.
+*/
+type Found = { url: string | null; reason: string };
+
+const firstUrlOf = (srcset: string | null) => (srcset ?? "").split(",")[0]?.trim().split(/\s+/)[0] ?? "";
+
+function rawImageSrc(el: Element): string {
+  const tag = el.tagName.toLowerCase();
+  if (tag === "img") {
+    const img = el as HTMLImageElement;
+    return img.currentSrc || img.getAttribute("src") || img.getAttribute("data-src") || firstUrlOf(img.getAttribute("srcset"));
   }
-  if (!src || src.startsWith("data:")) return null;
+  if (tag === "source") return firstUrlOf(el.getAttribute("srcset"));
+  if (tag === "image") return el.getAttribute("href") || el.getAttribute("xlink:href") || "";
+  return "";
+}
+
+function backgroundOf(el: Element): string {
+  let bg = (el as HTMLElement).style?.backgroundImage || "";
+  if (!bg || bg === "none") {
+    try {
+      bg = getComputedStyle(el).backgroundImage || "";
+    } catch {}
+  }
+  return /url\(["']?([^"')]+)["']?\)/.exec(bg)?.[1] ?? "";
+}
+
+function toHttps(src: string): Found {
+  if (!src) return { url: null, reason: "sem imagem no elemento" };
+  if (src.startsWith("data:") || src.startsWith("blob:")) return { url: null, reason: "imagem embutida (data:/blob:), sem endereço público" };
   try {
-    const u = new URL(src, location.href);
-    return u.protocol === "https:" && u.href.length <= 500 ? u.href : null;
+    let u = new URL(src, location.href);
+    // otimizador do Next: o endereço real vem em ?url=
+    if (/\/_next\/image\/?$/.test(u.pathname) && u.searchParams.get("url")) u = new URL(u.searchParams.get("url")!, u.href);
+    if (u.protocol !== "https:") return { url: null, reason: "endereço sem https" };
+    if (u.href.length > 500) return { url: null, reason: "endereço longo demais" };
+    return { url: u.href, reason: "ok" };
   } catch {
-    return null;
+    return { url: null, reason: "endereço inválido" };
   }
+}
+
+function findImage(el: Element | null): Found {
+  if (!el) return { url: null, reason: "seletor não encontrou nenhum elemento na tela" };
+  // o próprio elemento e os de dentro (a foto costuma estar um ou dois níveis abaixo)
+  const nodes = [el, ...Array.from(el.querySelectorAll("img, picture source, svg image, [style*='background'], div, span")).slice(0, 40)];
+  for (const n of nodes) {
+    const src = rawImageSrc(n) || backgroundOf(n);
+    if (src) return toHttps(src);
+  }
+  if (el.querySelector("svg") || el.tagName.toLowerCase() === "svg") return { url: null, reason: "a foto é um desenho SVG embutido na página (sem endereço de imagem)" };
+  return { url: null, reason: "o elemento não tem imagem (só iniciais/texto?)" };
+}
+
+/** Endereço https absoluto da imagem do elemento (ver findImage). */
+function imageUrl(el: Element | null): string | null {
+  return findImage(el).url;
 }
 
 function visible(el: Element): boolean {
@@ -150,26 +195,43 @@ function nameNearEmail(doc: Document, email: string): string | null {
   return null;
 }
 
-export function readPageIdentity(cfg: CaptureConfig, doc: Document = document, email?: string | null): { name: string | null; avatar: string | null } {
+export interface PageIdentity {
+  name: string | null;
+  avatar: string | null;
+  /** a foto veio de um seletor configurado pelo cliente (confiável: vale até ilustração/SVG) */
+  avatarFromSelector: boolean;
+  /** por que a foto não veio (diagnóstico do Luumu.debugIdentity) */
+  avatarReason: string;
+}
+
+export function readPageIdentity(cfg: CaptureConfig, doc: Document = document, email?: string | null): PageIdentity {
   let name: string | null = null;
   let avatar: string | null = null;
+  let avatarReason = "";
   try {
     const marked = doc.querySelector("[data-luumu-name]");
     if (cfg.n) name = looksLikeName(doc.querySelector(cfg.n)?.textContent) ?? textOf(doc.querySelector(cfg.n));
     else if (marked) name = looksLikeName(marked.getAttribute("data-luumu-name") || marked.textContent);
 
     const av = cfg.a ? doc.querySelector(cfg.a) : autoAvatar(doc);
-    avatar = imageUrl(av);
-    // mesmo com seletor: ilustração/ícone não é foto de gente
-    if (avatar && isJunkAvatar(avatar)) avatar = null;
+    const found = cfg.a ? findImage(av) : av ? findImage(av) : { url: null, reason: "nenhuma foto de perfil reconhecida (modo automático)" };
+    avatar = found.url;
+    avatarReason = found.reason;
+    // automático: ilustração/ícone não é foto de gente. Com seletor, o cliente apontou: vale
+    // (no Exploradores o avatar escolhido pelo aluno é um personagem em SVG)
+    if (avatar && !cfg.a && isJunkAvatar(avatar)) {
+      avatar = null;
+      avatarReason = "ilustração/ícone ignorado no modo automático";
+    }
     // nome ao lado do avatar — com foto, ou só com as iniciais (usuário sem foto)
     const anchor = av ?? (cfg.a ? null : firstVisible(doc, AVATAR_BOX));
     if (!name && !cfg.n && anchor) name = nameNear(anchor);
     if (!name && !cfg.n && email) name = nameNearEmail(doc, email);
   } catch {
     // seletor inválido ou DOM estranho: fica sem, nunca quebra o produto do cliente
+    avatarReason ||= "seletor inválido";
   }
-  return { name, avatar };
+  return { name, avatar, avatarFromSelector: !!cfg.a && !!avatar, avatarReason: avatar ? "ok" : avatarReason };
 }
 
 /** Seletor escolhido pelo cliente: aceita o texto como está (curto, sem @), mesmo fora do padrão de nome. */

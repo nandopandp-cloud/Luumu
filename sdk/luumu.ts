@@ -1655,6 +1655,9 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
         modo: d.capture ? (d.capture.n || d.capture.a ? "seletores" : "automático") : "desligada (Configurações → SDK & Eventos)",
         nomeLidoDaTela: d.page?.name ?? null,
         fotoLidaDaTela: d.page?.avatar ?? null,
+        // por que a foto não veio (seletor não achou, só iniciais, SVG embutido, sem https...)
+        motivoFoto: d.page ? d.page.avatarReason : null,
+        seletores: d.capture && (d.capture.n || d.capture.a) ? { nome: d.capture.n || "(automático)", foto: d.capture.a || "(automático)" } : null,
         // modo automático: só vai ao painel depois de aparecer igual em 2 telas diferentes
         confirmadoNoNavegador: (() => {
           try {

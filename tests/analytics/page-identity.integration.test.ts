@@ -5,7 +5,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { installDom } from "../tours/support/dom-env";
-import { readPageIdentity, looksLikeName } from "../../sdk/analytics/page-identity";
+import { readPageIdentity as readFull, looksLikeName } from "../../sdk/analytics/page-identity";
+// nome e foto (os testes de diagnóstico olham os outros campos)
+const readPageIdentity = (...a: Parameters<typeof readFull>) => {
+  const r = readFull(...a);
+  return { name: r.name, avatar: r.avatar };
+};
 
 installDom("https://preparasp.jovensgenios.com/home");
 const AUTO = { n: "", a: "" };

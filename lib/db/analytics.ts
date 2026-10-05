@@ -242,9 +242,10 @@ const bucket = (s: AnalyticsScope, col: SQL) => (hourly(s) ? sql`to_char(${col} 
 /** Início (ms) do balde: dia às 12h ou a hora cheia, no horário de Brasília. */
 const bucketTime = (d: string) => new Date(d.length > 10 ? `${d}:00:00-03:00` : `${d}T12:00:00-03:00`).getTime();
 /*
-  Nome/foto só valem se forem DE UMA PESSOA: o mesmo valor em 2+ pessoas diferentes do projeto
-  é mascote, ícone, imagem padrão ou um colega visto num ranking (captura automática da página).
-  Aplicado na leitura, então vale na hora, inclusive para o que já foi gravado.
+  Nome só vale se for DE UMA PESSOA: o mesmo nome em 2+ pessoas diferentes do projeto é um colega
+  visto num ranking ou um rótulo da tela (captura automática da página). Aplicado na leitura,
+  então vale na hora, inclusive para o que já foi gravado. A FOTO não passa por isso: avatares
+  de catálogo (o mesmo personagem escolhido por vários alunos, no Exploradores) são legítimos.
 */
 const personal = (col: "user_name" | "user_avatar") =>
   sql.raw(`case when u.${col} is null then null when exists (
@@ -785,7 +786,7 @@ export async function listAnalyticsUsers(
                (array_agg(s.browser order by s.started_at desc))[1] browser
           from analytics_sessions s where ${sf(s)} group by s.anon_id
       )
-      select u.anon_id, u.user_id, u.user_email, ${personal("user_name")} user_name, ${personal("user_avatar")} user_avatar, ${isoTs(sql`u.first_seen_at`)} first_seen, ${isoTs(sql`greatest(u.last_seen_at, act.last)`)} last_seen,
+      select u.anon_id, u.user_id, u.user_email, ${personal("user_name")} user_name, u.user_avatar, ${isoTs(sql`u.first_seen_at`)} first_seen, ${isoTs(sql`greatest(u.last_seen_at, act.last)`)} last_seen,
              u.first_channel, u.first_landing, act.device, act.os, act.browser, act.sessions, act.pv, act.ms, act.days,
              count(*) over ()::int total
         from act join analytics_users u on u.project_id = ${s.projectId} and u.anon_id = act.anon_id
@@ -889,7 +890,7 @@ export async function getAnalyticsUserProfile(projectId: string, anonId: string)
 
   // mesma regra da lista: valor compartilhado por outras pessoas não é deste usuário
   const [own] = rows<{ name: string | null; avatar: string | null }>(
-    await db.execute(sql`select ${personal("user_name")} "name", ${personal("user_avatar")} avatar from analytics_users u where u.project_id = ${projectId} and u.anon_id = ${anonId}`)
+    await db.execute(sql`select ${personal("user_name")} "name", u.user_avatar avatar from analytics_users u where u.project_id = ${projectId} and u.anon_id = ${anonId}`)
   );
   return {
     anonId: u.anonId,

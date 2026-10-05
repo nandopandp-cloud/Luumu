@@ -52,6 +52,8 @@ export interface AnalyticsPayload {
   name: string | null;
   /** foto do usuário na plataforma do cliente (só https; a imagem é carregada direto de lá) */
   avatar: string | null;
+  /** a foto veio de um seletor configurado pelo cliente: vale mesmo sendo ilustração/SVG */
+  avsel?: boolean;
   sid: string;
   /** início da sessão (ms) */
   st: number;
@@ -103,7 +105,10 @@ export function parseAnalytics(raw: unknown, now = Date.now()): AnalyticsPayload
     email: /^[^\s@<>]{1,64}@[^\s@<>]{1,190}\.[a-z]{2,24}$/i.test(str(o.email, 254)) ? str(o.email, 254).toLowerCase() : null,
     name: stripNameNoise(str(o.name, 80).replace(/[<>]/g, "")) || null,
     // ilustração/ícone (SVG, /icons/, personagem) não é foto de gente: nem grava
-    avatar: ((a) => (a && !isJunkAvatar(a) ? a : null))(avatarUrl(o.avatar)),
+    // ilustração/ícone (SVG, /icons/, personagem) não é foto de gente — a não ser que o cliente
+    // tenha apontado o lugar da foto (no Exploradores o avatar do aluno é um personagem em SVG)
+    avatar: ((a) => (a && (o.avsel === true || !isJunkAvatar(a)) ? a : null))(avatarUrl(o.avatar)),
+    avsel: o.avsel === true,
     sid,
     st: clamp(o.st),
     device: ANALYTICS_DEVICES.includes(o.device as AnalyticsDevice) ? (o.device as AnalyticsDevice) : "desktop",

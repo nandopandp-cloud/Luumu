@@ -14,7 +14,7 @@
   servidor (não vira uma visualização nova).
 */
 import { anonymousId } from "../shared/memory";
-import { readPageIdentity, type CaptureConfig } from "./page-identity";
+import { readPageIdentity, type CaptureConfig, type PageIdentity } from "./page-identity";
 import { detectBrowser, detectOS, SESSION_IDLE_MS, LIMITS, type AnalyticsDevice, type AnalyticsPayload } from "../../lib/analytics/core";
 
 export interface AnalyticsBootConfig {
@@ -42,7 +42,7 @@ export interface AnalyticsCollector {
   /** entrega o que está pendente ao core, que faz UM envio junto com os heatmaps */
   collect(): AnalyticsBatch | null;
   /** diagnóstico (Luumu.debugIdentity): o que o identify mandou e o que a página mostra agora */
-  peek(): { capture: CaptureConfig | null; identify: { id: string | null; email: string | null; name: string | null; avatar: string | null }; page: { name: string | null; avatar: string | null } | null };
+  peek(): { capture: CaptureConfig | null; identify: { id: string | null; email: string | null; name: string | null; avatar: string | null }; page: PageIdentity | null };
 }
 
 interface Page {
@@ -137,7 +137,7 @@ function startPage() {
 */
 const CONFIRMED = "luumu_idc_ok";
 const SEEN = "luumu_idc_seen";
-type Confirmed = { who: string; name: string | null; avatar: string | null };
+type Confirmed = { who: string; sig?: string; name: string | null; avatar: string | null; avsel?: boolean };
 type Seen = { who: string; n: Record<string, string[]>; a: Record<string, string[]> };
 let lastScan = 0;
 
@@ -154,10 +154,12 @@ function writeJson(store: Storage, key: string, v: unknown) {
   } catch {}
 }
 
-function pageIdentity(c: AnalyticsBootConfig, who: string, email: string | null): { name: string | null; avatar: string | null } | null {
+function pageIdentity(c: AnalyticsBootConfig, who: string, email: string | null): Confirmed | null {
   if (!c.capture) return null;
+  // trocou a configuração (ex.: automático → seletores): o que foi confirmado antes não vale
+  const sig = `${c.capture.n}|${c.capture.a}`;
   const saved = readJson<Confirmed>(localStorage, CONFIRMED);
-  const ok: Confirmed = saved?.who === who ? saved : { who, name: null, avatar: null };
+  const ok: Confirmed = saved?.who === who && saved.sig === sig ? saved : { who, sig, name: null, avatar: null };
   if ((ok.name && ok.avatar) || Date.now() - lastScan < 15_000) return ok;
   lastScan = Date.now();
 
@@ -165,7 +167,10 @@ function pageIdentity(c: AnalyticsBootConfig, who: string, email: string | null)
   if (c.capture.n || c.capture.a) {
     // seletores escolhidos pelo cliente: confia no que eles apontam
     ok.name = found.name ?? ok.name;
-    ok.avatar = found.avatar ?? ok.avatar;
+    if (found.avatar) {
+      ok.avatar = found.avatar;
+      ok.avsel = found.avatarFromSelector;
+    }
   } else {
     const route = c.path();
     const prev = readJson<Seen>(sessionStorage, SEEN);
@@ -197,7 +202,8 @@ function collect(): AnalyticsBatch | null {
     ...(() => {
       const who = c.identity();
       const page = (who.id || who.email) && (!who.name || !who.avatar) ? pageIdentity(c, who.id || who.email || "", who.email) : null;
-      return { uid: who.id, email: who.email, name: who.name ?? page?.name ?? null, avatar: who.avatar ?? page?.avatar ?? null };
+      const avatar = who.avatar ?? page?.avatar ?? null;
+      return { uid: who.id, email: who.email, name: who.name ?? page?.name ?? null, avatar, avsel: !who.avatar && !!page?.avsel && !!avatar };
     })(),
     sid: session.id,
     st: session.st,

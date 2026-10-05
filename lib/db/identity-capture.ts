@@ -109,7 +109,7 @@ export async function identityCaptureStatus(workspaceId: string, projectId: stri
       select s.host,
              count(distinct u.anon_id)::int identified,
              count(distinct u.anon_id) filter (where ${personal("user_name")})::int with_name,
-             count(distinct u.anon_id) filter (where ${personal("user_avatar")})::int with_avatar
+             count(distinct u.anon_id) filter (where u.user_avatar is not null)::int with_avatar
         from analytics_sessions s
         join analytics_users u on u.project_id = s.project_id and u.anon_id = s.anon_id
        where s.project_id = ${projectId} and s.last_seen_at > now() - interval '24 hours' and s.host <> ''
