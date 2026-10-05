@@ -241,6 +241,18 @@ const hourly = (s: AnalyticsScope) => s.to.getTime() - s.from.getTime() <= 2 * 8
 const bucket = (s: AnalyticsScope, col: SQL) => (hourly(s) ? sql`to_char(${col} at time zone ${TZ}, 'YYYY-MM-DD"T"HH24')` : day(col));
 /** Início (ms) do balde: dia às 12h ou a hora cheia, no horário de Brasília. */
 const bucketTime = (d: string) => new Date(d.length > 10 ? `${d}:00:00-03:00` : `${d}T12:00:00-03:00`).getTime();
+/*
+  Nome/foto só valem se forem DE UMA PESSOA: o mesmo valor em 2+ pessoas diferentes do projeto
+  é mascote, ícone, imagem padrão ou um colega visto num ranking (captura automática da página).
+  Aplicado na leitura, então vale na hora, inclusive para o que já foi gravado.
+*/
+const personal = (col: "user_name" | "user_avatar") =>
+  sql.raw(`case when u.${col} is null then null when exists (
+      select 1 from analytics_users x
+       where x.project_id = u.project_id and x.${col} = u.${col}
+         and coalesce(x.user_id, x.user_email, x.anon_id) <> coalesce(u.user_id, u.user_email, u.anon_id)
+    ) then null else u.${col} end`);
+
 /** timestamp → ISO 8601 em UTC ("…T…Z"): o formato texto do Postgres ("2026-10-02 01:54:25+00") não é lido pelo Safari */
 const isoTs = (col: SQL) => sql`to_char(${col} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`;
 
@@ -773,7 +785,7 @@ export async function listAnalyticsUsers(
                (array_agg(s.browser order by s.started_at desc))[1] browser
           from analytics_sessions s where ${sf(s)} group by s.anon_id
       )
-      select u.anon_id, u.user_id, u.user_email, u.user_name, u.user_avatar, ${isoTs(sql`u.first_seen_at`)} first_seen, ${isoTs(sql`greatest(u.last_seen_at, act.last)`)} last_seen,
+      select u.anon_id, u.user_id, u.user_email, ${personal("user_name")} user_name, ${personal("user_avatar")} user_avatar, ${isoTs(sql`u.first_seen_at`)} first_seen, ${isoTs(sql`greatest(u.last_seen_at, act.last)`)} last_seen,
              u.first_channel, u.first_landing, act.device, act.os, act.browser, act.sessions, act.pv, act.ms, act.days,
              count(*) over ()::int total
         from act join analytics_users u on u.project_id = ${s.projectId} and u.anon_id = act.anon_id
@@ -875,12 +887,16 @@ export async function getAnalyticsUserProfile(projectId: string, anonId: string)
   const pageCount = new Map<string, number>();
   for (const p of pv) pageCount.set(p.path, (pageCount.get(p.path) ?? 0) + 1);
 
+  // mesma regra da lista: valor compartilhado por outras pessoas não é deste usuário
+  const [own] = rows<{ name: string | null; avatar: string | null }>(
+    await db.execute(sql`select ${personal("user_name")} "name", ${personal("user_avatar")} avatar from analytics_users u where u.project_id = ${projectId} and u.anon_id = ${anonId}`)
+  );
   return {
     anonId: u.anonId,
     userId: u.userId,
     email: u.userEmail,
-    name: u.userName,
-    avatar: u.userAvatar,
+    name: own?.name ?? null,
+    avatar: own?.avatar ?? null,
     firstSeenAt: u.firstSeenAt.toISOString(),
     lastSeenAt: u.lastSeenAt.toISOString(),
     channel: u.firstChannel as Channel,

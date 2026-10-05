@@ -9,6 +9,7 @@
      externa, UTMs e página de entrada — é daí que sai o CANAL de aquisição;
    - por tela: rota normalizada, tempo ativo e os eventos que aconteceram nela.
 */
+import { isJunkAvatar, stripNameNoise } from "./identity-filter";
 
 import { fold } from "../search/core";
 
@@ -100,8 +101,9 @@ export function parseAnalytics(raw: unknown, now = Date.now()): AnalyticsPayload
     aid,
     uid: str(o.uid, 128) || null,
     email: /^[^\s@<>]{1,64}@[^\s@<>]{1,190}\.[a-z]{2,24}$/i.test(str(o.email, 254)) ? str(o.email, 254).toLowerCase() : null,
-    name: str(o.name, 80).replace(/[<>]/g, "") || null,
-    avatar: avatarUrl(o.avatar),
+    name: stripNameNoise(str(o.name, 80).replace(/[<>]/g, "")) || null,
+    // ilustração/ícone (SVG, /icons/, personagem) não é foto de gente: nem grava
+    avatar: ((a) => (a && !isJunkAvatar(a) ? a : null))(avatarUrl(o.avatar)),
     sid,
     st: clamp(o.st),
     device: ANALYTICS_DEVICES.includes(o.device as AnalyticsDevice) ? (o.device as AnalyticsDevice) : "desktop",

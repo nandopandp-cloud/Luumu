@@ -14,6 +14,8 @@
   do usuário em volta — só aceitando o que tem cara de nome de pessoa.
 */
 
+import { isJunkAvatar, isJunkName, stripNameNoise } from "../../lib/analytics/identity-filter";
+
 export interface CaptureConfig {
   /** seletor CSS do nome (vazio = automático) */
   n: string;
@@ -40,15 +42,25 @@ const AVATAR_AUTO = [
 // rótulos de interface que aparecem perto da foto e NÃO são nomes
 const NOT_NAMES = /^(avatar|foto|imagem|image|perfil|profile|meu perfil|minha conta|conta|account|menu|usu[aá]rio|user|sair|logout|entrar|configura[çc][õo]es|settings|ol[aá]|bem-vindo|bem-vinda)$/i;
 
-/** Tem cara de nome de pessoa? Letras (com acento), 1 a 6 palavras, sem número nem @. */
+/**
+ * Tem cara de nome de pessoa? Letras (com acento), 1 a 6 palavras, sem número nem @, sem
+ * palavra de interface/ilustração ("Genie Bot", "Knowledge Area"). Tira o ruído em volta
+ * ("Ana Souza avatar" → "Ana Souza").
+ */
 export function looksLikeName(raw: string | null | undefined): string | null {
-  const t = (raw ?? "").replace(/\s+/g, " ").trim();
+  const t = stripNameNoise(raw ?? "");
   if (t.length < 2 || t.length > 60) return null;
   if (!/^[\p{L}][\p{L}'’.\- ]*[\p{L}.]$/u.test(t)) return null;
   const words = t.split(" ");
-  if (words.length > 6 || NOT_NAMES.test(t) || words.every((w) => NOT_NAMES.test(w))) return null;
+  if (words.length > 6 || NOT_NAMES.test(t) || words.every((w) => NOT_NAMES.test(w)) || isJunkName(t)) return null;
   return t;
 }
+
+/** Na detecção AUTOMÁTICA, só nome completo (2+ palavras): "Astra", "Yugen" são personagens. */
+const fullName = (raw: string | null | undefined) => {
+  const n = looksLikeName(raw);
+  return n && n.split(" ").length >= 2 ? n : null;
+};
 
 /** Endereço https absoluto da imagem (img, imagem dentro do elemento ou fundo em CSS). */
 function imageUrl(el: Element | null): string | null {
@@ -82,14 +94,19 @@ const firstVisible = (doc: Document, sel: string) => {
   return all.find((el) => el.closest(CHROME)) ?? all[0] ?? null;
 };
 
-/** Foto de perfil automática: a primeira visível, preferindo topo/menu/barra lateral. */
+/** Foto de perfil automática: a primeira visível que É foto de gente (não ilustração/ícone), preferindo topo/menu. */
 function autoAvatar(doc: Document): Element | null {
-  return firstVisible(doc, AVATAR_AUTO);
+  const all = Array.from(doc.querySelectorAll(AVATAR_AUTO)).filter((el) => {
+    if (!visible(el)) return false;
+    const u = imageUrl(el);
+    return !!u && !isJunkAvatar(u);
+  });
+  return all.find((el) => el.closest(CHROME)) ?? all[0] ?? null;
 }
 
 /** Primeira linha com cara de nome dentro do menu/botão do usuário em volta da foto. */
 function nameNear(avatar: Element): string | null {
-  const alt = avatar.tagName === "IMG" ? looksLikeName(avatar.getAttribute("alt")) : looksLikeName(avatar.querySelector("img")?.getAttribute("alt"));
+  const alt = avatar.tagName === "IMG" ? fullName(avatar.getAttribute("alt")) : fullName(avatar.querySelector("img")?.getAttribute("alt"));
   if (alt) return alt;
   // o menu/botão do usuário em volta; sem ele, só o contêiner IMEDIATO (subir até o <body>
   // pegaria qualquer nome da página, como o de um professor num card)
@@ -101,7 +118,7 @@ function nameNear(avatar: Element): string | null {
   // cada pedaço de texto separado: innerText junta <span>s vizinhos ("ASAna SouzaAluno")
   const walker = box.ownerDocument.createTreeWalker(box, 4 /* NodeFilter.SHOW_TEXT */);
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-    const n = looksLikeName(node.textContent);
+    const n = fullName(node.textContent);
     // as iniciais do "fallback" do avatar ("FR") não são nome
     if (n && !/^[\p{Lu}]{1,3}$/u.test(n)) return n;
   }
@@ -125,7 +142,7 @@ function nameNearEmail(doc: Document, email: string): string | null {
     for (let i = 0; i < 3 && box; i++, box = box.parentElement) {
       const inner = doc.createTreeWalker(box, 4);
       for (let t = inner.nextNode(); t; t = inner.nextNode()) {
-        const n = looksLikeName(t.textContent);
+        const n = fullName(t.textContent);
         if (n && !/^[\p{Lu}]{1,3}$/u.test(n)) return n;
       }
     }
@@ -143,6 +160,8 @@ export function readPageIdentity(cfg: CaptureConfig, doc: Document = document, e
 
     const av = cfg.a ? doc.querySelector(cfg.a) : autoAvatar(doc);
     avatar = imageUrl(av);
+    // mesmo com seletor: ilustração/ícone não é foto de gente
+    if (avatar && isJunkAvatar(avatar)) avatar = null;
     // nome ao lado do avatar — com foto, ou só com as iniciais (usuário sem foto)
     const anchor = av ?? (cfg.a ? null : firstVisible(doc, AVATAR_BOX));
     if (!name && !cfg.n && anchor) name = nameNear(anchor);

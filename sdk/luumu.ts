@@ -1655,6 +1655,15 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
         modo: d.capture ? (d.capture.n || d.capture.a ? "seletores" : "automático") : "desligada (Configurações → SDK & Eventos)",
         nomeLidoDaTela: d.page?.name ?? null,
         fotoLidaDaTela: d.page?.avatar ?? null,
+        // modo automático: só vai ao painel depois de aparecer igual em 2 telas diferentes
+        confirmadoNoNavegador: (() => {
+          try {
+            const c = JSON.parse(localStorage.getItem("luumu_idc_ok") || "null");
+            return c ? { nome: c.name, foto: c.avatar } : null;
+          } catch {
+            return null;
+          }
+        })(),
         vaiParaOPainel: logged ? { nome: name, foto: avatar } : null,
       };
     },

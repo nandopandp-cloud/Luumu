@@ -38,6 +38,13 @@ export function cleanSelector(v: unknown): string {
   return s.length <= 200 && !/[<>{}`]|javascript:/i.test(s) ? s : "";
 }
 
+// só conta o que é DE UMA pessoa (mesma regra da lista em lib/db/analytics.ts)
+const shared = (col: string) =>
+  sql.raw(`u.${col} is not null and not exists (select 1 from analytics_users x where x.project_id = u.project_id and x.${col} = u.${col}
+    and coalesce(x.user_id, x.user_email, x.anon_id) <> coalesce(u.user_id, u.user_email, u.anon_id))`);
+const PERSONAL_NAME = shared("user_name");
+const PERSONAL_AVATAR = shared("user_avatar");
+
 export interface CaptureStatus {
   /** usuários identificados (id/e-mail) ativos nas últimas 24 h, na workspace */
   identified: number;
@@ -53,8 +60,8 @@ export async function identityCaptureStatus(workspaceId: string): Promise<Captur
   const [counts, projects] = await Promise.all([
     db.execute(sql`
       select count(*)::int identified,
-             count(*) filter (where u.user_name is not null)::int with_name,
-             count(*) filter (where u.user_avatar is not null)::int with_avatar
+             count(*) filter (where ${PERSONAL_NAME})::int with_name,
+             count(*) filter (where ${PERSONAL_AVATAR})::int with_avatar
         from analytics_users u join projects p on p.id = u.project_id
        where p.workspace_id = ${workspaceId} and u.last_seen_at > now() - interval '24 hours'
          and (u.user_id is not null or u.user_email is not null)`),

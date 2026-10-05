@@ -128,17 +128,63 @@ function startPage() {
 
 /*
   Nome/foto lidos da página: só no envio (a aba está saindo; nada roda durante o uso) e só para
-  usuário identificado. Achou os dois → guardado para esta pessoa e não procura mais; senão,
-  tenta de novo no máximo a cada 15 s (a tela do usuário pode ainda não ter montado).
+  usuário identificado.
+
+  Na detecção AUTOMÁTICA um valor só é aceito depois de aparecer IGUAL em duas telas diferentes
+  da mesma pessoa: o perfil do usuário logado fica fixo no topo/menu, conteúdo (ranking, card
+  de colega, personagem, ícone de matéria) muda de tela para tela. Confirmado, fica guardado no
+  navegador (por pessoa) e vai já nas próximas visitas. Com seletores configurados, vale direto.
 */
-let captured: { who: string; name: string | null; avatar: string | null; at: number } | null = null;
-function pageIdentity(c: AnalyticsBootConfig, who: string, email: string | null) {
+const CONFIRMED = "luumu_idc_ok";
+const SEEN = "luumu_idc_seen";
+type Confirmed = { who: string; name: string | null; avatar: string | null };
+type Seen = { who: string; n: Record<string, string[]>; a: Record<string, string[]> };
+let lastScan = 0;
+
+function readJson<T>(store: Storage, key: string): T | null {
+  try {
+    return JSON.parse(store.getItem(key) || "null") as T | null;
+  } catch {
+    return null;
+  }
+}
+function writeJson(store: Storage, key: string, v: unknown) {
+  try {
+    store.setItem(key, JSON.stringify(v));
+  } catch {}
+}
+
+function pageIdentity(c: AnalyticsBootConfig, who: string, email: string | null): { name: string | null; avatar: string | null } | null {
   if (!c.capture) return null;
-  if (captured && captured.who === who && (captured.name && captured.avatar ? true : Date.now() - captured.at < 15_000)) return captured;
+  const saved = readJson<Confirmed>(localStorage, CONFIRMED);
+  const ok: Confirmed = saved?.who === who ? saved : { who, name: null, avatar: null };
+  if ((ok.name && ok.avatar) || Date.now() - lastScan < 15_000) return ok;
+  lastScan = Date.now();
+
   const found = readPageIdentity(c.capture, document, email);
-  const prev = captured?.who === who ? captured : null;
-  captured = { who, name: found.name ?? prev?.name ?? null, avatar: found.avatar ?? prev?.avatar ?? null, at: Date.now() };
-  return captured;
+  if (c.capture.n || c.capture.a) {
+    // seletores escolhidos pelo cliente: confia no que eles apontam
+    ok.name = found.name ?? ok.name;
+    ok.avatar = found.avatar ?? ok.avatar;
+  } else {
+    const route = c.path();
+    const prev = readJson<Seen>(sessionStorage, SEEN);
+    const seen: Seen = prev?.who === who ? prev : { who, n: {}, a: {} };
+    const confirm = (bucket: Record<string, string[]>, v: string | null) => {
+      if (!v) return false;
+      const routes = (bucket[v] ??= []);
+      if (!routes.includes(route)) routes.push(route);
+      // poucos candidatos por pessoa (o storage não cresce)
+      const keys = Object.keys(bucket);
+      if (keys.length > 8) delete bucket[keys[0]];
+      return routes.length >= 2;
+    };
+    if (!ok.name && confirm(seen.n, found.name)) ok.name = found.name;
+    if (!ok.avatar && confirm(seen.a, found.avatar)) ok.avatar = found.avatar;
+    writeJson(sessionStorage, SEEN, seen);
+  }
+  writeJson(localStorage, CONFIRMED, ok);
+  return ok;
 }
 
 function collect(): AnalyticsBatch | null {
