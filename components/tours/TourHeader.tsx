@@ -25,7 +25,7 @@ export function TourHeader({
   id: string;
   name: string;
   description: string;
-  status: "draft" | "published" | "archived";
+  status: "draft" | "published" | "paused" | "archived";
   version: number | null;
   dirty: boolean;
   startUrl: string;
@@ -76,7 +76,7 @@ export function TourHeader({
           <Button variant="ghost" size="sm" onClick={() => setProduct("preview")}>
             <Play className="size-4" /> Preview no produto
           </Button>
-          <Button size="sm" onClick={publish} disabled={publishing || !canPublish || status === "archived"}>
+          <Button size="sm" onClick={publish} disabled={publishing || !canPublish || status === "archived" || status === "paused"}>
             {publishing ? <Loader2 className="size-4 animate-spin" /> : <Rocket className="size-4" />}
             {status === "draft" ? "Publicar" : dirty ? "Publicar alterações" : "Publicado"}
           </Button>

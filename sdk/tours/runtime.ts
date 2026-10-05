@@ -15,7 +15,7 @@ import { cardWidth, renderCard, tourCss } from "../../lib/tours/render";
 import { routeMatches } from "../../lib/tours/target";
 import { deviceConfig, deviceForWidth, normalizeSettings, normalizeSteps } from "../../lib/tours/normalize";
 import type { TourCatalogEntry, TourEventInput, TourEventType, TourPayload, TourStep } from "../../lib/tours/types";
-import { LUUMU_HOST_ATTR, waitForElement } from "../shared/dom";
+import { LUUMU_HOST_ATTR, waitForElement, whenScreenFree } from "../shared/dom";
 import { launchConfetti } from "../../lib/tours/confetti";
 import {
   anonymousId,
@@ -485,6 +485,26 @@ async function start(
 
 /* ------------------------------------------------------------------ gatilhos */
 
+/*
+  Início automático (primeiro acesso, carregamento, evento): depois do atraso configurado, se um
+  modal do site estiver aberto (ex.: vídeo de boas-vindas), espera ele fechar — o tour nunca
+  disputa a tela com ele. Início manual (Luumu.tours.start, preview) não espera.
+*/
+function autoStart(t: TourCatalogEntry) {
+  setTimeout(
+    () =>
+      safe(() =>
+        whenScreenFree(() =>
+          safe(() => {
+            if (cur || !eligible(t)) return;
+            void start(t.id, { v: t.v });
+          })
+        )
+      ),
+    Math.max(0, t.trigger.delaySec * 1000)
+  );
+}
+
 function eligible(t: TourCatalogEntry): boolean {
   if (!canShow(t.frequency, readMemory(t.id, userKey()), shownThisSession(t.id))) return false;
   return matchesAudience(t.audience, conditionContext());
@@ -499,7 +519,7 @@ function evaluateTriggers() {
     if (t.trigger.route && !routeMatches(t.trigger.route, location.pathname)) continue;
     if (!eligible(t)) continue;
     pendingTriggers.splice(pendingTriggers.indexOf(t), 1);
-    setTimeout(() => safe(() => void start(t.id, { v: t.v })), Math.max(0, t.trigger.delaySec * 1000));
+    autoStart(t);
     return;
   }
 }
@@ -559,7 +579,7 @@ const runtime = {
     safe(() => {
       if (cur) return;
       const t = pendingTriggers.find((x) => x.trigger.type === "event" && x.trigger.event === name && eligible(x));
-      if (t) setTimeout(() => safe(() => void start(t.id, { v: t.v })), Math.max(0, t.trigger.delaySec * 1000));
+      if (t) autoStart(t);
     });
   },
   start: (id: string) => safe(() => void start(id, { v: ctx?.catalog.find((t) => t.id === id)?.v ?? null })),

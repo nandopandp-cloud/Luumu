@@ -17,7 +17,7 @@ import type { ElementTarget, TourCatalogEntry, TourPayload, TourSettings, TourSt
 type TourRow = typeof tours.$inferSelect;
 type StepRow = typeof tourSteps.$inferSelect;
 
-export type TourStatus = "draft" | "published" | "archived";
+export type TourStatus = "draft" | "published" | "paused" | "archived";
 
 /* ---------- conversão passo <-> linha ---------- */
 
@@ -400,10 +400,16 @@ export async function restoreTourVersion(id: string, projectId: string, versionI
 }
 
 /** Arquivar tira o tour do ar sem perder versões; reativar volta à versão publicada. */
-export async function setTourStatus(id: string, projectId: string, status: "archived" | "active"): Promise<boolean> {
+/*
+  "paused" tira do ar sem perder nada: a versão publicada continua guardada e "active" devolve o
+  tour exatamente a ela. A entrega ao SDK só serve status "published", então pausar basta.
+*/
+export async function setTourStatus(id: string, projectId: string, status: "archived" | "active" | "paused"): Promise<boolean> {
   const tour = await ownedTour(id, projectId);
   if (!tour) return false;
-  const next: TourStatus = status === "archived" ? "archived" : tour.publishedVersionId ? "published" : "draft";
+  // só dá para pausar o que está no ar
+  if (status === "paused" && tour.status !== "published") return false;
+  const next: TourStatus = status === "active" ? (tour.publishedVersionId ? "published" : "draft") : status;
   await db.update(tours).set({ status: next, updatedAt: new Date() }).where(eq(tours.id, id));
   return true;
 }

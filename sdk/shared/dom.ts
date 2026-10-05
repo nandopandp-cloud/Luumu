@@ -272,3 +272,40 @@ export function waitForElement(
     const timer = setTimeout(() => finish(null), timeoutMs);
   });
 }
+
+/*
+  Modal do PRÓPRIO SITE aberto na tela (vídeo de boas-vindas, onboarding…). Tour automático não
+  abre por cima dele: espera fechar. Só conta o que ocupa uma área relevante da tela — balão de
+  chat ou toast com role=dialog não pode travar o tour — e nunca a UI da Luumu.
+*/
+const MODAL_SELECTOR = '[role="dialog"],[role="alertdialog"],[aria-modal="true"],dialog[open]';
+const MODAL_MIN_AREA = 0.15;
+
+export function blockingModal(): Element | null {
+  const screen = window.innerWidth * window.innerHeight;
+  for (const el of Array.from(document.querySelectorAll(MODAL_SELECTOR))) {
+    if (isLuumuNode(el) || el.getAttribute("data-state") === "closed") continue;
+    const r = el.getBoundingClientRect();
+    if (!screen || r.width * r.height < screen * MODAL_MIN_AREA) continue;
+    const cs = getComputedStyle(el);
+    if (cs.display === "none" || cs.visibility === "hidden" || cs.opacity === "0") continue;
+    return el;
+  }
+  return null;
+}
+
+/** Roda `fn` quando não houver modal do site aberto (na hora, se já estiver livre). */
+export function whenScreenFree(fn: () => void, settleMs = 700) {
+  if (!blockingModal()) return fn();
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const obs = new MutationObserver(() => {
+    if (timer) clearTimeout(timer);
+    // espera a animação de saída acabar e confere de novo (outro modal pode ter aberto em seguida)
+    timer = setTimeout(() => {
+      if (blockingModal()) return;
+      obs.disconnect();
+      fn();
+    }, settleMs);
+  });
+  obs.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-state", "open", "style", "class", "aria-hidden"] });
+}

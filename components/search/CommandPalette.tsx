@@ -128,6 +128,7 @@ const SURVEY_STATUS: Record<string, { label: string; cls: string }> = {
 const TOUR_STATUS: Record<string, { label: string; cls: string }> = {
   published: { label: "Publicado", cls: "bg-sucesso/12 text-sucesso" },
   draft: { label: "Rascunho", cls: "bg-fg/8 text-fg-mut" },
+  paused: { label: "Pausado", cls: "bg-aviso/15 text-aviso" },
   archived: { label: "Arquivado", cls: "bg-fg/8 text-fg-mut" },
 };
 const SENTIMENT = {

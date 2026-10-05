@@ -6,7 +6,7 @@ import { createPortal } from "react-dom";
 import Link from "@/components/ui/Link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { MoreHorizontal, Pencil, Copy, Archive, ArchiveRestore, Trash2, BarChart3, Loader2 } from "lucide-react";
+import { MoreHorizontal, Pencil, Copy, Archive, ArchiveRestore, Trash2, BarChart3, Loader2, Pause, Play } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -24,6 +24,8 @@ export function TourStatusBadge({ status, version, dirty }: { status: TourListIt
     <span className="inline-flex flex-wrap items-center gap-1.5">
       {status === "published" ? (
         <Badge tone="success">Publicado{version ? ` · v${version}` : ""}</Badge>
+      ) : status === "paused" ? (
+        <Badge tone="warn">Pausado{version ? ` · v${version}` : ""}</Badge>
       ) : status === "archived" ? (
         <Badge tone="neutral">Arquivado</Badge>
       ) : (
@@ -212,6 +214,22 @@ export function ToursTable({ items, hosts, newTour }: { items: TourRow[]; hosts:
               >
                 Duplicar
               </MenuItem>
+              {current.status === "published" && (
+                <MenuItem
+                  icon={<Pause className="size-4" />}
+                  onClick={() => run(() => setTourStatusAction(current.id, "paused"), "Tour pausado. Ele saiu do ar; retome quando quiser.")}
+                >
+                  Pausar
+                </MenuItem>
+              )}
+              {current.status === "paused" && (
+                <MenuItem
+                  icon={<Play className="size-4" />}
+                  onClick={() => run(() => setTourStatusAction(current.id, "active"), "Tour retomado. Ele voltou ao ar.")}
+                >
+                  Retomar
+                </MenuItem>
+              )}
               {current.status === "archived" ? (
                 <MenuItem
                   icon={<ArchiveRestore className="size-4" />}

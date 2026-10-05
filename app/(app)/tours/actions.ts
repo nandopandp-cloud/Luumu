@@ -89,7 +89,7 @@ export async function restoreTourVersionAction(id: string, versionId: string) {
   return ok ? { ok: true as const } : { ok: false as const, error: "Versão não encontrada." };
 }
 
-export async function setTourStatusAction(id: string, status: "archived" | "active") {
+export async function setTourStatusAction(id: string, status: "archived" | "active" | "paused") {
   const projectId = await getCurrentProjectId();
   const ok = await setTourStatus(id, projectId, status);
   revalidatePath(`/tours/${id}`, "layout");
