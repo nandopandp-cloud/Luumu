@@ -2,6 +2,11 @@ import Link from "@/components/ui/Link";
 import { MessageSquareText, MessagesSquare, Smile, Star, ChevronDown } from "lucide-react";
 import { DataFilters } from "@/components/ui/DataFilters";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Eye, Link2, Plus as PlusIcon, Users as UsersIcon, BarChart3 as BarsIcon, List } from "lucide-react";
+import { Button } from "@/components/ui/Button";
+import { IllustratedState } from "@/components/ui/IllustratedState";
+import { ResponsesEmptyArt } from "@/components/illustrations/EmptyArt";
+import { ShareSurveyButton } from "./ShareSurveyButton";
 import { getScoreDistribution, getWordCloud, type Scope } from "@/lib/db/responses";
 import { getOverview } from "@/lib/db/overview";
 import { getResponseFeed, FEED_SORTS, FEED_VIEWS, type FeedSort, type FeedView } from "@/lib/db/response-feed";
@@ -93,6 +98,11 @@ export async function ResponsesWorkspace({
         <SortMenu value={sort} />
       </div>
 
+      {counts.all === 0 ? (
+        <NoResponses surveyId={scope.surveyId} surveyName={surveyFilter?.options?.find((o) => o.id === scope.surveyId)?.name} />
+      ) : (
+        <>
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <InsightCard
           label="Total de respostas"
@@ -162,6 +172,49 @@ export async function ResponsesWorkspace({
           <WordsCard words={words} />
         </aside>
       </div>
+        </>
+      )}
     </div>
+  );
+}
+
+/** Nenhuma resposta no recorte (pesquisa, plataforma, período): orienta a divulgar a pesquisa. */
+function NoResponses({ surveyId, surveyName }: { surveyId?: string; surveyName?: string }) {
+  return (
+    <IllustratedState
+      className="pt-2"
+      wideActions
+      art={<ResponsesEmptyArt className="w-full" />}
+      title="Ainda não recebemos nenhuma resposta"
+      description={
+        surveyId
+          ? "Sua pesquisa já está pronta. Compartilhe o link com seus usuários e comece a coletar feedbacks."
+          : "Assim que seus usuários responderem às pesquisas desta plataforma, as respostas aparecem aqui."
+      }
+      actions={
+        surveyId ? (
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <ShareSurveyButton surveyId={surveyId} name={surveyName ?? "Pesquisa"} />
+            <Button href={`/surveys/${surveyId}/preview`} variant="ghost" className="w-full justify-center">
+              <Eye className="size-4" /> Ver minha pesquisa
+            </Button>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <Button href="/surveys" className="w-full justify-center">
+              <List className="size-4" /> Ver minhas pesquisas
+            </Button>
+            <Button href="/surveys/new" variant="ghost" className="w-full justify-center">
+              <PlusIcon className="size-4" /> Nova pesquisa
+            </Button>
+          </div>
+        )
+      }
+      steps={[
+        { icon: Link2, title: "Compartilhe o link", text: "Envie por e-mail, WhatsApp ou em seus canais de comunicação." },
+        { icon: UsersIcon, title: "Divulgue para seu público", text: "Quanto mais pessoas responderem, mais ricos serão os insights." },
+        { icon: BarsIcon, title: "Acompanhe em tempo real", text: "As respostas começam a aparecer aqui assim que forem enviadas." },
+      ]}
+    />
   );
 }

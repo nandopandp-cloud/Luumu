@@ -221,3 +221,59 @@ export function ErrorArt({ className }: { className?: string }) {
     </svg>
   );
 }
+
+/* ------------------------------------------------------------------ Respostas vazio */
+function Bubble({ x, y, r = 0, w = 92, cls }: { x: number; y: number; r?: number; w?: number; cls?: string }) {
+  return (
+    <g transform={`translate(${x} ${y}) rotate(${r})`} className={cls}>
+      <rect x={-w / 2} y="-30" width={w} height="56" rx="14" style={card} filter="url(#re-sh)" />
+      <path d={`M${-w / 2 + 16} 24 L ${-w / 2 + 12} 40 L ${-w / 2 + 32} 25Z`} style={card} />
+      {[-18, 0, 18].map((dx) => (
+        <circle key={dx} cx={dx} cy="-2" r="6" fill="#c4b0f7" />
+      ))}
+    </g>
+  );
+}
+
+export function ResponsesEmptyArt({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 760 320" className={className} role="img" aria-label="A ameixa da Luumu esperando as primeiras respostas">
+      <defs>
+        <Shadow id="re-sh" />
+      </defs>
+      {/* nuvem de fundo */}
+      <path d="M110 290 C 90 230 150 196 200 214 C 220 150 300 140 330 190 C 380 120 520 110 560 180 C 600 150 680 170 690 240 C 720 250 720 290 700 290Z" style={softer} />
+      <ellipse cx="380" cy="294" rx="230" ry="13" style={soft} />
+      {/* caminho tracejado das respostas chegando + avião de papel */}
+      <path d="M420 210 C 450 140 470 200 500 210 C 540 224 560 170 600 200 C 630 222 650 250 690 236" fill="none" strokeWidth="2.2" strokeDasharray="5 7" strokeLinecap="round" style={dash} />
+      <path d="M620 110 C 660 90 640 60 666 54 C 690 48 696 70 680 80 C 664 90 650 60 690 40 C 708 30 722 26 736 20" fill="none" strokeWidth="2.2" strokeDasharray="5 7" strokeLinecap="round" style={dash} />
+      <g transform="translate(740 18) rotate(-14)" className="ill-drift">
+        <path d="M-40 4 L 30 -22 L -6 22 Z" fill="#c4b0f7" />
+        <path d="M-40 4 L 30 -22 L -12 8 Z" fill="#e4dafd" />
+        <path d="M-12 8 L -6 22 L 2 4 Z" fill="#a98bf3" />
+      </g>
+      {/* balões de resposta "digitando…" */}
+      <Bubble x={520} y={150} r={6} w={96} cls="ill-bob-a" />
+      <Bubble x={620} y={96} r={-4} w={82} cls="ill-bob-b" />
+      <Bubble x={640} y={222} r={5} w={84} cls="ill-bob-c" />
+      <Leaf x={560} y={90} r={-60} s={0.7} className="ill-drift" />
+      <Leaf x={588} y={190} r={-30} s={0.65} className="ill-drift-b" />
+      <circle cx="560" cy="246" r="4" fill="#a98bf3" />
+      <Sparks x={322} y={56} color="#ffc233" r={30} />
+      <Plum x={300} y={182} scale={1.36} mood="curious" look={1} idPrefix="re">
+        <ellipse cx="-58" cy="26" rx="15" ry="18" fill="#6127cf" transform="rotate(25 -58 26)" />
+        {/* folha de respostas na mão */}
+        <g transform="translate(66 48) rotate(10)">
+          <rect x="-30" y="-38" width="64" height="80" rx="9" style={card} />
+          {[-20, -4, 12].map((dy, i) => (
+            <g key={i}>
+              <rect x="-20" y={dy - 4} width="9" height="8" rx="2.5" fill="#a78bfa" />
+              <rect x="-7" y={dy - 3} width={i === 1 ? 26 : 34} height="7" rx="3.5" style={line} />
+            </g>
+          ))}
+        </g>
+        <ellipse cx="94" cy="42" rx="13" ry="16" fill="#7238e6" transform="rotate(-20 94 42)" />
+      </Plum>
+    </svg>
+  );
+}

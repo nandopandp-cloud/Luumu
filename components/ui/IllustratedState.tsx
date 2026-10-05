@@ -11,6 +11,7 @@ export function IllustratedState({
   description,
   actions,
   steps,
+  wideActions,
   className,
 }: {
   art: React.ReactNode;
@@ -18,6 +19,8 @@ export function IllustratedState({
   description: string;
   actions?: React.ReactNode;
   steps?: { icon: LucideIcon; title: string; text: string }[];
+  /** botões lado a lado (em vez de empilhados) */
+  wideActions?: boolean;
   className?: string;
 }) {
   return (
@@ -25,7 +28,7 @@ export function IllustratedState({
       <div className="w-full max-w-[720px]">{art}</div>
       <h2 className="mt-2 font-display text-2xl font-extrabold tracking-tight text-fg md:text-[32px] md:leading-tight">{title}</h2>
       <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-fg-mut md:text-base">{description}</p>
-      {actions && <div className="mt-7 flex w-full max-w-[340px] flex-col gap-3">{actions}</div>}
+      {actions && <div className={cn("mt-7 flex w-full flex-col gap-3", wideActions ? "max-w-[520px]" : "max-w-[340px]")}>{actions}</div>}
       {steps && steps.length > 0 && (
         <div
           className={cn(
