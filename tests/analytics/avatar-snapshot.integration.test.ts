@@ -47,3 +47,41 @@ test("sem nenhuma imagem: diz o porquê", async () => {
   assert.equal(s.svg, undefined);
   assert.match(s.reason, /não tem imagem/);
 });
+
+test("foco no rosto: com corpo na base, enquadra só cabeça/rosto/acessórios num quadrado", async () => {
+  const { focusBox } = await import("../../sdk/analytics/avatar-snapshot");
+  // camadas reais de um avatar da Geniex (40×40): cabeça, rosto, óculos, corpo
+  const head = { x: 12.2, y: 4.6, w: 14.7, h: 17.6 };
+  const face = { x: 17.4, y: 10.4, w: 8.9, h: 9.1 };
+  const glasses = { x: 14.6, y: 12.2, w: 12.1, h: 4.3 };
+  const body = { x: 6, y: 18.5, w: 26.4, h: 23.5 };
+  const f = focusBox([head, face, glasses, body], 40, 40)!;
+  assert.equal(Math.round(f.w), Math.round(f.h)); // quadrado
+  assert.ok(f.w < 40 && f.w > head.h); // mais perto que o avatar inteiro, mas cabe a cabeça
+  const cx = f.x + f.w / 2;
+  const cy = f.y + f.h / 2;
+  assert.ok(Math.abs(cx - (head.x + head.w / 2)) < 2 && Math.abs(cy - (head.y + head.h / 2)) < 2); // centrado na cabeça
+  // sem corpo na base (só uma foto, ou camadas soltas): mantém o avatar inteiro
+  assert.equal(focusBox([head], 40, 40), null);
+  assert.equal(focusBox([head, face], 40, 40), null);
+});
+
+test("parece avatar? ícone de interface num botão não; foto/desenho sim", async () => {
+  const { looksLikeAvatarBox } = await import("../../sdk/analytics/avatar-snapshot");
+  // o ambiente de teste não mede layout: cada caso diz o tamanho que teria na tela
+  const el = (html: string, w = 40, h = 40) => {
+    document.body.innerHTML = html;
+    const e = document.body.firstElementChild!;
+    e.getBoundingClientRect = () => ({ width: w, height: h, x: 0, y: 0, top: 0, left: 0, right: w, bottom: h, toJSON: () => ({}) }) as DOMRect;
+    return e;
+  };
+  // o botão de ajuda do cabeçalho do Exploradores: ícone lucide "?" + texto, largo
+  assert.equal(looksLikeAvatarBox(el(`<button><svg class="lucide lucide-circle-help" viewBox="0 0 24 24" stroke="currentColor"><circle r="10"/></svg>Ajuda</button>`, 89, 20)), false);
+  // só ícone de interface, mesmo quadrado
+  assert.equal(looksLikeAvatarBox(el(`<button><svg viewBox="0 0 24 24" stroke="currentColor"><path d="M1 1"/></svg></button>`)), false);
+  assert.equal(looksLikeAvatarBox(el(`<button><img src="https://files-s3.jovensgenios.com/a.png"></button>`)), true);
+  assert.equal(looksLikeAvatarBox(el(`<div><svg viewBox="0 0 474 567"><path d="M1 1" fill="#fff"/></svg></div>`)), true);
+  // foto, mas num botão largo com texto: não é o avatar
+  assert.equal(looksLikeAvatarBox(el(`<button><img src="https://x.com/a.png">Perfil</button>`, 120, 36)), false);
+  assert.equal(looksLikeAvatarBox(el(`<button><span>FR</span></button>`)), false);
+});

@@ -14,8 +14,11 @@
   servidor (não vira uma visualização nova).
 */
 import { anonymousId } from "../shared/memory";
-import { queryTolerant, readPageIdentity, type CaptureConfig, type PageIdentity } from "./page-identity";
-import { snapshotAvatar, type Snapshot } from "./avatar-snapshot";
+import { queryTolerantAll, readPageIdentity, type CaptureConfig, type PageIdentity } from "./page-identity";
+import { looksLikeAvatarBox, snapshotAvatar, type Snapshot } from "./avatar-snapshot";
+
+/** O avatar desta tela: o 1º candidato do seletor que parece mesmo um avatar (não um botão de ajuda). */
+const avatarElement = (sel: string) => queryTolerantAll(document, sel).find(looksLikeAvatarBox) ?? null;
 import { svgHash } from "../../lib/analytics/svg-avatar";
 import { detectBrowser, detectOS, SESSION_IDLE_MS, LIMITS, type AnalyticsDevice, type AnalyticsPayload } from "../../lib/analytics/core";
 
@@ -167,7 +170,7 @@ function writeJson(store: Storage, key: string, v: unknown) {
 function pageIdentity(c: AnalyticsBootConfig, who: string, email: string | null): Confirmed | null {
   if (!c.capture) return null;
   // trocou a configuração (ex.: automático → seletores): o que foi confirmado antes não vale
-  const sig = `${c.capture.n}|${c.capture.a}`;
+  const sig = `v3|${c.capture.n}|${c.capture.a}`;
   const saved = readJson<Confirmed>(localStorage, CONFIRMED);
   const ok: Confirmed = saved?.who === who && saved.sig === sig ? saved : { who, sig, name: null, avatar: null };
   if ((ok.name && (ok.avatar || ok.svgh)) || Date.now() - lastScan < 15_000) return ok;
@@ -214,12 +217,12 @@ async function prepareAvatar() {
   const who = c.identity();
   const key = who.id || who.email;
   if (!key || who.avatar) return;
-  const sig = `${c.capture.n}|${c.capture.a}`;
+  const sig = `v3|${c.capture.n}|${c.capture.a}`;
   const saved = readJson<Confirmed>(localStorage, CONFIRMED);
   const ok: Confirmed = saved?.who === key && saved.sig === sig ? saved : { who: key, sig, name: null, avatar: null };
   if (ok.avatar || ok.svgh) return;
-  const el = queryTolerant(document, c.capture.a);
-  if (!el) return;
+  const el = avatarElement(c.capture.a);
+  if (!el) return; // tela sem o avatar: tenta de novo na próxima
   snapping = true;
   try {
     const snap = await snapshotAvatar(el);
@@ -333,8 +336,8 @@ const collector: AnalyticsCollector = {
     // diagnóstico: fotografa agora (sem gravar), para mostrar o que vai ao painel
     let snap: Snapshot | null = null;
     if (c?.capture?.a) {
-      const el = queryTolerant(document, c.capture.a);
-      snap = el ? await snapshotAvatar(el) : { reason: "o seletor da foto não encontrou nenhum elemento nesta tela", layers: [] };
+      const el = avatarElement(c.capture.a);
+      snap = el ? await snapshotAvatar(el) : { reason: "nesta tela o seletor não encontrou um avatar (teste numa tela onde ele aparece)", layers: [] };
     }
     const saved = readJson<Confirmed>(localStorage, CONFIRMED);
     return { capture: c?.capture ?? null, identify: who, page, snap: snap ?? lastSnapshot, confirmed: saved ? { avatar: saved.avatar, desenho: !!saved.svgh } : null };

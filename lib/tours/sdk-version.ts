@@ -1,2 +1,2 @@
 // Gerado por sdk/build.mjs — não editar. Hash do conteúdo de sdk-tours.js + sdk-builder.js + sdk-heatmaps.js + sdk-analytics.js.
-export const SDK_BUNDLE_VERSION = "82094e7a6a";
+export const SDK_BUNDLE_VERSION = "7cb0bdabc5";

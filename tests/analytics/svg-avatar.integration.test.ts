@@ -52,6 +52,9 @@ before(async () => {
 
 test("coletor: fotografa em segundo plano; o desenho vai no 1º envio, depois só a impressão", async () => {
   document.body.innerHTML = AVATAR;
+  // o ambiente de teste dá 120×36 a todo botão; na tela o avatar é um quadrado
+  const btn = document.querySelector("header button")!;
+  btn.getBoundingClientRect = () => ({ width: 40, height: 40, x: 0, y: 0, top: 0, left: 0, right: 40, bottom: 40, toJSON: () => ({}) }) as DOMRect;
   // a fotografia roda ~2,5 s depois do boot (a tela do usuário monta depois do SDK)
   await new Promise((r) => setTimeout(r, 3000));
   const first = col.collect();

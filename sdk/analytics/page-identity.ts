@@ -294,6 +294,20 @@ export function queryTolerant(doc: Document, selector: string): Element | null {
   return null;
 }
 
+/** Todos os candidatos do seletor: os que casam com ele inteiro e, depois, com versões mais curtas. */
+export function queryTolerantAll(doc: Document, selector: string): Element[] {
+  const out: Element[] = [];
+  const add = (sel: string) => {
+    try {
+      for (const el of Array.from(doc.querySelectorAll(sel))) if (!out.includes(el)) out.push(el);
+    } catch {}
+  };
+  add(selector);
+  const parts = selector.split(/\s*>\s*/).filter(Boolean);
+  for (let i = 1; parts.length - i >= 3 && out.length < 20; i++) add(parts.slice(i).join(" > "));
+  return out;
+}
+
 export interface PageIdentity {
   name: string | null;
   avatar: string | null;

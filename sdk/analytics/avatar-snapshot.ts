@@ -138,6 +138,57 @@ async function inlineSvgImages(clone: Element, maxSide: number) {
 
 const fmt = (n: number) => String(Math.round(n * 10) / 10);
 
+/** Ícone de interface (lucide/feather: traço currentColor em 24×24), não parte de avatar. */
+function isIconSvg(svg: Element): boolean {
+  const cls = svg.getAttribute("class") ?? "";
+  if (/\blucide\b|\bicon\b|feather/i.test(cls)) return true;
+  return svg.getAttribute("stroke") === "currentColor" && svg.getAttribute("viewBox") === "0 0 24 24";
+}
+
+/*
+  O elemento parece um avatar? Quadrado-ish (um botão com texto e ícone, como o de ajuda do
+  cabeçalho, não é), de tamanho de avatar, com imagem/desenho de verdade dentro. Usado para escolher
+  entre os candidatos do seletor tolerante — sem isso, outra tela casava com o botão errado.
+*/
+export function looksLikeAvatarBox(el: Element): boolean {
+  const r = el.getBoundingClientRect();
+  if (r.width && r.height) {
+    if (r.width < 16 || r.height < 16 || r.width > 320 || r.height > 320) return false;
+    const ratio = r.width / r.height;
+    if (ratio < 0.6 || ratio > 1.6) return false;
+  }
+  if (el.matches("img, canvas") || el.querySelector("img, canvas, picture")) return true;
+  const svgs = [el.tagName.toLowerCase() === "svg" ? el : null, ...Array.from(el.querySelectorAll("svg"))].filter((x): x is Element => !!x);
+  if (svgs.some((x) => !isIconSvg(x))) return true;
+  // fundo em CSS
+  for (const n of [el, ...Array.from(el.querySelectorAll("*")).slice(0, 30)]) {
+    if (urlIn(window.getComputedStyle(n).backgroundImage)) return true;
+  }
+  return false;
+}
+
+type Box = { x: number; y: number; w: number; h: number };
+
+/*
+  Foco no rosto: personagem com corpo (a maior camada, encostada na base do avatar) é enquadrado só
+  na cabeça — cabeça, cabelo, rosto e acessórios —, centralizado num quadrado com folga. Num círculo
+  de 40 px o corpo inteiro deixa o rosto minúsculo e fora do centro.
+*/
+export function focusBox(layers: Box[], W: number, H: number): Box | null {
+  if (layers.length < 2) return null;
+  const area = (b: Box) => b.w * b.h;
+  const body = layers.reduce((a, b) => (area(b) > area(a) ? b : a));
+  if (body.y + body.h < H * 0.85) return null; // a maior camada não é um corpo na base
+  const head = layers.filter((b) => b !== body);
+  const x0 = Math.min(...head.map((b) => b.x));
+  const y0 = Math.min(...head.map((b) => b.y));
+  const x1 = Math.max(...head.map((b) => b.x + b.w));
+  const y1 = Math.max(...head.map((b) => b.y + b.h));
+  const side = Math.max(x1 - x0, y1 - y0) * 1.3;
+  if (!side || side >= Math.max(W, H)) return null;
+  return { x: (x0 + x1) / 2 - side / 2, y: (y0 + y1) / 2 - side / 2, w: side, h: side };
+}
+
 /** Fotografa o avatar (ver comentário do módulo). */
 export async function snapshotAvatar(root: Element, scale = 2): Promise<Snapshot> {
   const doc = root.ownerDocument;
@@ -146,6 +197,7 @@ export async function snapshotAvatar(root: Element, scale = 2): Promise<Snapshot
   const H = R.height || 64;
   const maxSide = Math.max(48, Math.min(160, Math.round(Math.max(W, H) * scale)));
   const layers: string[] = [];
+  const boxes: Box[] = [];
   const parts: Promise<string | null>[] = [];
   const pos = (el: Element) => {
     const r = el.getBoundingClientRect();
@@ -169,8 +221,10 @@ export async function snapshotAvatar(root: Element, scale = 2): Promise<Snapshot
       }
     }
     if (tag === "svg") {
+      if (isIconSvg(el)) return; // ícone de interface dentro do botão, não parte do avatar
       layers.push("svg");
       const p = pos(el);
+      boxes.push(p);
       const clone = styledSvgClone(el as SVGSVGElement);
       pullExternalDefs(el, clone);
       const vb = el.getAttribute("viewBox");
@@ -187,11 +241,13 @@ export async function snapshotAvatar(root: Element, scale = 2): Promise<Snapshot
       const src = img.currentSrc || img.src;
       layers.push("img");
       const p = pos(el);
+      boxes.push(p);
       const fit = cs.objectFit === "contain" ? "xMidYMid meet" : "xMidYMid slice";
       parts.push(toDataUri(src, maxSide).then((d) => (d ? imageTag(d, p, fit) : null)));
     } else if (tag === "canvas") {
       layers.push("canvas");
       const p = pos(el);
+      boxes.push(p);
       let d: string | null = null;
       try {
         d = (el as HTMLCanvasElement).toDataURL("image/webp", 0.82);
@@ -223,7 +279,10 @@ export async function snapshotAvatar(root: Element, scale = 2): Promise<Snapshot
 
   const done = (await Promise.all(parts)).filter((x): x is string => !!x);
   if (!done.length) return { reason: "as imagens do avatar são de outro domínio sem permissão de leitura (CORS)", layers };
-  const svg = `<svg xmlns="${NS}" width="${fmt(W)}" height="${fmt(H)}" viewBox="0 0 ${fmt(W)} ${fmt(H)}">${done.join("")}</svg>`.replace(/\s+/g, " ");
+  const f = focusBox(boxes, W, H);
+  const vb = f ? `${fmt(f.x)} ${fmt(f.y)} ${fmt(f.w)} ${fmt(f.h)}` : `0 0 ${fmt(W)} ${fmt(H)}`;
+  const size = f ? 96 : null;
+  const svg = `<svg xmlns="${NS}" width="${size ?? fmt(W)}" height="${size ?? fmt(H)}" viewBox="${vb}">${done.join("")}</svg>`.replace(/\s+/g, " ");
   if (svg.length <= SVG_MAX) return { svg, reason: "ok", layers };
   // grande demais: tenta de novo com imagens menores
   if (scale > 1) return snapshotAvatar(root, 1);
