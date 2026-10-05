@@ -1,5 +1,6 @@
 import "server-only";
 import { and, desc, eq, sql, type SQL } from "drizzle-orm";
+import type { BatchItem } from "drizzle-orm/batch";
 import { db } from "./client";
 import { analyticsPageviews, analyticsSessions, analyticsSettings, analyticsUsers, analyticsViews, avatarSvgs } from "@/db/schema";
 import { analyticsViewId } from "./ids";
@@ -99,7 +100,11 @@ async function storeAvatarSvg(projectId: string, p: AnalyticsPayload): Promise<s
   return avatarSvgPath(projectId, p.avsvgh);
 }
 
-export async function recordAnalytics(workspaceId: string, projectId: string, host: string, p: AnalyticsPayload) {
+/**
+ * Grava uma visita. `extra`: outras escritas do mesmo envio (as telas de heatmap) que vão no
+ * MESMO lote — uma ida ao banco por envio do SDK em vez de duas.
+ */
+export async function recordAnalytics(workspaceId: string, projectId: string, host: string, p: AnalyticsPayload, extra: BatchItem<"pg">[] = []) {
   void workspaceId;
   // sem foto com endereço, mas com o desenho do avatar: vira a foto deste usuário
   if (!p.avatar && p.avsvgh) p = { ...p, avatar: await storeAvatarSvg(projectId, p) };
@@ -210,6 +215,7 @@ export async function recordAnalytics(workspaceId: string, projectId: string, ho
           events: sql`array(select distinct unnest(${analyticsPageviews.events} || excluded.events))`,
         },
       }),
+      ...extra,
     ]);
 
   try {

@@ -83,13 +83,81 @@ export function validSelector(s: unknown): s is string {
   return typeof s === "string" && s.length > 0 && s.length <= LIMITS.selector && !/[<{};]|javascript:/i.test(s);
 }
 
+/*
+  Formato COMPACTO do envio (SDK atual): o mesmo seletor CSS longo se repetia em cada célula de
+  movimento, clique, permanência e rótulo — ~70% dos bytes. Agora cada seletor vai uma vez em
+  `s` e o resto aponta para a posição dele:
+    c: [i, x, y][]   m: [i, gx, gy, n][]   h: [i, ms][]   l: [i, texto][]   p: i[]
+  O servidor reconstrói o formato antigo antes de validar: o que é gravado não muda, e SDKs
+  antigos (em cache nos navegadores) continuam funcionando.
+*/
+export interface CompactVisit {
+  s: string[];
+  c: [number, number, number][];
+  m: [number, number, number, number][];
+  h: [number, number][];
+  l: [number, string][];
+  p: number[];
+}
+
+/** Formato antigo → compacto (SDK). PURO. */
+export function compactVisit(v: {
+  c: [string, number, number][];
+  m: Record<string, number>;
+  h: Record<string, number>;
+  l: Record<string, string>;
+  p: string[];
+}): CompactVisit {
+  const s: string[] = [];
+  const at = new Map<string, number>();
+  const ix = (sel: string) => {
+    let i = at.get(sel);
+    if (i === undefined) {
+      i = s.push(sel) - 1;
+      at.set(sel, i);
+    }
+    return i;
+  };
+  const m: CompactVisit["m"] = [];
+  for (const [k, n] of Object.entries(v.m)) {
+    const cut = k.lastIndexOf("|", k.lastIndexOf("|") - 1);
+    const [gx, gy] = k.slice(cut + 1).split("|").map(Number);
+    m.push([ix(k.slice(0, cut)), gx, gy, n]);
+  }
+  return {
+    c: v.c.map(([sel, x, y]) => [ix(sel), x, y]),
+    m,
+    h: Object.entries(v.h).map(([sel, ms]) => [ix(sel), ms]),
+    l: Object.entries(v.l).map(([sel, t]) => [ix(sel), t]),
+    p: v.p.map(ix),
+    s,
+  };
+}
+
+/** Compacto → formato antigo (servidor). Índice inválido some (entrada não confiável). PURO. */
+export function expandVisit(o: Record<string, unknown>): Record<string, unknown> {
+  if (!Array.isArray(o.s)) return o;
+  const s = o.s.slice(0, 400).map((x) => (typeof x === "string" ? x : ""));
+  const sel = (i: unknown) => (typeof i === "number" && Number.isInteger(i) && s[i] ? s[i] : null);
+  const rows = (v: unknown) => (Array.isArray(v) ? v.filter(Array.isArray) : []) as unknown[][];
+  const c = rows(o.c).flatMap((r) => (sel(r[0]) ? [[sel(r[0]), r[1], r[2]]] : []));
+  const m: Record<string, unknown> = {};
+  for (const r of rows(o.m).slice(0, LIMITS.moveCells)) if (sel(r[0])) m[`${sel(r[0])}|${r[1]}|${r[2]}`] = r[3];
+  const h: Record<string, unknown> = {};
+  for (const r of rows(o.h).slice(0, LIMITS.hovers)) if (sel(r[0])) h[sel(r[0])!] = r[1];
+  const l: Record<string, unknown> = {};
+  for (const r of rows(o.l).slice(0, 100)) if (sel(r[0])) l[sel(r[0])!] = r[1];
+  const p = (Array.isArray(o.p) ? o.p : []).map(sel).filter(Boolean);
+  return { ...o, c, m, h, l, p };
+}
+
 /**
  * Valida e limita um envio do SDK. Tudo que vem do navegador é entrada não confiável
  * (qualquer pessoa com a key pública pode postar): números são presos aos limites, textos
  * cortados, listas truncadas. Devolve null se o essencial faltar.
  */
 export function parsePageview(raw: unknown): PageviewPayload | null {
-  const o = (raw ?? {}) as Record<string, unknown>;
+  const o = expandVisit((raw ?? {}) as Record<string, unknown>);
   const path = str(o.path, 200);
   const sid = str(o.sid, 64);
   if (!path || !sid || typeof o.key !== "string") return null;

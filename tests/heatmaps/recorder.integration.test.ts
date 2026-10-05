@@ -81,11 +81,13 @@ test("clique no ícone conta no botão, com a posição dentro dele; a visita va
   assert.equal(p.key, undefined); // key e host vão uma vez só, no envelope do core
   assert.equal(p.path, "cursos/:id");
   assert.equal(p.c.length, 2);
-  const [sel, x, y] = p.c[0];
+  // formato compacto: o seletor vai uma vez em `s`; cliques e rótulos apontam para ele
+  const [i, x, y] = p.c[0];
+  const sel = p.s[i];
   assert.equal(document.querySelector(sel), document.querySelector("button"));
   assert.deepEqual([x, y], [250, 500]);
   assert.equal(p.p.length, 2); // caminho: botão ⟶ Preços
-  assert.match(p.l[sel], /Começar agora/);
+  assert.match(p.l.find(([j]: [number, string]) => j === i)?.[1] ?? "", /Começar agora/);
   assert.ok(p.dur >= 1000);
   assert.ok(!JSON.stringify(p).includes("segredo"));
 

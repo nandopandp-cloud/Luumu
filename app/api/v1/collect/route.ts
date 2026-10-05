@@ -3,7 +3,7 @@ import { checkRateLimit } from "@/lib/api/ratelimit";
 import { allowedOrigin, jsonCors, preflight } from "@/lib/api/cors";
 import { hostFromOrigin, normalizeHost } from "@/lib/db/hosts";
 import { getAnalyticsSettings, recordAnalytics } from "@/lib/db/analytics";
-import { heatmapQuota, isHeatmapsEnabled, recordPageview } from "@/lib/db/heatmaps";
+import { heatmapQuota, isHeatmapsEnabled, pageviewsInsert, recordPageviews } from "@/lib/db/heatmaps";
 import { parseAnalytics } from "@/lib/analytics/core";
 import { parsePageview } from "@/lib/heatmaps/core";
 
@@ -43,31 +43,46 @@ export async function POST(req: Request) {
   if (!(await checkRateLimit(`col:${ip}:${key}`, 120, 60))) return jsonCors({ error: "Muitas requisições." }, { status: 429, origin: allowOrigin });
 
   const host = hostFromOrigin(origin) || normalizeHost(typeof body.host === "string" ? body.host : "") || "";
-  const tasks: Promise<unknown>[] = [];
-
   const a = body.a && typeof body.a === "object" ? parseAnalytics({ ...(body.a as object), key }) : null;
-  if (a) {
-    tasks.push(
-      getAnalyticsSettings(resolved.projectId).then((s) => (s.enabled ? recordAnalytics(resolved.workspaceId, resolved.projectId, host, a) : null))
-    );
-  }
-
   const visits = (Array.isArray(body.h) ? body.h.slice(0, MAX_VISITS) : [])
     .map((v) => (v && typeof v === "object" ? parsePageview({ ...(v as object), key, host }) : null))
     .filter((v): v is NonNullable<typeof v> => !!v);
-  if (visits.length) {
+
+  // o que vale gravar (configurações e cota em cache por instância: sem ida ao banco no caso comum)
+  const [analyticsOn, heatmapOk] = await Promise.all([
+    a ? getAnalyticsSettings(resolved.projectId).then((s) => s.enabled).catch(() => false) : false,
+    visits.length ? heatmapAllowed(resolved.workspaceId, resolved.projectId).catch(() => false) : false,
+  ]);
+  const { workspaceId, projectId } = resolved;
+
+  /*
+    Uma ida ao banco por envio: as telas de heatmap entram no lote do Analytics. Se o lote
+    conjunto falhar, grava cada parte sozinha — um problema numa não derruba a outra.
+  */
+  const tasks: Promise<unknown>[] = [];
+  if (a && analyticsOn && heatmapOk) {
     tasks.push(
-      (async () => {
-        if (!(await isHeatmapsEnabled(resolved.projectId))) return;
-        const quota = await heatmapQuota(resolved.workspaceId);
-        if (quota.limit !== Infinity && quota.used >= quota.limit) return;
-        await Promise.all(visits.map((v) => recordPageview(resolved.workspaceId, resolved.projectId, host, v)));
-      })()
+      recordAnalytics(workspaceId, projectId, host, a, [pageviewsInsert(workspaceId, projectId, host, visits)]).catch(async (e) => {
+        console.error("[collect] lote conjunto, gravando separado", e);
+        const r = await Promise.allSettled([recordAnalytics(workspaceId, projectId, host, a), recordPageviews(workspaceId, projectId, host, visits)]);
+        const bad = r.find((x) => x.status === "rejected");
+        if (bad) throw (bad as PromiseRejectedResult).reason;
+      })
     );
+  } else {
+    if (a && analyticsOn) tasks.push(recordAnalytics(workspaceId, projectId, host, a));
+    if (heatmapOk) tasks.push(recordPageviews(workspaceId, projectId, host, visits));
   }
 
   const results = await Promise.allSettled(tasks);
   const failed = results.find((r) => r.status === "rejected");
   if (failed) console.error("[collect]", (failed as PromiseRejectedResult).reason);
   return jsonCors({ ok: !failed }, { origin: allowOrigin });
+}
+
+/** Heatmaps ligados no projeto e dentro da cota do plano. */
+async function heatmapAllowed(workspaceId: string, projectId: string) {
+  if (!(await isHeatmapsEnabled(projectId))) return false;
+  const quota = await heatmapQuota(workspaceId);
+  return quota.limit === Infinity || quota.used < quota.limit;
 }

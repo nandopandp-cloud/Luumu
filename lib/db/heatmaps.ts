@@ -65,6 +65,54 @@ export async function heatmapQuota(workspaceId: string, fresh = false) {
 */
 let sampleColumnMissingUntil = 0;
 
+/** Linha de heatmap_pageviews a partir de um envio validado. */
+function pageviewRow(workspaceId: string, projectId: string, host: string, p: PageviewPayload) {
+  return {
+    id: heatmapPageviewId(),
+    workspaceId,
+    projectId,
+    host,
+    path: p.path,
+    device: p.device,
+    sessionId: p.sid,
+    viewportW: p.vw,
+    viewportH: p.vh,
+    docH: p.dh,
+    durationMs: p.dur,
+    maxScroll: p.sd,
+    maxMove: p.md,
+    clicks: p.c.map(([s, x, y]) => ({ s, x, y })),
+    moves: p.m,
+    hovers: p.h,
+    labels: p.l,
+    clickPath: clickPathKey(p.p),
+    sampleRate: p.r,
+  };
+}
+
+/**
+ * Todas as telas de um envio num INSERT só (uma ida ao banco, não uma por tela). Devolve a
+ * consulta sem executar, para o /collect juntar com a gravação do Analytics no mesmo lote.
+ */
+export function pageviewsInsert(workspaceId: string, projectId: string, host: string, visits: PageviewPayload[]) {
+  return db.insert(heatmapPageviews).values(visits.map((v) => pageviewRow(workspaceId, projectId, host, v)));
+}
+
+/** Grava as telas de um envio (INSERT único; sem a coluna sample_rate, cai para o caminho antigo). */
+export async function recordPageviews(workspaceId: string, projectId: string, host: string, visits: PageviewPayload[]) {
+  if (!visits.length) return;
+  if (Date.now() > sampleColumnMissingUntil) {
+    try {
+      await pageviewsInsert(workspaceId, projectId, host, visits);
+      return;
+    } catch (e) {
+      if (!/sample_rate/.test(String((e as Error)?.message ?? e) + String((e as { cause?: unknown })?.cause ?? ""))) throw e;
+      sampleColumnMissingUntil = Date.now() + 10 * 60_000;
+    }
+  }
+  await Promise.all(visits.map((v) => recordPageview(workspaceId, projectId, host, v)));
+}
+
 export async function recordPageview(workspaceId: string, projectId: string, host: string, p: PageviewPayload) {
   const values = {
     id: heatmapPageviewId(),

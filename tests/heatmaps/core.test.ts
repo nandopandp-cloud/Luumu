@@ -116,3 +116,41 @@ test("amostragem: cabe na cota do mês, com teto diário", () => {
   assert.equal(heatmapSampleRate({ ...base, estimatedDaily: 10_000_000 }), 0.01); // piso de 1%
   assert.equal(heatmapSampleRate({ ...base, limit: 0, estimatedDaily: 10 }), 0); // plano sem heatmaps
 });
+
+test("formato compacto: o servidor reconstrói exatamente o mesmo registro do formato antigo", async () => {
+  const { compactVisit } = await import("../../lib/heatmaps/core");
+  const SEL = "body>div:nth-of-type(2)>div>div>div>div>div:nth-of-type(1)>div:nth-of-type(3)>button:nth-of-type(1)";
+  const OTHER = "body>div:nth-of-type(2)>div>div>div>div>div:nth-of-type(1)";
+  const legacy = {
+    key: "pk_x",
+    host: "squad.jovensgenios.com",
+    path: "quiz/:id",
+    device: "desktop",
+    sid: "s_123456",
+    vw: 1280,
+    vh: 800,
+    dh: 2000,
+    dur: 30_000,
+    sd: 80,
+    md: 60,
+    c: [[SEL, 120, 300], [SEL, 500, 500]],
+    m: { [`${OTHER}|4|9`]: 1, [`${OTHER}|6|5`]: 3, [`${SEL}|1|1`]: 2 },
+    h: { [SEL]: 1200, [OTHER]: 300 },
+    l: { [SEL]: "AI, II, IV, III." },
+    p: [SEL, OTHER],
+    r: 0.5,
+  };
+  const compact = { ...legacy, ...compactVisit(legacy as never) };
+  assert.deepEqual(parsePageview(compact), parsePageview(legacy));
+  // cada seletor viaja uma vez só: bem menor que o antigo
+  assert.equal((compact as { s: string[] }).s.length, 2);
+  assert.ok(JSON.stringify(compact).length < JSON.stringify(legacy).length * 0.6);
+});
+
+test("formato compacto: índices inválidos ou fora da lista são ignorados", () => {
+  const v = parsePageview({ key: "pk_x", path: "a", sid: "s_123456", s: ["body>main"], c: [[0, 10, 10], [7, 1, 1], ["x", 1, 1]], m: [[0, 1, 1, 2], [3, 1, 1, 9]], h: [[0, 50], [-1, 9]], l: [[0, "Entrar"]], p: [0, 5] })!;
+  assert.deepEqual(v.c, [["body>main", 10, 10]]);
+  assert.deepEqual(v.m, { "body>main|1|1": 2 });
+  assert.deepEqual(v.h, { "body>main": 50 });
+  assert.deepEqual(v.p, ["body>main"]);
+});

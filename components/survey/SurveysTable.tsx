@@ -10,7 +10,7 @@ import { Search, MoreHorizontal, Pause, Play, Square, Eye, Pencil, Type, Trash2,
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Field, Input, Select } from "@/components/ui/Input";
+import { Field, Input } from "@/components/ui/Input";
 import { HostBadge } from "@/components/ui/HostBadge";
 import { SegmentedControl } from "@/components/ui/Tabs";
 import { useToast } from "@/components/ui/Toast";
@@ -39,7 +39,6 @@ const statusTone: Record<SurveyStatus, "success" | "warn" | "neutral" | "brand">
 type Filter = "todas" | SurveyStatus;
 
 // valor do filtro de plataforma para pesquisas sem alvo (aparecem em todas as plataformas)
-const NO_TARGET = "__none__";
 
 export function SurveysTable({
   items,
@@ -51,13 +50,12 @@ export function SurveysTable({
   currentDate: string;
   /** plataformas (hostnames) do projeto */
   hosts?: string[];
-  /** plataformas escolhidas no header (a lista já abre filtrada nelas) */
+  /** plataformas escolhidas no seletor do header (a lista vem filtrada nelas) */
   initialHosts?: string[];
 }) {
   const [filter, setFilter] = useState<Filter>("todas");
   // "" = todas as plataformas
   // uma plataforma no header: o seletor da tabela abre nela; várias: a lista vem filtrada nelas
-  const [hostFilter, setHostFilter] = useState(initialHosts.length === 1 ? initialHosts[0] : "");
   const [q, setQ] = useState("");
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
@@ -74,18 +72,14 @@ export function SurveysTable({
   const multiHost = allHosts.length > 1 || items.some((s) => s.targetHosts.length > 0);
 
   /*
-    Filtro de plataforma: uma plataforma = pesquisas direcionadas a ela; NO_TARGET = as sem
-    plataforma definida (aparecem em todas). Incluir estas no filtro de uma plataforma fazia
-    ele parecer quebrado: as pesquisas antigas, todas sem alvo, continuavam na lista.
+    Plataforma: a escolhida no seletor do header — pesquisas direcionadas a alguma delas. As sem
+    plataforma definida ficam de fora (incluí-las fazia o filtro parecer quebrado: as antigas,
+    todas sem alvo, continuavam na lista).
   */
   const filtered = items.filter(
     (s) =>
       (filter === "todas" || s.status === filter) &&
-      (hostFilter
-        ? hostFilter === NO_TARGET
-          ? s.targetHosts.length === 0
-          : s.targetHosts.includes(hostFilter)
-        : initialHosts.length < 2 || s.targetHosts.some((h) => initialHosts.includes(h))) &&
+      (!initialHosts.length || s.targetHosts.some((h) => initialHosts.includes(h))) &&
       s.name.toLowerCase().includes(q.toLowerCase())
   );
   // ordenação pelos cabeçalhos; "Atualizada" usa a ordem do servidor (mais recente primeiro)
@@ -167,22 +161,6 @@ export function SurveysTable({
           ]}
         />
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          {allHosts.length > 1 && (
-            <Select
-              value={hostFilter}
-              onChange={(e) => setHostFilter(e.target.value)}
-              aria-label="Filtrar por plataforma"
-              className="sm:w-60"
-            >
-              <option value="">Todas as plataformas</option>
-              {allHosts.map((h) => (
-                <option key={h} value={h}>
-                  {h}
-                </option>
-              ))}
-              <option value={NO_TARGET}>Sem plataforma definida</option>
-            </Select>
-          )}
           <div className="relative sm:w-72">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-fg-mut" />
             <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar pesquisa…" className="pl-9" />

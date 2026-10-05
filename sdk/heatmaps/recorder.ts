@@ -15,7 +15,7 @@
   laço; a cópia é feita só quando o navegador está ocioso.
 */
 import { isStableId } from "../../lib/tours/target";
-import { LIMITS, MOVE_GRID, SNAPSHOT_MAX_BYTES, type HeatmapDevice, type PageviewPayload } from "../../lib/heatmaps/core";
+import { LIMITS, MOVE_GRID, SNAPSHOT_MAX_BYTES, compactVisit, type CompactVisit, type HeatmapDevice, type PageviewPayload } from "../../lib/heatmaps/core";
 import { LUUMU_HOST_ATTR, cssEscape } from "../shared/dom";
 
 export interface HeatmapsBootConfig {
@@ -34,7 +34,8 @@ export interface HeatmapsBootConfig {
 }
 
 /** Uma visita pronta para envio (o core acrescenta key e host no envio único). */
-export type HeatmapVisit = Omit<PageviewPayload, "key" | "host">;
+/** Uma tela no envio: dados gerais + cliques/movimento no formato compacto (ver compactVisit). */
+export type HeatmapVisit = Omit<PageviewPayload, "key" | "host" | "c" | "m" | "h" | "l" | "p"> & CompactVisit;
 
 export interface HeatmapsRecorder {
   boot(cfg: HeatmapsBootConfig): void;
@@ -287,7 +288,7 @@ function finalize() {
     findScroller();
     v.sd = scroller ? Math.max(v.sd, viewDepth()) : 100;
   }
-  const payload: HeatmapVisit = {
+  const base = {
     path: v.path,
     device: cfg.device,
     sid,
@@ -298,17 +299,14 @@ function finalize() {
     dur: v.activeMs,
     sd: v.sd,
     md: v.md,
-    c: v.clicks,
-    m: v.moves,
-    h: v.hovers,
-    l: v.labels,
-    p: v.path_,
     r: cfg.rate,
   };
+  const pack = (moves: Record<string, number>): HeatmapVisit => ({ ...base, ...compactVisit({ c: v.clicks, m: moves, h: v.hovers, l: v.labels, p: v.path_ }) });
+  let payload = pack(v.moves);
   let size = JSON.stringify(payload).length;
   // sendBeacon tem teto (~64 KB): o movimento é o que cede primeiro
   if (size > 40_000) {
-    payload.m = Object.fromEntries(Object.entries(payload.m).sort((a, b) => b[1] - a[1]).slice(0, 60));
+    payload = pack(Object.fromEntries(Object.entries(v.moves).sort((a, b) => b[1] - a[1]).slice(0, 60)));
     size = JSON.stringify(payload).length;
   }
   queue.push(payload);
