@@ -1,9 +1,10 @@
-import { Plus } from "lucide-react";
+import { BarChart3, BookOpen, Pencil, Plus, Users } from "lucide-react";
 import { hostList } from "@/lib/hosts";
 import { savedPlatform } from "@/lib/platform";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
-import { EmptyState } from "@/components/ui/EmptyState";
+import { IllustratedState } from "@/components/ui/IllustratedState";
+import { SurveysEmptyArt } from "@/components/illustrations/EmptyArt";
 import { SurveysTable, type SurveyListItem } from "@/components/survey/SurveysTable";
 import { listSurveys } from "@/lib/db/surveys";
 import { listHosts } from "@/lib/db/hosts";
@@ -54,11 +55,25 @@ export default async function SurveysPage() {
       />
 
       {items.length === 0 ? (
-        <EmptyState
-          mascot="Trabalhando"
-          title="Nenhuma pesquisa ainda"
-          description="Crie sua primeira pesquisa e comece a ouvir seus clientes."
-          action={<Button href="/surveys/new"><Plus className="size-4" /> Nova pesquisa</Button>}
+        <IllustratedState
+          art={<SurveysEmptyArt className="w-full" />}
+          title="Ainda não há pesquisas por aqui"
+          description="Crie sua primeira pesquisa e comece a coletar feedbacks para entender melhor seus usuários."
+          actions={
+            <>
+              <Button href="/surveys/new" className="w-full justify-center">
+                <Plus className="size-4" /> Criar minha primeira pesquisa
+              </Button>
+              <Button href="/help?a=primeira-pesquisa" variant="ghost" className="w-full justify-center">
+                <BookOpen className="size-4" /> Ver exemplos de pesquisas
+              </Button>
+            </>
+          }
+          steps={[
+            { icon: Pencil, title: "Crie em minutos", text: "Modelos prontos e personalizáveis para diferentes objetivos." },
+            { icon: Users, title: "Compartilhe facilmente", text: "Envie por link, QR Code ou integre ao seu produto." },
+            { icon: BarChart3, title: "Obtenha insights reais", text: "Acompanhe as respostas em tempo real com relatórios intuitivos." },
+          ]}
         />
       ) : (
         <SurveysTable key={platform} items={items} currentDate={currentDate} hosts={hosts} initialHosts={hostList(platform).filter((h) => hosts.includes(h))} />

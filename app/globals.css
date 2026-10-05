@@ -278,3 +278,26 @@ h1, h2, h3, h4, h5 {
 .luumu-intro-skip:hover { color: var(--accent); border-color: var(--accent); }
 @keyframes luumuIntroFailsafe { to { opacity: 0; visibility: hidden; pointer-events: none; } }
 @media (prefers-reduced-motion: reduce) { .luumu-intro { display: none; } }
+
+/* ---- Ilustrações (components/illustrations): movimento leve, nunca chamativo ---- */
+.ill-float { animation: illFloat 4.8s ease-in-out infinite; }
+.ill-leaf-l { transform-box: fill-box; transform-origin: 100% 100%; animation: illSwayL 3.2s ease-in-out infinite alternate; }
+.ill-leaf-r { transform-box: fill-box; transform-origin: 0% 100%; animation: illSwayR 3.6s ease-in-out infinite alternate; }
+.ill-bob-a { animation: illBob 5.2s ease-in-out infinite; }
+.ill-bob-b { animation: illBob 6s ease-in-out -2s infinite; }
+.ill-bob-c { animation: illBob 5.6s ease-in-out -1s infinite; }
+.ill-drift { animation: illDrift 6.4s ease-in-out infinite; }
+.ill-drift-b { animation: illDrift 7.2s ease-in-out -3s infinite; }
+.ill-sparks { animation: illSparks 2.4s ease-in-out infinite; }
+.ill-unplug { animation: illUnplug 2.8s ease-in-out infinite; }
+@keyframes illFloat { 0%, 100% { translate: 0 0; } 50% { translate: 0 -6px; } }
+@keyframes illSwayL { from { rotate: -3deg; } to { rotate: 4deg; } }
+@keyframes illSwayR { from { rotate: 3deg; } to { rotate: -4deg; } }
+/* `translate` (e não `transform`) soma com o transform que o SVG já tem no elemento */
+@keyframes illBob { 0%, 100% { translate: 0 0; } 50% { translate: 0 -5px; } }
+@keyframes illDrift { 0%, 100% { translate: 0 0; rotate: 0deg; } 50% { translate: 4px -7px; rotate: 6deg; } }
+@keyframes illSparks { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+@keyframes illUnplug { 0%, 100% { translate: 0 0; } 50% { translate: 5px 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .ill-float, .ill-leaf-l, .ill-leaf-r, .ill-bob-a, .ill-bob-b, .ill-bob-c, .ill-drift, .ill-drift-b, .ill-sparks, .ill-unplug { animation: none; }
+}

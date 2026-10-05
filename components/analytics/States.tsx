@@ -3,7 +3,11 @@
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "@/components/ui/Link";
-import { BarChart3, Check, EyeOff, Loader2, Lock, Repeat, ShieldCheck, Sparkles, UserPlus, Zap } from "lucide-react";
+import { BarChart3, BookOpen, Check, EyeOff, FileText, Loader2, Lock, Repeat, ShieldCheck, Sparkles, Star, UserPlus, Users, Zap } from "lucide-react";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Button } from "@/components/ui/Button";
+import { IllustratedState } from "@/components/ui/IllustratedState";
+import { AnalyticsEmptyArt } from "@/components/illustrations/EmptyArt";
 import { Mascot } from "@/components/ui/Mascot";
 import { useToast } from "@/components/ui/Toast";
 import { setAnalyticsEnabledAction } from "@/app/(app)/analytics/actions";
@@ -107,19 +111,37 @@ export function EnableAnalytics({ canManage }: { canManage: boolean }) {
 
 export function WaitingAnalytics({ canManage }: { canManage: boolean }) {
   return (
-    <section className="flex flex-col items-center rounded-3xl border border-line bg-bg-elev px-6 py-14 text-center">
-      <Mascot name="Analisando" size={130} float />
-      <h2 className="mt-4 font-display text-2xl font-extrabold tracking-tight">Tudo pronto! Aguardando as primeiras visitas</h2>
-      <p className="mt-2 max-w-lg text-[15px] leading-relaxed text-fg-mut">
-        A coleta está ativa. Assim que alguém usar o seu produto, os indicadores aparecem aqui. Cada visita é enviada quando a pessoa troca de aba ou fecha a página.
-      </p>
-      <div className="mt-6 flex flex-wrap justify-center gap-3">
-        <Link href="/settings/sdk" className="rounded-xl border border-line-strong px-4 py-2.5 text-sm font-semibold text-fg-soft transition hover:border-accent hover:text-accent">
-          Ver instalação do SDK
-        </Link>
-        {canManage && <ToggleCollection enable={false} />}
-      </div>
-    </section>
+    <div>
+      <PageHeader title="Analytics" description="Acompanhe a evolução do feedback e descubra insights valiosos." />
+      <IllustratedState
+        art={<AnalyticsEmptyArt className="w-full" />}
+        title="Ainda não há dados de analytics por aqui"
+        description="Seus dados começarão a aparecer assim que seus usuários responderem às pesquisas ou interagirem com o seu produto."
+        actions={
+          <>
+            <Button href="/surveys/new" className="w-full justify-center">
+              <BarChart3 className="size-4" /> Criar minha primeira pesquisa
+            </Button>
+            <Button href="/help?a=analytics" variant="ghost" className="w-full justify-center">
+              <BookOpen className="size-4" /> Conhecer o Analytics da Luumu
+            </Button>
+            {/* a coleta já está ligada: quem administra continua com os atalhos de antes */}
+            <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-fg-mut">
+              <Link href="/settings/sdk" className="font-semibold hover:text-accent">
+                Ver instalação do SDK
+              </Link>
+              {canManage && <ToggleCollection enable={false} label="Pausar coleta" />}
+            </div>
+          </>
+        }
+        steps={[
+          { icon: FileText, title: "1. Crie uma pesquisa", text: "Escolha um modelo ou crie do zero em poucos minutos." },
+          { icon: Users, title: "2. Colete respostas", text: "Compartilhe o link, QR Code ou integre ao seu produto." },
+          { icon: BarChart3, title: "3. Acompanhe os dados", text: "Visualize métricas como CSAT, NPS, temas e sentimento em tempo real." },
+          { icon: Star, title: "4. Descubra insights", text: "Identifique oportunidades e tome decisões baseadas em dados reais." },
+        ]}
+      />
+    </div>
   );
 }
 
