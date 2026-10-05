@@ -784,9 +784,11 @@ const PAGE_SIZE = 25;
  */
 export async function listAnalyticsUsers(
   s: AnalyticsScope,
-  opts: { q?: string; segment?: UserSegment; sort?: UserSort; dir?: "asc" | "desc"; page?: number }
+  opts: { q?: string; segment?: UserSegment; sort?: UserSort; dir?: "asc" | "desc"; page?: number; pageSize?: number }
 ): Promise<{ rows: UserRow[]; total: number; page: number; pages: number }> {
   const page = Math.max(1, opts.page ?? 1);
+  // exportação pede tudo de uma vez (com teto)
+  const size = Math.min(10_000, Math.max(1, opts.pageSize ?? PAGE_SIZE));
   const q = (opts.q ?? "").trim().slice(0, 80).toLowerCase();
   const like = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
   const seg = opts.segment ?? "all";
@@ -822,7 +824,7 @@ export async function listAnalyticsUsers(
          ${seg === "identified" ? sql`and u.user_id is not null` : seg === "anonymous" ? sql`and u.user_id is null` : sql``}
          ${seg === "new" ? sql`and u.first_seen_at >= ${iso(s.from)}::timestamptz` : seg === "returning" ? sql`and u.first_seen_at < ${iso(s.from)}::timestamptz` : sql``}
        order by ${order}
-       limit ${PAGE_SIZE} offset ${(page - 1) * PAGE_SIZE}`)
+       limit ${size} offset ${(page - 1) * size}`)
   );
 
   // eventos no período só para as linhas desta página (barato)
@@ -858,7 +860,7 @@ export async function listAnalyticsUsers(
     })),
     total,
     page,
-    pages: Math.max(1, Math.ceil(total / PAGE_SIZE)),
+    pages: Math.max(1, Math.ceil(total / size)),
   };
 }
 

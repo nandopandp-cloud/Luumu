@@ -62,3 +62,39 @@ export async function toXlsx(rows: ExportRow[], title: string): Promise<Buffer> 
   const buf = await wb.xlsx.writeBuffer();
   return Buffer.from(buf);
 }
+
+/** Uma aba por tabela, com cabeçalho na cor da marca, zebra, filtro e largura pelo conteúdo. */
+export async function tablesToXlsx(tables: { title: string; columns: string[]; rows: (string | number | null)[][] }[], title: string): Promise<Buffer> {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "Luumu";
+  wb.created = new Date();
+  wb.title = `Luumu: ${title}`;
+  const used = new Set<string>();
+  for (const t of tables) {
+    // nome de aba: até 31 caracteres, sem []:*?/\ e sem repetir
+    const base = t.title.replace(/[[\]:*?/\\]/g, " ").trim().slice(0, 28) || "Dados";
+    let name = base;
+    for (let n = 2; used.has(name.toLowerCase()); n++) name = `${base.slice(0, 26)} ${n}`;
+    used.add(name.toLowerCase());
+    const ws = wb.addWorksheet(name, { views: [{ state: "frozen", ySplit: 1 }] });
+    ws.columns = t.columns.map((c, i) => ({
+      header: c,
+      key: `c${i}`,
+      width: Math.min(60, Math.max(10, c.length + 2, ...t.rows.slice(0, 200).map((r) => String(r[i] ?? "").length + 2))),
+    }));
+    const header = ws.getRow(1);
+    header.height = 22;
+    header.eachCell((c) => {
+      c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: LUUMU_ROXO } };
+      c.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
+      c.alignment = { vertical: "middle", horizontal: "left" };
+    });
+    t.rows.forEach((r, i) => {
+      const row = ws.addRow(Object.fromEntries(t.columns.map((_, j) => [`c${j}`, r[j] ?? ""])));
+      if (i % 2 === 1) row.eachCell((c) => (c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: LUUMU_LAVANDA } }));
+    });
+    if (t.columns.length) ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: t.columns.length } };
+  }
+  if (!tables.length) wb.addWorksheet("Dados");
+  return Buffer.from(await wb.xlsx.writeBuffer());
+}

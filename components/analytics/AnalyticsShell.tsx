@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "@/components/ui/Link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Check, ChevronRight, LayoutGrid, Loader2, MoreHorizontal, Pencil, Plus, Radio, Settings2, Share2 } from "lucide-react";
+import { Check, ChevronRight, LayoutGrid, Loader2, MoreHorizontal, Pencil, Plus, Radio, Settings2 } from "lucide-react";
+import { ShareMenu } from "@/components/ui/ShareMenu";
 import { cn } from "@/lib/utils";
 import { Dialog } from "@/components/ui/Dialog";
 import { Select } from "@/components/ui/Select";
@@ -92,7 +93,6 @@ export function AnalyticsShell({
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
-  const toast = useToast();
   const [dialog, setDialog] = useState<null | "metrics" | "manage">(null);
   const [editing, setEditing] = useState<EditStart | null>(null);
   const meta = TAB_META[config.tab];
@@ -188,20 +188,7 @@ export function AnalyticsShell({
           <p className="mt-1 max-w-2xl text-[15px] text-fg-mut">{currentView?.goal || meta.subtitle}</p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={async () => {
-              try {
-                await navigator.clipboard.writeText(window.location.href);
-                toast("success", "Link da visão copiado.");
-              } catch {
-                toast("error", "Não foi possível copiar o link.");
-              }
-            }}
-          >
-            <Share2 className="size-4" /> Compartilhar
-          </Button>
+          <ShareMenu exportUrl={(format) => `/api/analytics/export?${new URLSearchParams({ ...Object.fromEntries(new URLSearchParams(window.location.search)), format })}`} />
           {config.tab !== "users" && (
             <Button variant="subtle" size="sm" onClick={() => edit(currentView, true)}>
               <Pencil className="size-4" /> {currentView ? "Editar" : "Personalizar"}
