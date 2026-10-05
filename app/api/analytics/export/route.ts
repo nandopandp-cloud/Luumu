@@ -8,7 +8,7 @@ import { analyticsTables, usersTable, type ExportTable } from "@/lib/analytics/e
 import { tablesToCsv } from "@/lib/export/csv";
 import { tablesToXlsx } from "@/lib/export/xlsx";
 import { tablesToPdf } from "@/lib/export/pdf";
-import { normalizeHost } from "@/lib/hosts";
+import { normalizeHosts } from "@/lib/hosts";
 import { DEFAULT_PERIOD, periodLabel, periodToRange } from "@/lib/period";
 
 export const dynamic = "force-dynamic";
@@ -43,7 +43,7 @@ export async function GET(req: Request) {
     period: sp.get("period") ?? saved?.config.period,
     from: sp.get("from") ?? saved?.config.from,
     to: sp.get("to") ?? saved?.config.to,
-    host: normalizeHost(sp.get("host")) || saved?.config.host,
+    host: normalizeHosts(sp.get("host")) || saved?.config.host,
     device: sp.get("device") ?? saved?.config.device,
     widgets: w ? w.split(",") : saved?.config.widgets,
     spans: w ? undefined : saved?.config.spans,

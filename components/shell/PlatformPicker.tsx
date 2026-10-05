@@ -7,13 +7,12 @@ import Link from "@/components/ui/Link";
 import { cn } from "@/lib/utils";
 
 /*
-  Plataforma cujos dados a página mostra (?host=), no header: é o "onde", separado dos filtros de
-  período e pesquisa (o "quando"/"o quê"). Só aparece nas telas que filtram por plataforma.
-  Trocar de plataforma zera a pesquisa escolhida (ela pode não existir na outra).
+  Plataforma escolhida no header, herdada por todas as jornadas (lib/platform.ts): fica num cookie
+  por projeto e as telas leem de lá. Um ?host= na URL (link compartilhado) manda naquela tela;
+  escolher outra plataforma tira o parâmetro. Trocar zera a pesquisa escolhida (pode não existir
+  na outra plataforma).
 */
-
-// telas que respeitam ?host=
-const HOST_AWARE = ["/dashboard", "/responses", "/insights", "/reports", "/analytics"];
+const PLATFORM_COOKIE = "luumu_platform";
 
 const shortName = (h: string) => {
   const s = h.replace(/^www\./, "").split(".")[0];
@@ -38,13 +37,14 @@ function PlatformIcon({ host, size = "md" }: { host: string; size?: "sm" | "md" 
   );
 }
 
-export function PlatformPicker({ hosts }: { hosts: string[] }) {
+export function PlatformPicker({ hosts, projectId, selected }: { hosts: string[]; projectId: string | null; selected: string }) {
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
-  const host = sp.get("host") ?? "";
-  const current = hosts.includes(host) ? host : "";
+  // escolhidas: as da URL (link compartilhado), senão as do cookie; só as que existem no projeto
+  const current = (sp.get("host") || selected).split(",").filter((h) => hosts.includes(h));
   const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<string[]>(current);
   const [q, setQ] = useState("");
   const wrap = useRef<HTMLDivElement>(null);
 
@@ -62,42 +62,61 @@ export function PlatformPicker({ hosts }: { hosts: string[] }) {
     };
   }, [open]);
 
-  if (hosts.length < 2 || !HOST_AWARE.some((p) => pathname === p || pathname.startsWith(`${p}/`))) return null;
+  if (hosts.length < 2 || !projectId) return null;
 
-  function pick(h: string) {
-    const p = new URLSearchParams(sp.toString());
-    if (h) p.set("host", h);
-    else p.delete("host");
-    p.delete("surveyId");
-    setOpen(false);
-    setQ("");
-    router.push(`${pathname}?${p.toString()}`);
+  function toggleOpen() {
+    // abre com a seleção em vigor (descarta o rascunho de uma abertura anterior)
+    if (!open) {
+      setDraft(current);
+      setQ("");
+    }
+    setOpen((v) => !v);
   }
 
+  function apply(list: string[]) {
+    // 1 ano; lido no servidor por todas as telas
+    document.cookie = list.length
+      ? `${PLATFORM_COOKIE}=${encodeURIComponent(`${projectId}|${list.join(",")}`)}; path=/; max-age=31536000; samesite=lax`
+      : `${PLATFORM_COOKIE}=; path=/; max-age=0; samesite=lax`;
+    const p = new URLSearchParams(sp.toString());
+    p.delete("host");
+    p.delete("surveyId");
+    setOpen(false);
+    const qs = p.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname);
+    router.refresh();
+  }
+
+  const toggle = (h: string) => setDraft((d) => (d.includes(h) ? d.filter((x) => x !== h) : [...d, h]));
   const list = hosts.filter((h) => h.toLowerCase().includes(q.trim().toLowerCase()));
+  const same = draft.length === current.length && draft.every((h) => current.includes(h));
+  const label = !current.length ? "Todas as plataformas" : current.length === 1 ? shortName(current[0]) : `${shortName(current[0])} +${current.length - 1}`;
 
   return (
     <div ref={wrap} className="relative">
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={toggleOpen}
         aria-expanded={open}
         aria-haspopup="listbox"
-        aria-label={`Plataforma: ${current || "todas as plataformas"}`}
-        title={current || "Todas as plataformas"}
+        aria-label={`Plataformas: ${current.length ? current.join(", ") : "todas"}`}
+        title={current.length ? current.join("\n") : "Todas as plataformas"}
         className={cn(
           "inline-flex max-w-[260px] items-center gap-2 rounded-full border px-3.5 py-2 text-sm font-semibold transition",
           open ? "border-accent/30 bg-surface-brand text-fg" : "border-line-strong bg-bg-elev text-fg-soft hover:border-accent hover:text-accent"
         )}
       >
         <Layers className="size-4 shrink-0 text-accent" aria-hidden />
-        <span className="hidden truncate sm:inline">{current ? shortName(current) : "Todas as plataformas"}</span>
+        <span className="hidden truncate sm:inline">{label}</span>
         <ChevronDown className={cn("size-4 shrink-0 text-fg-mut transition-transform duration-200", open && "rotate-180")} aria-hidden />
       </button>
 
       {open && (
         <div className="absolute right-0 top-full z-50 mt-2 w-[360px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-line bg-bg-elev p-2 shadow-[var(--shadow-lg)]">
-          <div className="px-2.5 pb-1.5 pt-2 text-xs font-medium text-fg-mut">Plataforma atual</div>
+          <div className="flex items-baseline justify-between px-2.5 pb-1.5 pt-2">
+            <span className="text-xs font-medium text-fg-mut">Plataforma atual</span>
+            <span className="text-[11px] text-fg-mut">escolha uma ou mais</span>
+          </div>
           {hosts.length > 6 && (
             <label className="mx-1 mb-1.5 flex items-center gap-2 rounded-xl border border-line px-3 py-2">
               <Search className="size-4 text-fg-mut" aria-hidden />
@@ -110,11 +129,11 @@ export function PlatformPicker({ hosts }: { hosts: string[] }) {
               />
             </label>
           )}
-          <ul role="listbox" aria-label="Plataformas" className="flex max-h-80 flex-col gap-0.5 overflow-y-auto">
+          <ul role="listbox" aria-multiselectable="true" aria-label="Plataformas" className="flex max-h-80 flex-col gap-0.5 overflow-y-auto">
             {!q && (
               <Option
-                active={!current}
-                onClick={() => pick("")}
+                active={!draft.length}
+                onClick={() => setDraft([])}
                 icon={
                   <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-bg-elev text-accent shadow-[var(--shadow-sm)]">
                     <Layers className="size-5" aria-hidden />
@@ -125,18 +144,26 @@ export function PlatformPicker({ hosts }: { hosts: string[] }) {
               />
             )}
             {list.map((h) => (
-              <Option key={h} active={current === h} onClick={() => pick(h)} icon={<PlatformIcon host={h} />} title={shortName(h)} sub={h} />
+              <Option key={h} active={draft.includes(h)} onClick={() => toggle(h)} icon={<PlatformIcon host={h} />} title={shortName(h)} sub={h} />
             ))}
             {!list.length && <li className="px-3 py-3 text-sm text-fg-mut">Nenhuma plataforma encontrada.</li>}
           </ul>
-          <div className="mt-1.5 border-t border-line pt-1.5">
+          <div className="mt-1.5 flex items-center justify-between gap-2 border-t border-line pt-1.5">
             <Link
               href="/settings/sdk"
               onClick={() => setOpen(false)}
-              className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold text-accent transition hover:bg-bg-sunken"
+              className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold text-accent transition hover:bg-bg-sunken"
             >
               <Plus className="size-4" aria-hidden /> Gerenciar plataformas
             </Link>
+            <button
+              type="button"
+              onClick={() => apply(draft)}
+              disabled={same}
+              className="rounded-xl px-4 py-2 text-sm font-bold text-white transition [background:var(--grad-roxo)] disabled:opacity-40"
+            >
+              {draft.length > 1 ? `Aplicar (${draft.length})` : "Aplicar"}
+            </button>
           </div>
         </div>
       )}

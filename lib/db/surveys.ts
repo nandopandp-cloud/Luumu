@@ -1,3 +1,4 @@
+import { hostList } from "@/lib/hosts";
 import "server-only";
 import { cache } from "react";
 import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
@@ -14,8 +15,10 @@ export type SurveyRow = typeof surveys.$inferSelect;
 export type QuestionRow = typeof questions.$inferSelect;
 
 /** Condição "pesquisa direcionada a esta plataforma" (targetHosts contém o host). */
+/** Pesquisa direcionada a alguma das plataformas ("a,b"). */
 export function targetsHostSql(host: string) {
-  return sql`${surveys.targetHosts} @> ${JSON.stringify([host])}::jsonb`;
+  const list = hostList(host);
+  return sql`(${sql.join(list.map((h) => sql`${surveys.targetHosts} @> ${JSON.stringify([h])}::jsonb`), sql` or `)})`;
 }
 
 /**

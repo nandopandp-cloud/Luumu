@@ -1,4 +1,5 @@
 import Link from "@/components/ui/Link";
+import { selectedPlatform } from "@/lib/platform";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { ExportMenu } from "@/components/responses/ExportMenu";
@@ -7,7 +8,6 @@ import { ResponsesWorkspace } from "@/components/responses/feed/ResponsesWorkspa
 import { getSurvey } from "@/lib/db/surveys";
 import { listHosts } from "@/lib/db/hosts";
 import { getCurrentProjectId } from "@/lib/auth/current";
-import { normalizeHost } from "@/lib/hosts";
 import { periodToRange } from "@/lib/period";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +25,7 @@ export default async function SurveyResponsesPage({
   const projectId = await getCurrentProjectId();
   const [survey, hosts] = await Promise.all([getSurvey(id, { projectId }), listHosts(projectId)]);
   if (!survey) notFound();
-  const host = normalizeHost(sp.host) || undefined;
+  const host = await selectedPlatform(projectId, sp.host);
   const { from: dateFrom, to: dateTo } = periodToRange(sp.period ?? "all", sp.from, sp.to);
 
   return (

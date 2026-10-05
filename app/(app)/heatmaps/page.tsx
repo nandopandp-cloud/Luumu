@@ -1,4 +1,6 @@
 import { HeatmapHeader } from "@/components/heatmaps/HeatmapHeader";
+import { hostList } from "@/lib/hosts";
+import { selectedPlatform } from "@/lib/platform";
 import { HeatmapFilters } from "@/components/heatmaps/HeatmapFilters";
 import { HeatmapWorkspace } from "@/components/heatmaps/HeatmapWorkspace";
 import { EnableHeatmaps, WaitingForData, HeatmapsUnavailable } from "@/components/heatmaps/HeatmapStates";
@@ -16,7 +18,7 @@ const MODES: HeatmapMode[] = ["clicks", "moves", "scroll"];
 export default async function HeatmapsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ mode?: string; page?: string; device?: string; period?: string; from?: string; to?: string; compare?: string }>;
+  searchParams: Promise<{ mode?: string; page?: string; device?: string; period?: string; from?: string; to?: string; compare?: string; host?: string }>;
 }) {
   const sp = await searchParams;
   const mode: HeatmapMode = MODES.includes(sp.mode as HeatmapMode) ? (sp.mode as HeatmapMode) : "clicks";
@@ -39,12 +41,16 @@ export default async function HeatmapsPage({
   const canManage = await canManageWorkspace();
   // heatmap acumula: por padrão, todas as visitas registradas
   const { from, to } = periodToRange(sp.period ?? DEFAULT_PERIOD, sp.from, sp.to);
-  const [pages, anyData, hosts, quota] = await Promise.all([
+  const [allPages, anyData, hosts, quota, platform] = await Promise.all([
     listHeatmapPages(project.id, from, to),
     hasAnyPageview(project.id),
     listHosts(project.id),
     heatmapQuota(project.workspaceId),
+    selectedPlatform(project.id, sp.host),
   ]);
+  // só as páginas da plataforma escolhida no header
+  const picked = hostList(platform);
+  const pages = picked.length ? allPages.filter((p) => picked.includes(p.host)) : allPages;
 
   if (!enabled && !anyData) {
     return (

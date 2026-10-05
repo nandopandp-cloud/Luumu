@@ -3,6 +3,7 @@ import { and, desc, eq, sql, type SQL } from "drizzle-orm";
 import { db } from "./client";
 import { analyticsPageviews, analyticsSessions, analyticsSettings, analyticsUsers, analyticsViews, avatarSvgs } from "@/db/schema";
 import { analyticsViewId } from "./ids";
+import { hostList } from "@/lib/hosts";
 import { sanitizeSvg, svgHash } from "@/lib/analytics/svg-avatar";
 import {
   classifyChannel,
@@ -241,24 +242,27 @@ export function prevScope(s: AnalyticsScope): AnalyticsScope {
   return { ...s, from: new Date(s.from.getTime() - span), to: new Date(s.from.getTime()) };
 }
 
+/** Lista de plataformas ("a,b") como parâmetros de um IN (...). */
+const inHosts = (h: string) => sql.join(hostList(h).map((x) => sql`${x}`), sql`, `);
+
 const spanDays = (s: AnalyticsScope) => Math.max(1, Math.round((s.to.getTime() - s.from.getTime()) / 86_400_000));
 
 /** Filtro de sessões (alias s) no intervalo. */
 function sf(s: AnalyticsScope, from = s.from, to = s.to): SQL {
   return sql`s.project_id = ${s.projectId} and s.started_at >= ${iso(from)}::timestamptz and s.started_at < ${iso(to)}::timestamptz${
-    s.host ? sql` and s.host = ${s.host}` : sql``
+    s.host ? sql` and s.host in (${inHosts(s.host)})` : sql``
   }${s.device ? sql` and s.device = ${s.device}` : sql``}`;
 }
 /** Filtro de telas (alias p) no intervalo. */
 function pf(s: AnalyticsScope, from = s.from, to = s.to): SQL {
   return sql`p.project_id = ${s.projectId} and p.created_at >= ${iso(from)}::timestamptz and p.created_at < ${iso(to)}::timestamptz${
-    s.host ? sql` and p.host = ${s.host}` : sql``
+    s.host ? sql` and p.host in (${inHosts(s.host)})` : sql``
   }${s.device ? sql` and p.device = ${s.device}` : sql``}`;
 }
 /** Filtro de usuários pela PRIMEIRA visita (alias u). */
 function uf(s: AnalyticsScope, from = s.from, to = s.to): SQL {
   return sql`u.project_id = ${s.projectId} and u.first_seen_at >= ${iso(from)}::timestamptz and u.first_seen_at < ${iso(to)}::timestamptz${
-    s.host ? sql` and u.first_host = ${s.host}` : sql``
+    s.host ? sql` and u.first_host in (${inHosts(s.host)})` : sql``
   }${s.device ? sql` and u.first_device = ${s.device}` : sql``}`;
 }
 const day = (col: SQL) => sql`to_char((${col} at time zone ${TZ})::date, 'YYYY-MM-DD')`;

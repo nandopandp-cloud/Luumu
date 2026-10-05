@@ -1,11 +1,11 @@
 import { PageHeader } from "@/components/ui/PageHeader";
+import { selectedPlatform } from "@/lib/platform";
 import { DataFilters } from "@/components/ui/DataFilters";
 import { ExportPanel } from "@/components/reports/ExportPanel";
 import { ScheduleReports, type ScheduledItem } from "@/components/reports/ScheduleReports";
 import { PublicLinks, type PublicLinkItem } from "@/components/reports/PublicLinks";
 import { getCurrentProjectId } from "@/lib/auth/current";
 import { listSurveys, listSurveyOptions, resolveSurveyScope } from "@/lib/db/surveys";
-import { normalizeHost } from "@/lib/hosts";
 import { getStats } from "@/lib/db/responses";
 import { listScheduledReports, listPublicReports } from "@/lib/db/reports";
 import { periodLabel, periodToRange } from "@/lib/period";
@@ -22,7 +22,7 @@ export default async function ReportsPage({
 }) {
   const { surveyId, period, from, to, host: hostParam } = await searchParams;
   const projectId = await getCurrentProjectId();
-  const host = normalizeHost(hostParam) || undefined;
+  const host = await selectedPlatform(projectId, hostParam);
   const { from: dateFrom, to: dateTo } = periodToRange(period ?? REPORTS_DEFAULT_PERIOD, from, to);
   // sem filtro na URL, abre já na última pesquisa vigente/criada (da plataforma, se filtrada)
   const { surveyId: scopedSurveyId, defaultSurveyId } = await resolveSurveyScope(projectId, surveyId, host);

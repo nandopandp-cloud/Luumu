@@ -1,4 +1,6 @@
 import Link from "@/components/ui/Link";
+import { hostList } from "@/lib/hosts";
+import { selectedPlatform } from "@/lib/platform";
 import { CalendarDays, MessagesSquare, Plus, Smile, Timer } from "lucide-react";
 import { DataFilters } from "@/components/ui/DataFilters";
 import { InsightCard, pctDelta, scoreDelta } from "@/components/ui/InsightCard";
@@ -11,7 +13,6 @@ import { getScoreDistribution } from "@/lib/db/responses";
 import { getOverview, getScoreSeries, previousScope } from "@/lib/db/overview";
 import { requireUser, getCurrentProjectId } from "@/lib/auth/current";
 import { formatScore } from "@/lib/scoring";
-import { normalizeHost } from "@/lib/hosts";
 import { formatDayBR, periodToRange } from "@/lib/period";
 
 export const dynamic = "force-dynamic";
@@ -45,7 +46,7 @@ export default async function DashboardPage({
   // o Dashboard abre com TODO o histórico; um período específico é escolha do usuário
   const period = periodParam ?? DASHBOARD_DEFAULT_PERIOD;
   const projectId = await getCurrentProjectId();
-  const host = normalizeHost(hostParam) || undefined;
+  const host = await selectedPlatform(projectId, hostParam);
   const { from: dateFrom, to: dateTo } = periodToRange(period, from, to);
   // sem filtro na URL, abre já na última pesquisa vigente/criada (da plataforma, se filtrada)
   const { surveyId: scopedSurveyId, defaultSurveyId } = await resolveSurveyScope(projectId, surveyId ?? "all", host);
@@ -61,7 +62,8 @@ export default async function DashboardPage({
   const { counts, prevCounts, mainScore, prevScore, positivePct, prevPositivePct, daily } = overview;
 
   // com plataforma filtrada, contagem de ativas e lista recente também são só dela
-  const allSurveys = host ? projectSurveys.filter((s) => ((s.targetHosts as string[]) ?? []).includes(host)) : projectSurveys;
+  const picked = hostList(host);
+  const allSurveys = picked.length ? projectSurveys.filter((s) => ((s.targetHosts as string[]) ?? []).some((h) => picked.includes(h))) : projectSurveys;
   const activeCount = allSurveys.filter((s) => s.status === "ativa").length;
   const prev = previousScope(scope);
   const prevActive = prev ? allSurveys.filter((s) => liveDuring(s, prev.dateFrom!, prev.dateTo ?? new Date())).length : null;

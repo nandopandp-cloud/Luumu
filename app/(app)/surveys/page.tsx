@@ -1,4 +1,6 @@
 import { Plus } from "lucide-react";
+import { hostList } from "@/lib/hosts";
+import { savedPlatform } from "@/lib/platform";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -15,10 +17,11 @@ export const dynamic = "force-dynamic";
 
 export default async function SurveysPage() {
   const [projectId, workspaceId] = await Promise.all([getCurrentProjectId(), getCurrentWorkspaceId()]);
-  const [rows, workspace, hosts] = await Promise.all([
+  const [rows, workspace, hosts, platform] = await Promise.all([
     listSurveys(projectId),
     getWorkspace(workspaceId),
     listHosts(projectId),
+    savedPlatform(projectId),
   ]);
   // "hoje" no fuso do workspace: a vigência é uma data civil do cliente, não do relógio
   // do navegador de quem abre o painel (que pode estar em outro fuso)
@@ -58,7 +61,7 @@ export default async function SurveysPage() {
           action={<Button href="/surveys/new"><Plus className="size-4" /> Nova pesquisa</Button>}
         />
       ) : (
-        <SurveysTable items={items} currentDate={currentDate} hosts={hosts} />
+        <SurveysTable key={platform} items={items} currentDate={currentDate} hosts={hosts} initialHosts={hostList(platform).filter((h) => hosts.includes(h))} />
       )}
     </div>
   );

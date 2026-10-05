@@ -1,4 +1,5 @@
 import "server-only";
+import { hostList } from "@/lib/hosts";
 import { and, asc, desc, eq, count, avg, sql, inArray, gte, lte, or, isNull, type SQL } from "drizzle-orm";
 import { db } from "./client";
 import { responses, answers, surveys, questions } from "@/db/schema";
@@ -33,12 +34,12 @@ export function scopeWhere(scope: Scope): SQL | undefined {
     do link público) contam para a plataforma só se a pesquisa for direcionada a ela —
     pesquisa sem alvo não diz de qual produto a resposta veio.
   */
-  if (scope.host) {
-    const host = scope.host;
+  const hosts = hostList(scope.host);
+  if (hosts.length) {
     parts.push(
       or(
-        eq(responses.host, host),
-        and(isNull(responses.host), sql`${surveys.targetHosts} @> ${JSON.stringify([host])}::jsonb`)
+        inArray(responses.host, hosts),
+        and(isNull(responses.host), sql`(${sql.join(hosts.map((h) => sql`${surveys.targetHosts} @> ${JSON.stringify([h])}::jsonb`), sql` or `)})`)
       )!
     );
   }

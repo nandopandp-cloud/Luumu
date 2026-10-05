@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { getCurrentProjectId, requireUser } from "@/lib/auth/current";
 import { checkRateLimit } from "@/lib/api/ratelimit";
-import { normalizeHost } from "@/lib/hosts";
+import { normalizeHosts } from "@/lib/hosts";
 import { getInsights } from "@/lib/insights/service";
 import { askInsights } from "@/lib/insights/ask-ai";
 import { fold } from "@/lib/insights/themes";
@@ -57,7 +57,7 @@ export async function askInsightsAction(input: unknown): Promise<InsightAnswer |
   const data = await getInsights({
     projectId,
     surveyId: filters.surveyId && filters.surveyId !== "all" ? filters.surveyId : undefined,
-    host: normalizeHost(filters.host) || undefined,
+    host: normalizeHosts(filters.host) || undefined,
     period: filters.period,
     from: filters.from,
     to: filters.to,

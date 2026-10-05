@@ -35,3 +35,16 @@ export function hostLabel(host: string, all: string[] = []): string {
   const clash = all.some((h) => h !== host && h.split(".")[0] === first);
   return clash ? host : first;
 }
+
+/*
+  Seleção de VÁRIAS plataformas: na URL (?host=a,b), no cookie do header e nos escopos de
+  consulta ela viaja como texto separado por vírgula. "" = todas.
+*/
+export function normalizeHosts(raw: string | null | undefined): string {
+  return hostList(raw).join(",");
+}
+
+/** "a.com,b.com" → ["a.com", "b.com"] (normalizados, sem repetição, até 50). */
+export function hostList(raw: string | null | undefined): string[] {
+  return [...new Set((raw ?? "").split(",").map(normalizeHost).filter(Boolean))].slice(0, 50);
+}

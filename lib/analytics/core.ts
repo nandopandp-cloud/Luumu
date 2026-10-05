@@ -361,7 +361,7 @@ export function parseViewConfig(raw: unknown): ViewConfig {
     period: s(o.period, /^(today|7d|30d|90d|12m|all|custom)$/),
     from: s(o.from, /^\d{4}-\d{2}-\d{2}$/),
     to: s(o.to, /^\d{4}-\d{2}-\d{2}$/),
-    host: s(o.host, /^[a-z0-9.-]{1,253}$/),
+    host: s(o.host, /^[a-z0-9.-]{1,253}(,[a-z0-9.-]{1,253}){0,49}$/),
     device: s(o.device, /^(desktop|tablet|mobile)$/),
     widgets: tab === "custom" ? widgets ?? [] : undefined,
     spans: tab === "custom" && Object.keys(spans).length ? spans : undefined,

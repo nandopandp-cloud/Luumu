@@ -1,10 +1,10 @@
 import { PageHeader } from "@/components/ui/PageHeader";
+import { selectedPlatform } from "@/lib/platform";
 import { ExportMenu } from "@/components/responses/ExportMenu";
 import { ResponsesWorkspace } from "@/components/responses/feed/ResponsesWorkspace";
 import { listSurveyOptions, resolveSurveyScope } from "@/lib/db/surveys";
 import { listHosts } from "@/lib/db/hosts";
 import { getCurrentProjectId } from "@/lib/auth/current";
-import { normalizeHost } from "@/lib/hosts";
 import { periodToRange } from "@/lib/period";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +25,7 @@ export default async function ResponsesPage({
 }) {
   const sp = await searchParams;
   const projectId = await getCurrentProjectId();
-  const host = normalizeHost(sp.host) || undefined;
+  const host = await selectedPlatform(projectId, sp.host);
   const { from: dateFrom, to: dateTo } = periodToRange(sp.period ?? "all", sp.from, sp.to);
   // sem filtro na URL, abre em "Todas as pesquisas" e "Todo o período"
   const [{ surveyId, defaultSurveyId }, surveyOptions, hosts] = await Promise.all([
@@ -46,7 +46,6 @@ export default async function ResponsesPage({
         scope={{ projectId, surveyId, dateFrom, dateTo, host }}
         params={{ view: sp.view, sort: sp.sort, limit: sp.limit }}
         hosts={hosts}
-        hostInFilters={false}
         surveyFilter={{ options: surveyOptions, defaultSurveyId }}
         hrefBase="/responses"
       />

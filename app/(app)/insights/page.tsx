@@ -1,4 +1,5 @@
 import { Info } from "lucide-react";
+import { selectedPlatform } from "@/lib/platform";
 import { DataFilters } from "@/components/ui/DataFilters";
 import { InsightsExperience } from "@/components/insights/InsightsExperience";
 import { InsightsHeader } from "@/components/insights/InsightsHeader";
@@ -15,7 +16,6 @@ import { getInsights } from "@/lib/insights/service";
 import { listSurveyOptions } from "@/lib/db/surveys";
 import { getCurrentProjectId, requireUser } from "@/lib/auth/current";
 import { getUserById } from "@/lib/db/users";
-import { normalizeHost } from "@/lib/hosts";
 import { periodLabel } from "@/lib/period";
 
 export const dynamic = "force-dynamic";
@@ -34,7 +34,7 @@ export default async function InsightsPage({
   // Insights olha TODO o histórico por padrão: temas e padrões pedem volume
   const period = sp.period ?? INSIGHTS_DEFAULT_PERIOD;
   const [projectId, session] = await Promise.all([getCurrentProjectId(), requireUser()]);
-  const host = normalizeHost(sp.host) || undefined;
+  const host = await selectedPlatform(projectId, sp.host);
   // padrões de tema pedem volume: por padrão a análise olha TODAS as pesquisas do projeto
   const surveyId = sp.surveyId && sp.surveyId !== "all" ? sp.surveyId : undefined;
 

@@ -10,11 +10,11 @@ import { useToast } from "@/components/ui/Toast";
 import { createTourAction } from "@/app/(app)/tours/actions";
 
 /** Botão + diálogo de criação: nome, objetivo e onde o produto está. */
-export function NewTourButton({ hosts, label = "Novo tour", icon }: { hosts: string[]; label?: string; icon?: React.ReactNode }) {
+export function NewTourButton({ hosts, defaultHost = "", label = "Novo tour", icon }: { hosts: string[]; defaultHost?: string; label?: string; icon?: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [host, setHost] = useState(hosts[0] ?? "");
+  const [host, setHost] = useState(defaultHost || hosts[0] || "");
   const [path, setPath] = useState("/");
   const [custom, setCustom] = useState(hosts.length === 0);
   const [url, setUrl] = useState("");

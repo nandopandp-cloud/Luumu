@@ -9,6 +9,7 @@ import { eq } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { getWorkspaceUsage } from "@/lib/db/workspace";
 import { listHosts } from "@/lib/db/hosts";
+import { savedPlatform } from "@/lib/platform";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await requireUser();
@@ -25,7 +26,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   ]);
   const ws = wsRows[0];
   // plataformas do projeto para o seletor do header
-  const hosts = activeProject ? await listHosts(activeProject.id).catch(() => []) : [];
+  const [hosts, platform] = activeProject ? await Promise.all([listHosts(activeProject.id).catch(() => []), savedPlatform(activeProject.id)]) : [[], ""];
   // mesmo nome de SIDEBAR_COOKIE (AppShell): a página já nasce com a bandeja do jeito salvo
   // sem await: o card de plano da sidebar entra via Suspense quando a contagem chega
   const usage = getWorkspaceUsage(session.workspaceId).catch(() => null);
@@ -39,6 +40,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         projects={projectList.map((p) => ({ id: p.id, name: p.name, logoUrl: p.logoUrl }))}
         activeProjectId={activeProject?.id ?? null}
         hosts={hosts}
+        platform={platform}
         initialCollapsed={sidebarCollapsed}
         usage={usage}
       >

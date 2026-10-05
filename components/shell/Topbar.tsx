@@ -15,10 +15,15 @@ export function Topbar({
   onMenu,
   user,
   hosts = [],
+  projectId = null,
+  platform = "",
 }: {
   onMenu: () => void;
   user: { name: string; email: string; avatarUrl: string | null };
   hosts?: string[];
+  projectId?: string | null;
+  /** plataforma escolhida (cookie), "" = todas */
+  platform?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [theme, setTheme] = useTheme();
@@ -41,7 +46,7 @@ export function Topbar({
         <PlanUsageMenu />
         {/* lê ?host= da URL (useSearchParams pede um limite de Suspense) */}
         <Suspense>
-          <PlatformPicker hosts={hosts} />
+          <PlatformPicker hosts={hosts} projectId={projectId} selected={platform} />
         </Suspense>
         <div className="relative">
         <button

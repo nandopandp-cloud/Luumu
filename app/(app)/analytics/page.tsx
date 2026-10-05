@@ -1,4 +1,5 @@
 import { AnalyticsShell } from "@/components/analytics/AnalyticsShell";
+import { savedPlatform } from "@/lib/platform";
 import { AnalyticsUnavailable, EnableAnalytics, WaitingAnalytics } from "@/components/analytics/States";
 import { canManageWorkspace, getCurrentProject, getCurrentRole, requireUser } from "@/lib/auth/current";
 import { collectingSince, getAnalytics, getAnalyticsSettings, hasAnalyticsData, listAnalyticsUsers, listViews, USER_SEGMENTS, USER_SORTS, type AnalyticsSettings, type UserSegment, type UserSort } from "@/lib/db/analytics";
@@ -6,7 +7,7 @@ import type { UsersData } from "@/components/analytics/UsersView";
 import { listHosts } from "@/lib/db/hosts";
 import { parseViewConfig, viewHref, type ViewConfig } from "@/lib/analytics/core";
 import { datasetsFor, defaultSpan, TAB_LAYOUT, type Block } from "@/lib/analytics/derive";
-import { normalizeHost } from "@/lib/hosts";
+import { normalizeHosts } from "@/lib/hosts";
 import { DEFAULT_PERIOD, periodToRange } from "@/lib/period";
 
 export const dynamic = "force-dynamic";
@@ -33,7 +34,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
   if (!settings.enabled && !hasData) return <EnableAnalytics canManage={canManage} />;
   if (!hasData) return <WaitingAnalytics canManage={canManage} />;
 
-  const [views, hosts, since] = await Promise.all([listViews(projectId, session.userId), listHosts(projectId), collectingSince(projectId)]);
+  const [views, hosts, since, platform] = await Promise.all([listViews(projectId, session.userId), listHosts(projectId), collectingSince(projectId), savedPlatform(projectId)]);
   const saved = sp.view ? views.find((v) => v.id === sp.view) ?? null : null;
 
   // a URL manda (é ela que os filtros alteram); a visão salva completa o que faltar
@@ -42,7 +43,8 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
     period: sp.period ?? saved?.config.period,
     from: sp.from ?? saved?.config.from,
     to: sp.to ?? saved?.config.to,
-    host: normalizeHost(sp.host) || saved?.config.host,
+    // URL > visão salva > plataforma escolhida no header
+    host: normalizeHosts(sp.host) || saved?.config.host || platform || undefined,
     device: sp.device ?? saved?.config.device,
     widgets: sp.w ? sp.w.split(",") : saved?.config.widgets,
     spans: sp.w ? undefined : saved?.config.spans,

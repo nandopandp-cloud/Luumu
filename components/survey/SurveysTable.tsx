@@ -45,15 +45,19 @@ export function SurveysTable({
   items,
   currentDate,
   hosts = [],
+  initialHosts = [],
 }: {
   items: SurveyListItem[];
   currentDate: string;
   /** plataformas (hostnames) do projeto */
   hosts?: string[];
+  /** plataformas escolhidas no header (a lista já abre filtrada nelas) */
+  initialHosts?: string[];
 }) {
   const [filter, setFilter] = useState<Filter>("todas");
   // "" = todas as plataformas
-  const [hostFilter, setHostFilter] = useState("");
+  // uma plataforma no header: o seletor da tabela abre nela; várias: a lista vem filtrada nelas
+  const [hostFilter, setHostFilter] = useState(initialHosts.length === 1 ? initialHosts[0] : "");
   const [q, setQ] = useState("");
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
@@ -77,8 +81,11 @@ export function SurveysTable({
   const filtered = items.filter(
     (s) =>
       (filter === "todas" || s.status === filter) &&
-      (!hostFilter ||
-        (hostFilter === NO_TARGET ? s.targetHosts.length === 0 : s.targetHosts.includes(hostFilter))) &&
+      (hostFilter
+        ? hostFilter === NO_TARGET
+          ? s.targetHosts.length === 0
+          : s.targetHosts.includes(hostFilter)
+        : initialHosts.length < 2 || s.targetHosts.some((h) => initialHosts.includes(h))) &&
       s.name.toLowerCase().includes(q.toLowerCase())
   );
   // ordenação pelos cabeçalhos; "Atualizada" usa a ordem do servidor (mais recente primeiro)
