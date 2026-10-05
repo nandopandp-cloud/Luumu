@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Luumu Flow — protótipo</title>
+<style>
+  :root { --bg:#f7f5fd; --panel:#fff; --text:#1a1530; --mut:#6b6880; --border:#ebe6f8; --brand:#5b21d0; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:#eeeaf8; color:var(--text); font:14px/1.45 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
+  .top { display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:center; padding:18px 16px 4px; }
+  button { font:inherit; font-weight:600; border:1px solid var(--border); background:var(--panel); color:var(--text); padding:9px 15px; border-radius:999px; cursor:pointer; }
+  button:hover { border-color:#8b5cf6; color:#7c3aed; }
+  button.primary { background:#6b2bd9; color:#fff; border:0; }
+  .scrub { display:flex; align-items:center; gap:12px; max-width:960px; margin:10px auto 0; padding:0 16px; color:var(--mut); font-size:12px; }
+  .scrub input { flex:1; accent-color:#7c3aed; }
+  .scrub b { color:var(--text); min-width:230px; }
+  .frame { position:relative; max-width:960px; aspect-ratio:2/1; margin:14px auto 10px; border-radius:20px; overflow:hidden; border:1px solid var(--border); background:var(--bg); box-shadow:0 16px 40px rgb(76 40 160 / .10); }
+  .frame > svg { position:absolute; inset:0; width:100%; height:100%; }
+
+  /* o app por trás (desfocado enquanto carrega) */
+  .app { position:absolute; inset:0; display:grid; grid-template-columns:21% 1fr; background:var(--bg); will-change:filter, transform; }
+  .win { position:absolute; left:14px; top:11px; display:flex; gap:6px; z-index:2; }
+  .win i { width:8px; height:8px; border-radius:50%; background:#dcd6ea; }
+  .side { background:#fff; border-right:1px solid var(--border); padding:34px 14px 14px; }
+  .side .logo { height:21px; margin:0 0 20px 6px; color:var(--brand); display:block; }
+  .side .item { display:flex; align-items:center; gap:9px; padding:7px 10px; border-radius:9px; font-size:11.5px; color:#8a86a0; margin-bottom:3px; }
+  .side .item i { width:11px; height:11px; border-radius:3px; border:1.8px solid currentColor; }
+  .side .item.on { background:#ece4ff; color:var(--brand); font-weight:700; }
+  .main { padding:30px 26px; position:relative; }
+  .head { display:flex; justify-content:space-between; align-items:flex-start; }
+  .head h3 { margin:0; font-size:19px; }
+  .head p { margin:3px 0 18px; font-size:10.5px; color:var(--mut); }
+  .head .pill { width:70px; height:22px; border-radius:8px; background:#fff; border:1px solid var(--border); }
+  .kpis { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .kpi { position:relative; background:#fff; border:1px solid var(--border); border-radius:14px; padding:12px 14px; font-size:11px; color:#4b4766; font-weight:600; }
+  .kpi b { display:block; font-size:24px; color:var(--text); margin-top:6px; }
+  .kpi small { color:#16a34a; font-weight:700; font-size:10px; }
+  .kpi svg { position:absolute; right:14px; bottom:14px; }
+  .perf { margin-top:12px; height:96px; background:#fff; border:1px solid var(--border); border-radius:14px; padding:12px 14px; font-weight:700; font-size:12.5px; position:relative; overflow:hidden; }
+  .perf svg { position:absolute; left:0; right:0; bottom:0; width:100%; height:60%; }
+  .veil { position:absolute; inset:0; background:rgb(248 246 255 / .7); will-change:opacity; }
+  .label { text-align:center; color:var(--mut); font-size:12px; margin:0 0 30px; }
+</style>
+</head>
+<body>
+<div class="top">
+  <button class="primary" id="play">▶ Reproduzir</button>
+  <button id="long">Carregamento longo</button>
+  <button id="slow">Câmera lenta: não</button>
+</div>
+<div class="scrub">
+  <span>Linha do tempo</span>
+  <input id="t" type="range" min="0" max="6.4" step="0.01" value="0" />
+  <b id="tl">Quadro 1 · Início</b>
+</div>
+
+<div class="frame" id="frame">
+  <div class="app" id="app">
+    <div class="win"><i></i><i></i><i></i></div>
+    <div class="side">
+      <svg class="logo" viewBox="0 440 736 150"><path d="M459.585 454.713L460.6 454.658C479.355 453.738 490.475 456.163 504.505 469.008C522.41 450.673 560.33 449.048 579.035 466.918C591.08 478.433 592.04 500.033 592.165 515.728L592.23 545.678C592.245 555.853 593.99 570.838 586.335 578.288C577.47 586.918 559.04 584.628 554.845 572.058C552.675 565.558 553.225 559.908 553.26 553.293L553.435 523.748C553.465 516.498 554.005 508.748 552.54 501.613C551.765 497.848 550.35 494.083 547.665 491.253C543.975 487.373 538.725 486.193 533.56 486.028C528.13 485.858 523.965 487.373 520.12 491.183C518.165 493.123 516.465 495.403 515.58 498.033C511.53 510.018 513.25 547.483 513.305 561.183C513.3 566.623 513 571.013 509.9 575.823C507.32 579.853 503.16 582.608 498.445 583.413C492.785 584.413 486.245 582.733 481.58 579.418C473.19 573.458 474.23 562.228 474.29 553.093L474.51 523.818C474.625 509.963 476.73 486.873 456.135 486.243C435.84 485.623 435.69 504.558 435.72 519.548L435.79 546.443C435.82 559.233 437.675 580.208 421.225 582.923C392.4 587.408 394.695 563.678 394.835 543.753C395.275 523.423 393.92 502.738 395.645 482.478C397.31 462.923 418.65 452.378 434.525 464.238C441.255 458.398 450.965 455.953 459.585 454.713Z" fill="currentColor"/> <path d="M735.175 526.768C736.05 536.493 731.47 553.188 726.31 561.548C708.535 590.313 655.235 591.743 630.555 572.888C603.96 552.573 612.669 508.843 610.829 479.788C610.514 474.758 611.609 467.013 614.969 463.043C620.949 456.288 635.51 455.553 642.25 461.613C649.63 468.268 648.079 480.758 648.284 489.738C648.399 501.913 647.859 514.128 648.399 526.298C649.174 543.823 661.079 552.938 678.149 550.633C699.224 547.783 697.86 525.493 697.86 509.558C697.82 501.203 697.845 492.843 697.94 484.488C698.065 477.518 697.665 469.878 702.36 463.978C707.945 456.363 724.334 457.063 730.779 462.843C736.379 467.868 735.385 481.913 735.36 488.998L735.185 517.573C735.205 520.393 735.32 524.028 735.175 526.768Z" fill="currentColor"/> <path d="M734.08 510.603C734.57 512.693 734.875 515.403 735.185 517.573C735.205 520.393 735.32 524.028 735.175 526.768L734.325 526.073C733.16 523.493 733.92 513.923 734.08 510.603Z" fill="currentColor"/> <path d="M16.3089 385.243C24.7814 383.992 36.2784 387.048 37.9694 396.183C40.5594 410.183 39.6929 427.773 39.7159 442.058L39.9404 500.218C40.0014 507.513 39.6124 522.268 41.7479 528.353C50.0169 551.923 89.8379 543.308 108.114 551.983C111.754 553.908 115.217 557.543 116.22 561.593C119.177 573.533 107.918 578.173 98.6874 580.413C62.0929 587.663 9.09044 586.638 2.16844 539.998C0.0624418 525.808 0.363941 513.168 0.398941 498.883L0.361938 455.883L0.301437 419.958C0.285937 404.668 -3.51356 387.548 16.3089 385.243Z" fill="currentColor"/> <path d="M292.193 516.298C292.433 534.848 295.369 552.933 320.676 550.088C338.69 548.068 338.325 529.328 338.397 515.093C338.495 506.348 338.489 497.603 338.378 488.863C338.293 482.488 337.866 475.518 338.576 469.368C339.603 460.478 346.295 455.888 354.598 454.903C359.435 454.328 365.21 455.963 369.085 458.898C373.375 462.148 374.42 468.018 374.72 473.048C374.96 482.743 374.96 492.613 374.905 502.383C374.78 524.498 377.12 549.718 361.535 567.688C351.516 579.243 333.976 584.663 319.229 585.208C303.315 585.798 285.941 582.848 273.881 571.658C259.98 558.758 257.312 542.903 256.737 524.763C256.429 515.053 256.566 505.178 256.563 495.418C256.56 486.038 255.814 475.383 257.289 466.223C257.665 463.858 258.788 462.058 260.436 460.368C269.02 451.578 289.572 452.998 291.554 467.308C293.109 478.533 292.329 491.303 292.227 502.748C292.326 507.268 292.315 511.783 292.193 516.298Z" fill="currentColor"/> <path d="M292.193 516.297L291.179 515.422C290.603 512.712 290.532 501.122 290.915 498.407L291.415 498.342L291.211 497.958C291.816 499.803 291.93 500.812 292.227 502.747C292.326 507.267 292.315 511.782 292.193 516.297Z" fill="currentColor"/> <path d="M133.803 455.213C154.155 452.803 154.29 469.752 154.202 484.107L154.129 508.347C154.117 519.847 152.429 535.693 161.411 544.398C168.194 550.973 180.728 551.738 188.478 546.433C200.54 538.173 198.761 521.273 198.705 508.583L198.574 483.152C198.5 468.307 197.7 455.903 217.075 455.068C227.754 454.498 234.498 461.258 234.752 471.873C235.017 482.928 234.845 494.143 234.795 505.213C234.866 524.328 236.759 548.768 224.707 564.763C206.591 588.833 162.132 591.323 138.962 574.078C114.15 555.613 117.935 520.293 117.747 493.063C117.693 485.278 117.282 476.352 118.15 468.662C119.111 460.147 125.933 456.258 133.803 455.213Z" fill="currentColor"/> <path d="M679.36 457.223C678.24 457.683 678.329 457.678 677.149 457.423C676.389 455.828 675.849 451.453 675.789 449.648C674.904 422.503 705.139 411.698 727.599 410.948C729.519 410.888 729.44 410.748 730.695 411.928C724.32 441.623 710.915 455.718 679.36 457.223Z" fill="#88D029"/> <path d="M679.36 457.223C678.24 457.683 678.329 457.678 677.149 457.423C676.389 455.828 675.849 451.453 675.789 449.648C674.904 422.503 705.139 411.698 727.599 410.948C729.519 410.888 729.44 410.748 730.695 411.928C717.715 415.988 684.395 444.888 679.125 456.743L679.36 457.223Z" fill="#469C2B"/></svg>
+      <div class="item on"><i></i>Início</div><div class="item"><i></i>Pesquisas</div><div class="item"><i></i>Respostas</div>
+      <div class="item"><i></i>Relatórios</div><div class="item"><i></i>Público</div><div class="item"><i></i>Produtos</div>
+    </div>
+    <div class="main">
+      <div class="head"><div><h3>Olá, Fernando! 👋</h3><p>Aqui está um resumo da sua plataforma.</p></div><span class="pill"></span></div>
+      <div class="kpis">
+        <div class="kpi">CSAT<b>92,4</b><small>↑ +12%</small>
+          <svg width="30" height="24"><rect x="2" y="13" width="6" height="11" rx="2" fill="#22c55e"/><rect x="12" y="7" width="6" height="17" rx="2" fill="#22c55e"/><rect x="22" y="1" width="6" height="23" rx="2" fill="#16a34a"/></svg></div>
+        <div class="kpi">Pesquisas ativas<b>12</b><small>↑ +20%</small>
+          <svg width="26" height="26" viewBox="0 0 26 26"><circle cx="13" cy="13" r="9" fill="none" stroke="#ece4ff" stroke-width="5"/><path d="M13 4 A9 9 0 1 1 4.6 16" fill="none" stroke="#6b2bd9" stroke-width="5" stroke-linecap="round"/></svg></div>
+      </div>
+      <div class="perf">Desempenho
+        <svg viewBox="0 0 400 60" preserveAspectRatio="none"><path d="M0 52 C 60 48 100 30 160 38 S 270 18 330 22 S 385 8 400 4" fill="none" stroke="#8b5cf6" stroke-width="2.4"/></svg>
+      </div>
+    </div>
+  </div>
+  <div class="veil" id="veil"></div>
+
+  <svg id="stage" viewBox="0 0 960 480" aria-hidden="true">
+    <defs>
+      <!-- sombra curta e suave: profundidade sem 3D -->
+      <linearGradient id="gBand" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="960" y2="0"><stop offset="0" stop-color="#e3d8fc" stop-opacity="0"/><stop offset=".22" stop-color="#e3d8fc" stop-opacity=".95"/><stop offset=".85" stop-color="#e3d8fc" stop-opacity=".95"/><stop offset="1" stop-color="#e3d8fc" stop-opacity=".2"/></linearGradient>
+      <linearGradient id="gBand2" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="960" y2="0"><stop offset="0" stop-color="#cdbaf8" stop-opacity="0"/><stop offset=".3" stop-color="#cdbaf8" stop-opacity=".75"/><stop offset="1" stop-color="#cdbaf8" stop-opacity=".35"/></linearGradient>
+      <linearGradient id="gBandL" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="960" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".3" stop-color="#fff" stop-opacity="1"/><stop offset="1" stop-color="#fff" stop-opacity=".6"/></linearGradient>
+      <filter id="fCard" x="-40%" y="-40%" width="180%" height="200%"><feDropShadow dx="0" dy="6" stdDeviation="7" flood-color="#4a2fa8" flood-opacity=".11"/></filter>
+      <clipPath id="cBody"><circle r="62"/></clipPath>
+      <g id="leafShape"><path d="M0 0 C 5 -9 17 -12 26 -8 C 20 1 9 4 0 0Z" fill="#7fd34e"/><path d="M0 0 C 9 -2 18 -5 26 -8 C 20 1 9 4 0 0Z" fill="#4cae3c"/></g>
+    </defs>
+
+    <!-- fita (flat: camadas translúcidas) -->
+    <g id="band" opacity="0">
+      <path id="bandA" fill="none" stroke="url(#gBand)" stroke-width="58" stroke-linecap="round"/>
+      <path id="bandA2" fill="none" stroke="url(#gBand2)" stroke-width="20" stroke-linecap="round"/>
+      <path id="bandB" fill="none" stroke="url(#gBandL)" stroke-width="2.4" stroke-linecap="round"/>
+      <path id="bandC" fill="none" stroke="#b9a3f5" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="2 10"/>
+    </g>
+    <!-- anel (quadro 8) -->
+    <g id="ring" opacity="0">
+      <ellipse cx="480" cy="262" rx="262" ry="74" fill="none" stroke="#efe9fd" stroke-width="30"/>
+      <ellipse cx="480" cy="262" rx="262" ry="74" fill="none" stroke="#fff" stroke-width="14"/>
+      <ellipse id="ring2" cx="480" cy="262" rx="262" ry="74" fill="none" stroke="#c9b6fa" stroke-width="1.6" pathLength="100" stroke-dasharray="40 6 14 10"/>
+    </g>
+    <!-- anéis finos da transformação (quadro 2) -->
+    <g id="orbit0" opacity="0">
+      <ellipse cx="480" cy="240" rx="130" ry="46" fill="none" stroke="#e9e1fd" stroke-width="14" transform="rotate(-8 480 240)"/>
+      <ellipse id="orb2" cx="480" cy="240" rx="112" ry="56" fill="none" stroke="#c4b0f7" stroke-width="2.4" stroke-linecap="round" pathLength="100" stroke-dasharray="32 18 10 40" transform="rotate(12 480 240)"/>
+      <ellipse id="orb3" cx="480" cy="240" rx="140" ry="40" fill="none" stroke="#d8cbfb" stroke-width="1.6" stroke-linecap="round" pathLength="100" stroke-dasharray="20 30 6 44" transform="rotate(-4 480 240)"/>
+    </g>
+
+    <g id="ghosts" opacity="0">
+      <g transform="translate(250 365) rotate(-4)"><rect x="-90" y="-26" width="180" height="52" rx="14" fill="#fff" opacity=".55"/><rect x="-70" y="-6" width="60" height="7" rx="3.5" fill="#e6ddfb"/><rect x="-70" y="6" width="90" height="7" rx="3.5" fill="#efe9fd"/></g>
+      <g transform="translate(715 360) rotate(3)"><rect x="-80" y="-30" width="160" height="60" rx="14" fill="#fff" opacity=".55"/><rect x="-10" y="-8" width="60" height="8" rx="4" fill="#e6ddfb"/><rect x="-10" y="6" width="44" height="8" rx="4" fill="#efe9fd"/></g>
+      <g transform="translate(300 118) rotate(-6)"><rect x="-60" y="-34" width="120" height="68" rx="14" fill="#fff" opacity=".45"/></g>
+    </g>
+
+    <g id="cardsBack"></g>
+    <g id="parts"></g>
+    <ellipse id="shadow" cx="480" cy="332" rx="60" ry="8" fill="#e3daf8"/>
+    <g id="dot" opacity="0"><circle id="dotHalo" cx="480" cy="240" r="16" fill="#e7defc"/><circle id="dotCore" cx="480" cy="240" r="10" fill="#6b2bd9"/></g>
+
+    <!-- AMEIXA — flat com profundidade (centro do corpo em 0,0) -->
+    <g id="plum" opacity="0">
+      <g id="armL"><ellipse cx="-58" cy="20" rx="14" ry="17" fill="#6127cf" transform="rotate(20 -58 20)"/><ellipse cx="-62" cy="14" rx="5" ry="4" fill="#8a57f2"/></g>
+      <g id="body">
+        <circle r="62" fill="#6a2fe0"/>
+        <circle cx="-9" cy="-10" r="58" fill="#7f45f2" clip-path="url(#cBody)"/>
+        <ellipse cx="-30" cy="-30" rx="13" ry="7.5" fill="#a47cff" transform="rotate(-38 -30 -30)"/>
+        <circle cx="-43" cy="-14" r="3.6" fill="#a47cff"/>
+        <path d="M-9 -60 Q0 -54 9 -60" stroke="#5422b8" stroke-width="3" fill="none" stroke-linecap="round"/>
+      </g>
+      <g id="leaves">
+        <path d="M1 -57 C 1 -66 4 -72 9 -78" stroke="#8a3b34" stroke-width="6" stroke-linecap="round" fill="none"/>
+        <g transform="translate(2 -58) scale(1.18) translate(-2 58)">
+        <g id="leafL">
+          <path d="M-2 -60 C -14 -82 -44 -90 -64 -76 C -48 -58 -22 -50 -2 -60Z" fill="#7fd34e"/>
+          <path d="M-2 -60 C -22 -64 -42 -70 -64 -76 C -48 -58 -22 -50 -2 -60Z" fill="#4cae3c"/>
+        </g>
+        <g id="leafR">
+          <path d="M5 -62 C 16 -94 52 -104 72 -88 C 60 -64 30 -54 5 -62Z" fill="#8ad95a"/>
+          <path d="M5 -62 C 28 -70 50 -78 72 -88 C 60 -64 30 -54 5 -62Z" fill="#52b541"/>
+        </g>
+        </g>
+      </g>
+      <g id="face" opacity="0">
+        <ellipse cx="-38" cy="16" rx="11" ry="6.5" fill="#ff8dbd"/>
+        <ellipse cx="38" cy="16" rx="11" ry="6.5" fill="#ff8dbd"/>
+        <g id="eyesOpenL"><ellipse cx="-22" cy="-2" rx="12.5" ry="14" fill="#fff"/><circle cx="-19" cy="1" r="9" fill="#1c1033"/><circle cx="-15.5" cy="-3" r="3.2" fill="#fff"/></g>
+        <g id="eyesOpenR"><ellipse cx="22" cy="-2" rx="12.5" ry="14" fill="#fff"/><circle cx="25" cy="1" r="9" fill="#1c1033"/><circle cx="28.5" cy="-3" r="3.2" fill="#fff"/></g>
+        <path id="happyL" d="M-33 2 Q -22 -10 -11 2" stroke="#1c1033" stroke-width="5" fill="none" stroke-linecap="round"/>
+        <path id="happyR" d="M11 2 Q 22 -10 33 2" stroke="#1c1033" stroke-width="5" fill="none" stroke-linecap="round"/>
+        <path id="calmL" d="M-32 -1 Q -22 8 -12 -1" stroke="#1c1033" stroke-width="4.6" fill="none" stroke-linecap="round"/>
+        <path id="calmR" d="M12 -1 Q 22 8 32 -1" stroke="#1c1033" stroke-width="4.6" fill="none" stroke-linecap="round"/>
+        <g id="mouthOpen"><path d="M-17 11 Q 0 44 17 11 Q 0 15 -17 11Z" fill="#2a0f4a"/><path d="M-10 28 Q 0 38 10 28 Q 0 22 -10 28Z" fill="#ff5d8f"/></g>
+        <path id="mouthCalm" d="M-9 16 Q 0 25 9 16" stroke="#2a0f4a" stroke-width="4.4" fill="none" stroke-linecap="round"/>
+      </g>
+      <g id="armR"><ellipse cx="60" cy="10" rx="14" ry="17" fill="#7238e6" transform="rotate(-20 60 10)"/><ellipse cx="62" cy="3" rx="5" ry="4" fill="#9a6cf7"/></g>
+      <g id="sparks" opacity="0" stroke="#ffc233" stroke-width="5" stroke-linecap="round">
+        <line x1="66" y1="-56" x2="74" y2="-68"/><line x1="78" y1="-40" x2="92" y2="-46"/><line x1="80" y1="-22" x2="94" y2="-22"/>
+        <line x1="-66" y1="-56" x2="-74" y2="-68"/><line x1="-78" y1="-40" x2="-92" y2="-46"/><line x1="-80" y1="-22" x2="-94" y2="-22"/>
+      </g>
+    </g>
+    <g id="cardsFront"></g>
+
+    <!-- LOGO + mensagens -->
+    <g id="logo" opacity="0">
+      <g id="wm"><svg x="0" y="0" width="240" height="49" viewBox="0 440 736 150" style="color:#5b21d0"><path d="M459.585 454.713L460.6 454.658C479.355 453.738 490.475 456.163 504.505 469.008C522.41 450.673 560.33 449.048 579.035 466.918C591.08 478.433 592.04 500.033 592.165 515.728L592.23 545.678C592.245 555.853 593.99 570.838 586.335 578.288C577.47 586.918 559.04 584.628 554.845 572.058C552.675 565.558 553.225 559.908 553.26 553.293L553.435 523.748C553.465 516.498 554.005 508.748 552.54 501.613C551.765 497.848 550.35 494.083 547.665 491.253C543.975 487.373 538.725 486.193 533.56 486.028C528.13 485.858 523.965 487.373 520.12 491.183C518.165 493.123 516.465 495.403 515.58 498.033C511.53 510.018 513.25 547.483 513.305 561.183C513.3 566.623 513 571.013 509.9 575.823C507.32 579.853 503.16 582.608 498.445 583.413C492.785 584.413 486.245 582.733 481.58 579.418C473.19 573.458 474.23 562.228 474.29 553.093L474.51 523.818C474.625 509.963 476.73 486.873 456.135 486.243C435.84 485.623 435.69 504.558 435.72 519.548L435.79 546.443C435.82 559.233 437.675 580.208 421.225 582.923C392.4 587.408 394.695 563.678 394.835 543.753C395.275 523.423 393.92 502.738 395.645 482.478C397.31 462.923 418.65 452.378 434.525 464.238C441.255 458.398 450.965 455.953 459.585 454.713Z" fill="currentColor"/> <path d="M735.175 526.768C736.05 536.493 731.47 553.188 726.31 561.548C708.535 590.313 655.235 591.743 630.555 572.888C603.96 552.573 612.669 508.843 610.829 479.788C610.514 474.758 611.609 467.013 614.969 463.043C620.949 456.288 635.51 455.553 642.25 461.613C649.63 468.268 648.079 480.758 648.284 489.738C648.399 501.913 647.859 514.128 648.399 526.298C649.174 543.823 661.079 552.938 678.149 550.633C699.224 547.783 697.86 525.493 697.86 509.558C697.82 501.203 697.845 492.843 697.94 484.488C698.065 477.518 697.665 469.878 702.36 463.978C707.945 456.363 724.334 457.063 730.779 462.843C736.379 467.868 735.385 481.913 735.36 488.998L735.185 517.573C735.205 520.393 735.32 524.028 735.175 526.768Z" fill="currentColor"/> <path d="M734.08 510.603C734.57 512.693 734.875 515.403 735.185 517.573C735.205 520.393 735.32 524.028 735.175 526.768L734.325 526.073C733.16 523.493 733.92 513.923 734.08 510.603Z" fill="currentColor"/> <path d="M16.3089 385.243C24.7814 383.992 36.2784 387.048 37.9694 396.183C40.5594 410.183 39.6929 427.773 39.7159 442.058L39.9404 500.218C40.0014 507.513 39.6124 522.268 41.7479 528.353C50.0169 551.923 89.8379 543.308 108.114 551.983C111.754 553.908 115.217 557.543 116.22 561.593C119.177 573.533 107.918 578.173 98.6874 580.413C62.0929 587.663 9.09044 586.638 2.16844 539.998C0.0624418 525.808 0.363941 513.168 0.398941 498.883L0.361938 455.883L0.301437 419.958C0.285937 404.668 -3.51356 387.548 16.3089 385.243Z" fill="currentColor"/> <path d="M292.193 516.298C292.433 534.848 295.369 552.933 320.676 550.088C338.69 548.068 338.325 529.328 338.397 515.093C338.495 506.348 338.489 497.603 338.378 488.863C338.293 482.488 337.866 475.518 338.576 469.368C339.603 460.478 346.295 455.888 354.598 454.903C359.435 454.328 365.21 455.963 369.085 458.898C373.375 462.148 374.42 468.018 374.72 473.048C374.96 482.743 374.96 492.613 374.905 502.383C374.78 524.498 377.12 549.718 361.535 567.688C351.516 579.243 333.976 584.663 319.229 585.208C303.315 585.798 285.941 582.848 273.881 571.658C259.98 558.758 257.312 542.903 256.737 524.763C256.429 515.053 256.566 505.178 256.563 495.418C256.56 486.038 255.814 475.383 257.289 466.223C257.665 463.858 258.788 462.058 260.436 460.368C269.02 451.578 289.572 452.998 291.554 467.308C293.109 478.533 292.329 491.303 292.227 502.748C292.326 507.268 292.315 511.783 292.193 516.298Z" fill="currentColor"/> <path d="M292.193 516.297L291.179 515.422C290.603 512.712 290.532 501.122 290.915 498.407L291.415 498.342L291.211 497.958C291.816 499.803 291.93 500.812 292.227 502.747C292.326 507.267 292.315 511.782 292.193 516.297Z" fill="currentColor"/> <path d="M133.803 455.213C154.155 452.803 154.29 469.752 154.202 484.107L154.129 508.347C154.117 519.847 152.429 535.693 161.411 544.398C168.194 550.973 180.728 551.738 188.478 546.433C200.54 538.173 198.761 521.273 198.705 508.583L198.574 483.152C198.5 468.307 197.7 455.903 217.075 455.068C227.754 454.498 234.498 461.258 234.752 471.873C235.017 482.928 234.845 494.143 234.795 505.213C234.866 524.328 236.759 548.768 224.707 564.763C206.591 588.833 162.132 591.323 138.962 574.078C114.15 555.613 117.935 520.293 117.747 493.063C117.693 485.278 117.282 476.352 118.15 468.662C119.111 460.147 125.933 456.258 133.803 455.213Z" fill="currentColor"/> <path d="M679.36 457.223C678.24 457.683 678.329 457.678 677.149 457.423C676.389 455.828 675.849 451.453 675.789 449.648C674.904 422.503 705.139 411.698 727.599 410.948C729.519 410.888 729.44 410.748 730.695 411.928C724.32 441.623 710.915 455.718 679.36 457.223Z" fill="#88D029"/> <path d="M679.36 457.223C678.24 457.683 678.329 457.678 677.149 457.423C676.389 455.828 675.849 451.453 675.789 449.648C674.904 422.503 705.139 411.698 727.599 410.948C729.519 410.888 729.44 410.748 730.695 411.928C717.715 415.988 684.395 444.888 679.125 456.743L679.36 457.223Z" fill="#469C2B"/></svg></g>
+      <text id="msg" x="480" y="0" text-anchor="middle" font-size="16" font-weight="500" fill="#7a63c9" font-family="ui-sans-serif, system-ui, sans-serif"></text>
+      <g id="dots"><circle cx="447" r="6.5"/><circle cx="469" r="6.5"/><circle cx="491" r="6.5"/><circle cx="513" r="6.5"/></g>
+    </g>
+  </svg>
+</div>
+<p class="label">Arraste a linha do tempo para comparar com cada quadro da referência.</p>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const NS = "http://www.w3.org/2000/svg";
+const C = { x: 480, y: 240 };
+const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+const seg = (t, a, b) => (t <= a ? 0 : t >= b ? 1 : (t - a) / (b - a));
+const eo = (p) => 1 - (1 - p) ** 3;
+const ei = (p) => p * p * p;
+const eio = (p) => (p < .5 ? 4 * p * p * p : 1 - (-2 * p + 2) ** 3 / 2);
+const back = (p, s = 1.7) => (p <= 0 ? 0 : 1 + (s + 1) * (p - 1) ** 3 + s * (p - 1) ** 2);
+const wob = (t, t0, amp, f = 14, k = 6) => (!(t > t0) || !isFinite(t0) ? 0 : amp * Math.exp(-k * (t - t0)) * Math.sin(f * (t - t0)));
+const lerp = (a, b, p) => a + (b - a) * p;
+const show = (id, on) => ($(id).style.display = on ? "" : "none");
+
+/* ---------------------------------------------------------------- linha do tempo (s) */
+const K = { dot: [0, .35], life: [.35, .85], orbit: [3.0, 3.6], exit: [3.6, 4.4], logo: 4.3 };
+const FRAMES = [[0,"1 · Início"],[.35,"2 · Ameixa ganha vida"],[.85,"3 · Boas-vindas"],[1.3,"4 · Explorando a plataforma"],[1.75,"5 · CSAT e Pesquisas"],[2.15,"6 · Dados, Insights e Produtos"],[2.6,"7 · Outros recursos"],[3.0,"8 · Tudo em movimento"],[3.6,"9 · Transição"],[4.4,"10 · Carregamento"],[5.3,"11 · Quase pronto"]];
+
+/* ---------------------------------------------------------------- cards (flat) */
+const ink = "#2b1a5e";
+const txt = (x, y, s, c = ink, w = 700) => `<text x="${x}" y="${y}" font-size="${s}" font-weight="${w}" fill="${c}" font-family="ui-sans-serif, system-ui, sans-serif">`;
+const box = (w, h, r = 15) => `<rect x="${-w / 2}" y="${-h / 2}" width="${w}" height="${h}" rx="${r}" fill="#fff" filter="url(#fCard)"/>`;
+const bullets = (x, y, n = 2, w = 50) => [...Array(n)].map((_, i) => `<rect x="${x}" y="${y - 4 + i * 14}" width="9" height="8" rx="2.5" fill="#a78bfa"/><rect x="${x + 14}" y="${y - 3 + i * 14}" width="${i ? w - 14 : w}" height="7" rx="3.5" fill="#ddd2fb"/>`).join("");
+const barsIco = (x, y, s = 1, c = ["#5b7cff", "#3f63ff", "#2f53f0"]) => `<g transform="translate(${x} ${y}) scale(${s})"><rect x="-16" y="-2" width="9" height="16" rx="2.5" fill="${c[0]}"/><rect x="-4" y="-12" width="9" height="26" rx="2.5" fill="${c[1]}"/><rect x="8" y="-20" width="9" height="34" rx="2.5" fill="${c[2]}"/></g>`;
+const smiley = (x, y) => `<circle cx="${x}" cy="${y}" r="15" fill="#7b3ff2"/><circle cx="${x - 5}" cy="${y - 3}" r="2.2" fill="#fff"/><circle cx="${x + 5}" cy="${y - 3}" r="2.2" fill="#fff"/><path d="M${x - 7} ${y + 3} Q ${x} ${y + 10} ${x + 7} ${y + 3}" stroke="#fff" stroke-width="2.6" fill="none" stroke-linecap="round"/>`;
+const greenBars = (x, y) => `<rect x="${x}" y="${y + 6}" width="7" height="10" rx="2" fill="#5cc443"/><rect x="${x + 10}" y="${y}" width="7" height="16" rx="2" fill="#4cae3c"/><rect x="${x + 20}" y="${y - 7}" width="7" height="23" rx="2" fill="#3f9c34"/>`;
+const pie = (x, y, r = 17) => `<circle cx="${x}" cy="${y}" r="${r}" fill="#6a3ef0"/><path d="M${x} ${y} L${x} ${y - r} A${r} ${r} 0 0 1 ${x + r * .95} ${y + r * .3}Z" fill="#ff6fa3"/><circle cx="${x}" cy="${y}" r="${r * .32}" fill="#fff" opacity=".0"/>`;
+const heart = (s = 1) => `<path transform="scale(${s})" d="M0 13 C -19 1 -16 -14 -7 -14 C -3 -14 0 -10 0 -8 C 0 -10 3 -14 7 -14 C 16 -14 19 1 0 13Z" fill="#ff5d8f"/>`;
+const people = (x, y, c = "#7b3ff2", c2 = "#b39af7") => `<circle cx="${x - 5}" cy="${y - 6}" r="7.5" fill="${c}"/><path d="M${x - 18} ${y + 14} C ${x - 18} ${y + 2} ${x + 8} ${y + 2} ${x + 8} ${y + 14}Z" fill="${c}"/><circle cx="${x + 12}" cy="${y - 3}" r="5.5" fill="${c2}"/><path d="M${x + 4} ${y + 14} C ${x + 4} ${y + 6} ${x + 22} ${y + 6} ${x + 22} ${y + 14}Z" fill="${c2}"/>`;
+const sparkle = (x, y, s = 1, c = "#8b5cf6") => `<path transform="translate(${x} ${y}) scale(${s})" d="M0 -16 C 2 -5 5 -2 16 0 C 5 2 2 5 0 16 C -2 5 -5 2 -16 0 C -5 -2 -2 -5 0 -16Z" fill="${c}"/>`;
+const cube = (x, y) => `<g transform="translate(${x} ${y})"><path d="M-13 -7 L0 -14 L13 -7 L13 8 L0 15 L-13 8Z" fill="#3f63ff"/><path d="M-13 -7 L0 0 L13 -7 L0 -14Z" fill="#8aa2ff"/><path d="M0 0 L0 15 L13 8 L13 -7Z" fill="#2f4fe0"/></g>`;
+
+const KIND = {
+  barsCard: () => box(66, 66) + barsIco(0, 2),
+  heartCard: () => box(58, 58) + heart(1.05),
+  pesqMini: () => box(112, 62) + txt(-42, -10, 11.5, "#7b3ff2") + `Pesquisas</text>` + `<rect x="-42" y="-24" width="9" height="8" rx="2.5" fill="#a78bfa" opacity="0"/>` + bullets(-42, 8, 2, 46),
+  csat: () => box(128, 92) + txt(-50, -22, 12.5) + `CSAT</text>` + txt(6, -22, 12.5, "#d7cdf3") + `CSAT</text>` + smiley(-30, 12) + greenBars(4, 6),
+  pesquisas: () => box(132, 84) + txt(-50, -14, 14) + `Pesquisas</text>` + bullets(-50, 6, 2, 64),
+  dados: () => box(130, 80) + txt(-50, -20, 9, "#c8bdf0") + `CSAT</text>` + txt(-14, -14, 14) + `Dados</text>` + barsIco(-38, 10, .85) + `<rect x="-12" y="4" width="50" height="7" rx="3.5" fill="#e3e9ff"/><rect x="-12" y="16" width="36" height="7" rx="3.5" fill="#eef1ff"/>`,
+  insights: () => box(112, 92) + txt(-40, -22, 14) + `Insights</text>` + sparkle(0, 14, 1.1) + `<circle cx="22" cy="2" r="3" fill="#c4b0f7"/>`,
+  produtos: () => box(136, 62) + cube(-38, 0) + txt(-12, 5, 14) + `Produtos</text>`,
+  relatorios: () => box(124, 104) + txt(-48, -26, 14) + `Relatórios</text>` + pie(-16, 16) + `<rect x="10" y="6" width="32" height="7" rx="3.5" fill="#efe9fd"/><rect x="10" y="18" width="22" height="7" rx="3.5" fill="#efe9fd"/>`,
+  usuarios: () => box(118, 92) + txt(-44, -20, 14) + `Usuários</text>` + people(-4, 16),
+  // quadro 9: cards só com ícone
+  barsSoft: () => box(60, 60) + barsIco(0, 0, .9, ["#c9bdf6", "#b5a4f2", "#a08cee"]),
+  heartSoft: () => box(56, 56) + heart(.95),
+  peopleSoft: () => box(60, 60) + people(-2, -1, "#5b7cff", "#8fa6ff"),
+  pieSoft: () => box(60, 60) + pie(0, 0, 15),
+};
+/* entradas em ondas (4–7): em volta da ameixa, levemente inclinados, como na referência */
+const CARDS = [
+  { k: "barsCard", in: 1.3, out: 1.82, x: 288, y: 118, r: -8 },
+  { k: "heartCard", in: 1.38, out: 1.82, x: 690, y: 92, r: 9 },
+  { k: "pesqMini", in: 1.46, out: 1.82, x: 735, y: 200, r: 10 },
+  { k: "csat", in: 1.75, out: 2.22, x: 268, y: 182, r: -9, orbit: 0 },
+  { k: "pesquisas", in: 1.84, out: 2.22, x: 712, y: 196, r: 9, orbit: 1 },
+  { k: "dados", in: 2.15, out: 2.66, x: 282, y: 120, r: -8 },
+  { k: "insights", in: 2.23, out: 2.66, x: 690, y: 112, r: 10 },
+  { k: "produtos", in: 2.31, out: 2.66, x: 700, y: 318, r: -5, orbit: 2 },
+  { k: "relatorios", in: 2.6, out: 3.02, x: 272, y: 132, r: -10, orbit: 3 },
+  { k: "usuarios", in: 2.68, out: 3.02, x: 692, y: 118, r: 12 },
+];
+// 8: posição de cada um no anel (cantos, como na referência) — giram devagar
+const ORBIT_A = [-2.62, -0.52, 2.62, 0.52];
+// 9: cards de ícone que vão atrás da ameixa
+const TRAIL = [
+  { k: "barsSoft", x: 225, y: 168, r: -10 },
+  { k: "heartSoft", x: 372, y: 186, r: 8 },
+  { k: "peopleSoft", x: 520, y: 200, r: -4 },
+  { k: "pieSoft", x: 236, y: 300, r: 6 },
+];
+const mk = (k, parent) => { const g = document.createElementNS(NS, "g"); g.innerHTML = KIND[k](); parent.appendChild(g); return g; };
+const cardEls = CARDS.map((c) => mk(c.k, $("cardsFront")));
+const trailEls = TRAIL.map((c) => mk(c.k, $("cardsFront")));
+
+/* folhinhas, pontinhos e tracinhos coloridos */
+const PARTS = [
+  // [início, x, y, dx, dy, tipo]
+  [.5, 640, 150, 40, -30, "leaf"], [.55, 340, 300, -36, 20, "dot"], [.95, 330, 170, -30, -10, "dot"],
+  [1.4, 185, 210, -30, 10, "leaf"], [1.5, 610, 250, 20, 6, "dot"], [1.9, 400, 330, -20, 14, "dot"],
+  [2.15, 150, 230, -24, 6, "leaf"], [2.2, 392, 210, -14, -6, "dashY"], [2.25, 420, 290, -18, 8, "dashG"], [2.3, 600, 160, 14, -10, "dashY"], [2.35, 360, 250, -20, 0, "dashG"],
+  [2.65, 395, 275, -16, 4, "dashG"], [2.7, 420, 300, -18, 10, "dashY"], [2.75, 560, 190, 14, -6, "dashY"],
+  [3.1, 780, 130, 26, -20, "leaf"], [3.2, 300, 330, -20, 10, "leaf"],
+  [3.75, 95, 196, -30, -10, "leaf"], [3.85, 600, 150, 30, -20, "dot"],
+];
+const partEls = PARTS.map(([, , , , , k]) => {
+  const g = document.createElementNS(NS, "g");
+  g.innerHTML = k === "leaf" ? `<use href="#leafShape" transform="scale(1.1)"/>` : k === "dot" ? `<circle r="3.6" fill="#a98bf3"/>` : `<rect x="-6" y="-2" width="12" height="4" rx="2" fill="${k === "dashY" ? "#ffc233" : "#5cc443"}"/>`;
+  $("parts").appendChild(g); return g;
+});
+
+/* ---------------------------------------------------------------- render(t) */
+let doneAt = Infinity;
+const waveD = (x0, x1, yA, yB, amp, ph) => { let d = ""; for (let i = 0; i <= 44; i++) { const p = i / 44, x = lerp(x0, x1, p); d += (i ? " L" : "M") + x.toFixed(1) + " " + (lerp(yA, yB, p) + Math.sin(p * Math.PI * 1.6 + ph) * amp).toFixed(1); } return d; };
+
+function render(t) {
+  const end = seg(t, doneAt, doneAt + .8);            // 12 Página carregada
+  $("app").style.filter = end < 1 ? `blur(${(8 * (1 - eo(end))).toFixed(2)}px)` : "";
+  $("app").style.transform = `scale(${(1.015 - .015 * eo(end)).toFixed(4)})`;
+  $("veil").style.opacity = (1 - eo(end)).toFixed(3);
+
+  // 1 Início: ponto + sombra
+  const pDot = seg(t, ...K.dot);
+  $("dot").setAttribute("opacity", (eo(pDot) * (1 - seg(t, .42, .52))).toFixed(3));
+  $("dotCore").setAttribute("r", (10 * back(pDot)).toFixed(2));
+  $("dotHalo").setAttribute("r", (17 * eo(pDot)).toFixed(2));
+
+  // 2 Ameixa ganha vida: o ponto vira a ameixa (sem rosto, uma folha) dentro dos anéis
+  const pLife = seg(t, ...K.life);
+  $("orbit0").setAttribute("opacity", (seg(t, .35, .55) * (1 - seg(t, .9, 1.15))).toFixed(3));
+  $("orb2").setAttribute("stroke-dashoffset", (-t * 70).toFixed(1));
+  $("orb3").setAttribute("stroke-dashoffset", (t * 50).toFixed(1));
+
+  let x = C.x, y = C.y, rot = 0, sc = pLife <= 0 ? 0 : lerp(.16, 1, back(pLife, 1.25));
+  y += wob(t, .85, -9, 15, 6);                          // 3: quique de boas-vindas
+  y += Math.sin(t * 3.4) * 3 * seg(t, 1.2, 1.5);         // flutua
+  const pEx = seg(t, ...K.exit);
+  if (pEx > 0) {                                        // 9: vai até a direita levando tudo, depois sai
+    const a = eio(seg(pEx, 0, .5)), b = ei(seg(pEx, .55, 1));
+    x = lerp(C.x, 760, a) + (1260 - 760) * b; y += -30 * a; rot = 10 * a + 6 * b; sc *= 1 - .1 * a;
+  }
+  const big = 1.12;
+  $("plum").setAttribute("opacity", clamp(seg(t, .35, .42)).toFixed(3));
+  $("plum").setAttribute("transform", `translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${rot.toFixed(1)}) scale(${(sc * big).toFixed(3)})`);
+  $("shadow").setAttribute("cx", x.toFixed(1));
+  $("shadow").setAttribute("rx", (lerp(20, 64, clamp(sc)) * (pEx > 0 ? 1 - .3 * pEx : 1)).toFixed(1));
+  $("shadow").setAttribute("cy", pEx > 0 ? 332 - 40 * eio(seg(pEx, 0, .5)) : 332);
+  $("shadow").setAttribute("opacity", (clamp(pDot * 2) * (1 - seg(pEx, .5, 1))).toFixed(3));
+
+  // folhas: a direita nasce no 2; a esquerda brota nas boas-vindas; balançam sempre
+  const lR = seg(t, .55, .82), lL = seg(t, .88, 1.1);
+  const sway = Math.sin(t * 3.2) * 4 + wob(t, .9, 12, 13, 5) + (pEx > 0 ? Math.sin(t * 12) * 6 : 0);
+  $("leaves").setAttribute("opacity", clamp(lR * 3).toFixed(3));
+  $("leafR").setAttribute("transform", `rotate(${(sway + (1 - back(lR)) * 60).toFixed(1)} 4 -60) scale(${Math.max(0, back(lR)).toFixed(3)})`);
+  $("leafL").setAttribute("opacity", clamp(lL * 3).toFixed(3));
+  $("leafL").setAttribute("transform", `rotate(${(-sway - (1 - back(lL)) * 50).toFixed(1)} 0 -58) scale(${Math.max(0, back(lL)).toFixed(3)})`);
+
+  // rosto por quadro: 3 ^^ · 4–6 piscadinha · 7 calmo (◡ ◡) · 8 piscadinha · 9 ^^
+  $("face").setAttribute("opacity", seg(t, .9, 1.06).toFixed(3));
+  const calm = t >= 2.6 && t < 3.0;
+  const happy = t < 1.3 || t >= 3.6;
+  const wink = !happy && !calm;
+  show("happyL", happy); show("happyR", happy || wink);
+  show("calmL", calm); show("calmR", calm);
+  show("eyesOpenL", wink); show("eyesOpenR", false);
+  show("mouthOpen", !calm); show("mouthCalm", calm);
+  // braços: entram no 4; acenam; no 9 esticam para frente
+  const armIn = back(seg(t, 1.25, 1.45), 2);
+  const wave = t > 1.25 && t < 1.7 ? Math.sin((t - 1.25) * 22) * 14 - 18 : 0;
+  $("armR").setAttribute("opacity", clamp(armIn * 2).toFixed(3));
+  $("armL").setAttribute("opacity", clamp(armIn * 2).toFixed(3));
+  $("armR").setAttribute("transform", `rotate(${(wave + (pEx > 0 ? -50 : 0)).toFixed(1)} 50 16) translate(${(50 * (1 - armIn)).toFixed(1)} 0) scale(${Math.max(0, armIn).toFixed(3)})`);
+  $("armL").setAttribute("transform", `rotate(${(pEx > 0 ? 30 : Math.sin(t * 4) * 6).toFixed(1)} -50 20) translate(${(-50 * (1 - armIn)).toFixed(1)} 0) scale(${Math.max(0, armIn).toFixed(3)})`);
+  const spk = seg(t, .95, 1.1) * (1 - seg(t, 3.0, 3.1)) + seg(t, 3.1, 3.2) * 0;
+  $("sparks").setAttribute("opacity", (spk * (0.85 + 0.15 * Math.sin(t * 16))).toFixed(3));
+
+  // fita: diagonal atrás (4–7, sobe da esquerda para a direita) → rastro da saída (9)
+  const bandOp = seg(t, 1.25, 1.55) * (1 - seg(t, 2.92, 3.08)) + clamp(pEx * 5) * (1 - seg(t, 4.2, 4.45));
+  $("band").setAttribute("opacity", clamp(bandOp).toFixed(3));
+  const inExit = pEx > 0;
+  const bx1 = inExit ? x - 20 : 1040, yA = inExit ? 250 : 370, yB = inExit ? y + 10 : 205, amp = inExit ? 30 : 30, ph = t * 1.5;
+  $("bandA").setAttribute("d", waveD(-80, bx1, yA, yB, amp, ph));
+  $("bandA2").setAttribute("d", waveD(-80, bx1, yA + 10, yB + 4, amp * 1.25, ph + 1.1));
+  $("bandB").setAttribute("d", waveD(-80, bx1, yA - 8, yB - 6, amp, ph + .15));
+  $("bandC").setAttribute("d", waveD(-80, bx1, yA + 22, yB + 16, amp, ph - .2));
+  $("ghosts").setAttribute("opacity", (seg(t, 2.6, 2.8) * (1 - seg(t, 2.95, 3.1))).toFixed(3));
+  $("ring").setAttribute("opacity", (seg(t, 2.95, 3.2) * (1 - seg(t, 3.58, 3.75))).toFixed(3));
+  $("ring2").setAttribute("stroke-dashoffset", (-t * 30).toFixed(1));
+
+  // cards em ondas (4–7) → anel (8)
+  CARDS.forEach((c, i) => {
+    const pin = seg(t, c.in, c.in + .3), pout = seg(t, c.out, c.out + .22);
+    let cx = c.x + Math.sin(t * 2.6 + i) * 3.5, cy = c.y + Math.cos(t * 2.2 + i) * 3.5, s = back(pin, 2) * (1 - .12 * pout), o = clamp(pin * 2) * (1 - pout), r = c.r * (1 + .6 * (1 - pin));
+    cx = lerp(C.x + (c.x - C.x) * .5, cx, eo(pin)); cy = lerp(C.y + (c.y - C.y) * .5, cy, eo(pin));
+    if (c.orbit !== undefined && t >= 2.98) {
+      const a = ORBIT_A[c.orbit] + (t - 3.3) * .35;
+      const pin8 = seg(t, 2.98, 3.24);
+      cx = C.x + Math.cos(a) * 262; cy = 238 + Math.sin(a) * 118;
+      s = 1 * back(pin8, 2) * (1 - .15 * seg(t, 3.6, 3.8)); o = clamp(pin8 * 2) * (1 - seg(t, 3.6, 3.78)); r = Math.cos(a) * -8;
+    }
+    cardEls[i].setAttribute("opacity", o.toFixed(3));
+    cardEls[i].setAttribute("transform", `translate(${cx.toFixed(1)} ${cy.toFixed(1)}) rotate(${r.toFixed(1)}) scale(${Math.max(0, s).toFixed(3)})`);
+  });
+  // 9: cards de ícone se enfileiram atrás da ameixa e saem com ela
+  TRAIL.forEach((c, i) => {
+    const pin = seg(t, 3.62 + i * .05, 3.9 + i * .05), go = ei(seg(t, 4.0 + i * .03, 4.4));
+    const cx = lerp(C.x, c.x, eo(pin)) + 900 * go, cy = lerp(C.y, c.y, eo(pin)) + Math.sin(t * 3 + i) * 3;
+    trailEls[i].setAttribute("opacity", (clamp(pin * 2) * (1 - seg(t, 4.2, 4.4))).toFixed(3));
+    trailEls[i].setAttribute("transform", `translate(${cx.toFixed(1)} ${cy.toFixed(1)}) rotate(${c.r}) scale(${Math.max(0, back(pin, 1.6) * .95).toFixed(3)})`);
+  });
+
+  PARTS.forEach(([t0, px, py, dx, dy], i) => {
+    const a = seg(t, t0, t0 + .75);
+    const o = a > 0 && a < 1 ? Math.sin(a * Math.PI) : 0;
+    partEls[i].setAttribute("opacity", o.toFixed(3));
+    partEls[i].setAttribute("transform", `translate(${(px + dx * eo(a)).toFixed(1)} ${(py + dy * eo(a)).toFixed(1)}) rotate(${(i * 41 + a * 70 - 20).toFixed(1)})`);
+  });
+
+  // 10–11: logo, mensagem e pontos em progressão (cheio · cheio · meio · vazio)
+  const lin = seg(t, K.logo, K.logo + .4);
+  $("logo").setAttribute("opacity", (eo(lin) * (1 - seg(t, doneAt, doneAt + .4))).toFixed(3));
+  const lift = 8 * (1 - eo(lin));
+  $("wm").setAttribute("transform", `translate(360 ${(180 + lift).toFixed(1)})`);
+  const msg = t < 5.3 ? "Organizando tudo para você..." : "Quase lá...";
+  if ($("msg").textContent !== msg) $("msg").textContent = msg;
+  const mIn = t < 5.3 ? seg(t, 4.5, 4.85) : seg(t, 5.3, 5.6);
+  $("msg").setAttribute("y", (262 + lift).toFixed(1));
+  $("msg").setAttribute("opacity", (t > 5.1 && t < 5.3 ? 1 - seg(t, 5.1, 5.3) : mIn).toFixed(3));
+  const head = (t * 2.2) % 5;     // a "cabeça" do progresso percorre os pontos
+  [...$("dots").children].forEach((d, i) => {
+    const fill = clamp(head - i);                        // 1 = cheio, 0 = vazio
+    d.setAttribute("cy", (298 + lift).toFixed(1));
+    d.setAttribute("fill", fill >= .99 ? "#5b21d0" : fill > .01 ? "#8f6cf0" : "#ddd3fb");
+    d.setAttribute("r", (6.5 + (fill > .01 && fill < .99 ? .8 : 0)).toFixed(2));
+  });
+
+  let label = FRAMES[0][1];
+  for (const [at, l] of FRAMES) if (t >= at) label = l;
+  if (end > 0) label = "12 · Página carregada";
+  $("tl").textContent = "Quadro " + label;
+}
+
+/* ---------------------------------------------------------------- reprodução */
+let raf = 0, slow = 1;
+function play(loadMs) {
+  cancelAnimationFrame(raf);
+  doneAt = Infinity;
+  const start = performance.now();
+  const tick = (now) => {
+    const t = (now - start) / 1000 / slow;
+    if (doneAt === Infinity && t * 1000 >= loadMs) doneAt = Math.max(t, K.logo + .8);
+    render(t);
+    $("t").value = Math.min(t, 6.4);
+    if (t < doneAt + 1) raf = requestAnimationFrame(tick);
+  };
+  raf = requestAnimationFrame(tick);
+}
+$("play").onclick = () => play(4300);
+$("long").onclick = () => play(6400);
+$("slow").onclick = (e) => { slow = slow === 1 ? 4 : 1; e.target.textContent = `Câmera lenta: ${slow === 1 ? "não" : "sim (4×)"}`; };
+$("t").oninput = (e) => { cancelAnimationFrame(raf); const t = Number(e.target.value); doneAt = t > 6.0 ? 6.0 : Infinity; render(t); };
+window.seek = (t, d) => { cancelAnimationFrame(raf); doneAt = d ?? Infinity; render(t); };
+render(.3);
+</script>
+</body>
+</html>

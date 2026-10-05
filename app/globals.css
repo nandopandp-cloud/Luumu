@@ -242,3 +242,39 @@ h1, h2, h3, h4, h5 {
 .hm-print-scroll { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--text) 25%, transparent) transparent; }
 .hm-print-scroll::-webkit-scrollbar { width: 8px; }
 .hm-print-scroll::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--text) 22%, transparent); border-radius: 999px; }
+
+/* ---- Animação de entrada (components/intro) ----
+   Acima do app, do topo e da busca (70); abaixo dos toasts (100). */
+.luumu-intro {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  -webkit-backdrop-filter: blur(var(--intro-blur, 8px));
+  backdrop-filter: blur(var(--intro-blur, 8px));
+  /* rede de segurança: se o script não rodar, o véu some sozinho */
+  animation: luumuIntroFailsafe 0s linear 12s forwards;
+}
+.luumu-intro > svg { width: min(100vw, 1280px); height: 100%; max-height: 100vh; }
+.luumu-intro .intro-wm { color: var(--accent); }
+.luumu-intro .intro-msg { fill: var(--text-mut); }
+.luumu-intro .intro-dot-on { fill: var(--accent); }
+.luumu-intro .intro-dot-half { fill: color-mix(in srgb, var(--accent) 60%, transparent); }
+.luumu-intro .intro-dot-off { fill: color-mix(in srgb, var(--accent) 18%, transparent); }
+.luumu-intro-skip {
+  position: absolute;
+  right: 24px;
+  bottom: 22px;
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-mut);
+  background: color-mix(in srgb, var(--bg-elev) 80%, transparent);
+  border: 1px solid var(--border);
+}
+.luumu-intro-skip:hover { color: var(--accent); border-color: var(--accent); }
+@keyframes luumuIntroFailsafe { to { opacity: 0; visibility: hidden; pointer-events: none; } }
+@media (prefers-reduced-motion: reduce) { .luumu-intro { display: none; } }

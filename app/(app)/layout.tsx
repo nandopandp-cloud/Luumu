@@ -10,6 +10,8 @@ import { cookies } from "next/headers";
 import { getWorkspaceUsage } from "@/lib/db/workspace";
 import { listHosts } from "@/lib/db/hosts";
 import { savedPlatform } from "@/lib/platform";
+import { INTRO_COOKIE } from "@/components/intro/cookie";
+import { LuumuIntro } from "@/components/intro/LuumuIntro";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await requireUser();
@@ -30,7 +32,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // mesmo nome de SIDEBAR_COOKIE (AppShell): a página já nasce com a bandeja do jeito salvo
   // sem await: o card de plano da sidebar entra via Suspense quando a contagem chega
   const usage = getWorkspaceUsage(session.workspaceId).catch(() => null);
-  const sidebarCollapsed = (await cookies()).get("luumu_sidebar")?.value === "collapsed";
+  const jar = await cookies();
+  const sidebarCollapsed = jar.get("luumu_sidebar")?.value === "collapsed";
+  // acabou de entrar: a animação já vem no HTML (cobre o primeiro quadro, sem o app piscar antes)
+  const intro = jar.has(INTRO_COOKIE);
 
   return (
     <ToastProvider>
@@ -52,6 +57,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         */}
         {activeProject ? children : <NoProjectAccess />}
       </AppShell>
+      {intro && <LuumuIntro />}
     </ToastProvider>
   );
 }

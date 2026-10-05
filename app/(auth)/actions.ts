@@ -1,7 +1,8 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
+import { INTRO_COOKIE } from "@/components/intro/cookie";
 import { z } from "zod";
 import { findUserByEmail, getUserWorkspace } from "@/lib/db/users";
 import { verifyPassword } from "@/lib/auth/password";
@@ -71,6 +72,8 @@ export async function loginAction(_prev: AuthResult, formData: FormData): Promis
     if (!ws) return { error: "Usuário sem workspace. Contate o suporte." };
 
     await createSession({ userId: user.id, workspaceId: ws.workspaceId, email: user.email, name: user.name });
+    // primeira tela depois do login abre com a animação de entrada (lido pelo layout do app)
+    (await cookies()).set(INTRO_COOKIE, "1", { path: "/", maxAge: 120, sameSite: "lax", secure: process.env.NODE_ENV === "production" });
   } catch (err) {
     if (isDbUnavailable(err)) {
       console.error("[login] banco indisponível", err);
