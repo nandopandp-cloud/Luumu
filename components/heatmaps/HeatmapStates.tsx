@@ -1,5 +1,9 @@
 "use client";
 
+import { BarChart3, Code2, Lightbulb, PlayCircle } from "lucide-react";
+import { Button } from "@/components/ui/Button";
+import { IllustratedState } from "@/components/ui/IllustratedState";
+import { HeatmapEmptyArt } from "@/components/illustrations/EmptyArt";
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "@/components/ui/Link";
@@ -108,38 +112,42 @@ export function EnableHeatmaps({ canManage, allowed }: { canManage: boolean; all
 /** Coleta ligada, nenhuma visita ainda. */
 export function WaitingForData({ canManage, hosts, sdkKey }: { canManage: boolean; hosts: string[]; sdkKey: string | null }) {
   return (
-    <section className="flex flex-col items-center rounded-3xl border border-line bg-bg-elev px-6 py-14 text-center">
-      <Mascot name="Analisando" size={130} float />
-      <h2 className="mt-4 font-display text-2xl font-extrabold tracking-tight">Tudo pronto! Aguardando as primeiras visitas</h2>
-      <p className="mt-2 max-w-lg text-[15px] leading-relaxed text-fg-mut">
-        A coleta está ativa. Assim que alguém navegar pelo seu produto, os mapas aparecem aqui, normalmente em poucos minutos.
-      </p>
-      <ol className="mt-6 grid w-full max-w-2xl gap-3 text-left sm:grid-cols-3">
-        <li className="rounded-2xl border border-line p-4 text-sm">
-          <span className="text-xs font-bold text-accent">1</span>
-          <p className="mt-1 font-semibold">SDK instalado</p>
-          <p className="mt-0.5 text-xs text-fg-mut">
-            {hosts.length ? `Visto em ${hosts.slice(0, 2).join(", ")}${hosts.length > 2 ? "…" : ""}` : sdkKey ? "Ainda não vimos o SDK rodar." : "Crie uma chave em Configurações → SDK & Eventos."}
-          </p>
-        </li>
-        <li className="rounded-2xl border border-line p-4 text-sm">
-          <span className="text-xs font-bold text-accent">2</span>
-          <p className="mt-1 font-semibold">Navegue pelo produto</p>
-          <p className="mt-0.5 text-xs text-fg-mut">Abra seu site em outra aba, clique e role a página.</p>
-        </li>
-        <li className="rounded-2xl border border-line p-4 text-sm">
-          <span className="text-xs font-bold text-accent">3</span>
-          <p className="mt-1 font-semibold">Volte aqui</p>
-          <p className="mt-0.5 text-xs text-fg-mut">A visita é enviada quando a aba é fechada ou trocada.</p>
-        </li>
-      </ol>
-      <div className="mt-6 flex flex-wrap justify-center gap-3">
-        <Link href="/settings/sdk" className="rounded-xl border border-line-strong px-4 py-2.5 text-sm font-semibold text-fg-soft transition hover:border-accent hover:text-accent">
-          Ver instalação do SDK
-        </Link>
-        {canManage && <PauseButton />}
-      </div>
-    </section>
+    <IllustratedState
+      className="pt-2"
+      wideActions
+      art={<HeatmapEmptyArt className="w-full" />}
+      title="Ainda não há dados de heatmap por aqui"
+      description="Conecte seu produto à Luumu e aguarde os primeiros dados de interação para visualizar os mapas de cliques, rolagem e comportamento."
+      actions={
+        <>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <Button href="/settings/sdk" className="w-full justify-center">
+              <Code2 className="size-4" /> Instalar o código da Luumu
+            </Button>
+            <Button href="/help?a=ativar" variant="ghost" className="w-full justify-center">
+              <PlayCircle className="size-4" /> Ver como funciona
+            </Button>
+          </div>
+          {/* o que já sabemos da instalação, e a pausa para quem administra */}
+          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-fg-mut">
+            <span>
+              {hosts.length
+                ? `SDK visto em ${hosts.slice(0, 2).join(", ")}${hosts.length > 2 ? "…" : ""}`
+                : sdkKey
+                  ? "Ainda não vimos o SDK rodar."
+                  : "Crie uma chave em Configurações → SDK & Eventos."}
+            </span>
+            {canManage && <PauseButton compact={false} />}
+          </div>
+        </>
+      }
+      steps={[
+        { icon: Code2, title: "1. Instale o código", text: "Adicione o snippet da Luumu no seu produto em poucos minutos." },
+        { icon: MousePointerClick, title: "2. Colete interações", text: "Comece a registrar cliques, movimentos e rolagem dos seus usuários." },
+        { icon: BarChart3, title: "3. Visualize os mapas", text: "Veja heatmaps de cliques, rolagem e áreas de maior atenção." },
+        { icon: Lightbulb, title: "4. Tome decisões melhores", text: "Descubra oportunidades de melhoria baseadas em dados reais." },
+      ]}
+    />
   );
 }
 

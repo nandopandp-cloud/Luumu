@@ -1,4 +1,3 @@
-import { Route } from "lucide-react";
 import { hostList } from "@/lib/hosts";
 import { savedPlatform } from "@/lib/platform";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -31,7 +30,7 @@ export default async function ToursPage() {
       <ToursTable
         hosts={hosts}
         items={rows.map((t) => ({ ...t, updatedAtLabel: timeAgo(t.updatedAt), updatedAt: undefined }))}
-        newTour={<NewTourButton hosts={hosts} defaultHost={platform} label="Criar primeiro tour" icon={<Route className="size-4" />} />}
+        newTour={<NewTourButton hosts={hosts} defaultHost={platform} label="Criar meu primeiro tour" />}
       />
     </div>
   );

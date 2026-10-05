@@ -1,5 +1,8 @@
 "use client";
 
+import { IllustratedState } from "@/components/ui/IllustratedState";
+import { ToursEmptyArt } from "@/components/illustrations/EmptyArt";
+import { Layers, MousePointer2, PlayCircle, Users } from "lucide-react";
 import { useEffect, useState, useTransition } from "react";
 import { SortTh, useTableSort } from "@/components/ui/SortableHeader";
 import { createPortal } from "react-dom";
@@ -12,7 +15,6 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { HostBadge } from "@/components/ui/HostBadge";
-import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
 import { deleteTourAction, duplicateTourAction, setTourStatusAction } from "@/app/(app)/tours/actions";
 import type { TourListItem } from "@/lib/db/tours";
@@ -71,11 +73,26 @@ export function ToursTable({ items, hosts, newTour }: { items: TourRow[]; hosts:
 
   if (items.length === 0) {
     return (
-      <EmptyState
-        mascot="Apresentando"
-        title="Nenhum tour ainda"
-        description="Abra seu produto, clique no que quer explicar, escreva a mensagem e publique. Seu primeiro tour fica pronto em poucos minutos."
-        action={newTour}
+      <IllustratedState
+        className="pt-2"
+        wideActions
+        art={<ToursEmptyArt className="w-full" />}
+        title="Ainda não há tours por aqui"
+        description="Crie tours guiados para apresentar as principais funcionalidades do seu produto e oferecer uma melhor experiência aos seus usuários."
+        actions={
+          <div className="flex flex-col gap-3 sm:flex-row [&>*]:w-full [&_button]:w-full [&_button]:justify-center">
+            {newTour}
+            <Button href="/help?a=o-que-e-tour" variant="ghost" className="w-full justify-center">
+              <PlayCircle className="size-4" /> Ver exemplos de tours
+            </Button>
+          </div>
+        }
+        steps={[
+          { icon: MousePointer2, title: "1. Escolha os passos", text: "Selecione as telas e crie mensagens simples e objetivas." },
+          { icon: Layers, title: "2. Personalize", text: "Adicione textos, imagens e destaque os elementos mais importantes." },
+          { icon: Users, title: "3. Defina o público", text: "Escolha quem verá o tour (ex.: novos usuários, planos específicos ou segmentos)." },
+          { icon: BarChart3, title: "4. Acompanhe os resultados", text: "Veja quantos usuários concluíram o tour e entenda o impacto na adoção do seu produto." },
+        ]}
       />
     );
   }

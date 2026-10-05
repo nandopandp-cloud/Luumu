@@ -277,3 +277,287 @@ export function ResponsesEmptyArt({ className }: { className?: string }) {
     </svg>
   );
 }
+
+/* ------------------------------------------------------------------ peças comuns das novas cenas */
+function Star4({ x, y, s = 1, color = "#ffc233", cls }: { x: number; y: number; s?: number; color?: string; cls?: string }) {
+  return (
+    <path
+      className={cls}
+      transform={`translate(${x} ${y}) scale(${s})`}
+      d="M0 -16 C 2 -5 5 -2 16 0 C 5 2 2 5 0 16 C -2 5 -5 2 -16 0 C -5 -2 -2 -5 0 -16Z"
+      fill={color}
+    />
+  );
+}
+function Window({ w, h, children }: { w: number; h: number; children?: React.ReactNode }) {
+  return (
+    <>
+      <rect x={-w / 2} y={-h / 2} width={w} height={h} rx="18" style={card} />
+      <rect x={-w / 2 + 16} y={-h / 2 + 14} width={w - 32} height="18" rx="9" style={softer} />
+      {[0, 14, 28].map((dx) => (
+        <circle key={dx} cx={-w / 2 + 28 + dx} cy={-h / 2 + 23} r="4.5" fill="#c4b0f7" />
+      ))}
+      {children}
+    </>
+  );
+}
+const Feet = () => (
+  <>
+    <ellipse cx="-22" cy="60" rx="16" ry="10" fill="#5a22c7" />
+    <ellipse cx="22" cy="60" rx="16" ry="10" fill="#5a22c7" />
+  </>
+);
+
+/* ------------------------------------------------------------------ Dashboard vazio */
+export function DashboardEmptyArt({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 760 320" className={className} role="img" aria-label="A ameixa da Luumu pensativa diante de um painel ainda sem dados">
+      <defs>
+        <Shadow id="de-sh" />
+      </defs>
+      <path d="M90 290 C 80 220 150 180 220 200 C 250 120 380 100 430 160 C 480 110 600 120 630 190 C 690 190 720 250 700 290Z" style={softer} />
+      <ellipse cx="380" cy="294" rx="260" ry="13" style={soft} />
+      <path d="M160 190 C 130 120 220 80 260 110" fill="none" strokeWidth="2.2" strokeDasharray="5 7" strokeLinecap="round" style={dash} />
+      <path d="M690 150 C 720 210 690 250 640 250" fill="none" strokeWidth="2.2" strokeDasharray="5 7" strokeLinecap="round" style={dash} />
+      {/* painel principal (apagado) */}
+      <g transform="translate(330 150) rotate(-6)" filter="url(#de-sh)" opacity=".92">
+        <Window w={230} h={170}>
+          <rect x="-70" y="10" width="26" height="44" rx="5" fill="#e4dafd" />
+          <rect x="-34" y="-14" width="26" height="68" rx="5" fill="#d6c8fb" />
+          <rect x="2" y="-36" width="26" height="90" rx="5" fill="#cbb9f9" />
+          <rect x="-90" y="60" width="160" height="8" rx="4" style={line} />
+        </Window>
+      </g>
+      <g transform="translate(176 200) rotate(-8)" filter="url(#de-sh)" className="ill-bob-a">
+        <rect x="-44" y="-42" width="88" height="84" rx="18" style={card} />
+        <circle r="24" fill="#ddd2fb" />
+        <path d="M0 0 L 0 -24 A24 24 0 0 1 23 7Z" fill="#a78bfa" />
+      </g>
+      <g transform="translate(600 140) rotate(6)" filter="url(#de-sh)" className="ill-bob-b">
+        <rect x="-70" y="-50" width="140" height="100" rx="16" style={card} />
+        <rect x="-56" y="-36" width="112" height="72" rx="8" style={softer} />
+        <path d="M-46 22 L -22 0 L -4 12 L 22 -16 L 44 -26" fill="none" stroke="#a78bfa" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M34 -30 L 46 -27 L 42 -15" fill="none" stroke="#a78bfa" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+      </g>
+      <SoftLeaf x={440} y={286} r={-20} s={0.8} />
+      <SoftLeaf x={460} y={286} r={14} s={0.7} />
+      <SoftLeaf x={640} y={286} r={18} s={0.9} />
+      <Sparks x={414} y={96} color="#ffc233" r={-50} />
+      {/* balão de dúvida */}
+      <g transform="translate(470 54)" className="ill-bob-c">
+        <circle r="30" style={card} filter="url(#de-sh)" />
+        <path d="M-4 22 L 2 34 L 8 22Z" style={card} />
+        <text x="0" y="12" textAnchor="middle" fontSize="34" fontWeight="800" fill="#8b5cf6" fontFamily="ui-sans-serif, system-ui, sans-serif">?</text>
+      </g>
+      <Plum x={500} y={196} scale={1.3} mood="worried" look={-0.6} idPrefix="de">
+        <ellipse cx="-56" cy="26" rx="15" ry="16" fill="#6127cf" />
+        <ellipse cx="-50" cy="20" rx="6" ry="4.5" fill="#8a57f2" />
+        <ellipse cx="58" cy="34" rx="14" ry="17" fill="#7238e6" transform="rotate(-20 58 34)" />
+      </Plum>
+    </svg>
+  );
+}
+
+/* ------------------------------------------------------------------ Tour guiado vazio */
+export function ToursEmptyArt({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 760 320" className={className} role="img" aria-label="A ameixa da Luumu guiando um caminho em três etapas">
+      <defs>
+        <Shadow id="te-sh" />
+      </defs>
+      <path d="M60 300 C 40 220 120 190 180 210 C 200 130 320 110 360 170 C 420 90 560 90 600 160 C 680 150 730 230 710 300Z" style={softer} />
+      <ellipse cx="400" cy="296" rx="270" ry="13" style={soft} />
+      {/* caminho tracejado do tour */}
+      <path d="M210 176 C 260 210 270 260 320 250 C 380 240 380 200 420 196 C 470 192 470 150 520 130 C 570 110 600 140 620 180 C 640 220 670 220 690 210" fill="none" strokeWidth="2.4" strokeDasharray="6 8" strokeLinecap="round" style={dash} />
+      {/* etapa 1: tela */}
+      <g transform="translate(196 186) rotate(-6)" filter="url(#te-sh)" className="ill-bob-a">
+        <Window w={170} h={120}>
+          <rect x="-62" y="2" width="44" height="40" rx="8" style={softer} />
+          <rect x="-8" y="6" width="70" height="9" rx="4.5" style={line} />
+          <rect x="-8" y="24" width="50" height="9" rx="4.5" style={line} />
+        </Window>
+      </g>
+      {/* etapa 2: mensagem */}
+      <g transform="translate(606 112) rotate(5)" filter="url(#te-sh)" className="ill-bob-b">
+        <rect x="-70" y="-38" width="140" height="76" rx="16" style={card} />
+        <path d="M-40 36 L -48 54 L -22 37Z" style={card} />
+        <rect x="-48" y="-14" width="96" height="10" rx="5" style={line} />
+        <rect x="-48" y="4" width="66" height="10" rx="5" style={line} />
+      </g>
+      {/* etapa 3: concluído */}
+      <g transform="translate(650 232) rotate(6)" filter="url(#te-sh)" className="ill-bob-c">
+        <rect x="-62" y="-36" width="124" height="72" rx="16" style={card} />
+        <circle cx="20" cy="2" r="20" fill="#ede6ff" />
+        <path d="M10 2 L 17 9 L 30 -5" fill="none" stroke="#7c3aed" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+      </g>
+      {[
+        [138, 142, "1"],
+        [548, 80, "2"],
+        [598, 206, "3"],
+      ].map(([x, y, n]) => (
+        <g key={n as string} transform={`translate(${x} ${y})`}>
+          <circle r="17" fill="#a78bfa" stroke="var(--bg-elev)" strokeWidth="4" />
+          <text y="6" textAnchor="middle" fontSize="17" fontWeight="800" fill="#fff" fontFamily="ui-sans-serif, system-ui, sans-serif">
+            {n}
+          </text>
+        </g>
+      ))}
+      <Star4 x={120} y={230} s={1.2} cls="ill-sparks" />
+      <Star4 x={690} y={92} s={1.3} cls="ill-sparks" />
+      <Star4 x={712} y={112} s={0.6} />
+      <Sparks x={430} y={70} color="#a78bfa" r={30} />
+      {/* ameixa correndo com a bandeira */}
+      <Plum x={372} y={178} scale={1.28} mood="curious" look={1} idPrefix="te">
+        <ellipse cx="-30" cy="62" rx="17" ry="10" fill="#5a22c7" transform="rotate(-20 -30 62)" />
+        <ellipse cx="30" cy="58" rx="17" ry="10" fill="#5a22c7" transform="rotate(25 30 58)" />
+        <ellipse cx="-62" cy="16" rx="15" ry="17" fill="#6127cf" transform="rotate(40 -62 16)" />
+        <path d="M70 46 L 70 -88" stroke="#c4b0f7" strokeWidth="5" strokeLinecap="round" />
+        <path d="M70 -88 L 128 -80 L 120 -58 L 128 -36 L 70 -40Z" style={card} />
+        <path d="M86 -60 L 112 -72 L 100 -46 L 98 -58Z" fill="#7c3aed" />
+        <ellipse cx="70" cy="20" rx="13" ry="15" fill="#7238e6" />
+      </Plum>
+    </svg>
+  );
+}
+
+/* ------------------------------------------------------------------ Heatmap vazio */
+export function HeatmapEmptyArt({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 760 320" className={className} role="img" aria-label="A ameixa da Luumu investigando um mapa de calor com uma lupa">
+      <defs>
+        <Shadow id="he-sh" />
+        <radialGradient id="he-hot">
+          <stop offset="0" stopColor="#ff3d3d" />
+          <stop offset=".3" stopColor="#ffb02e" />
+          <stop offset=".6" stopColor="#ffe36a" stopOpacity=".8" />
+          <stop offset=".85" stopColor="#7fb6ff" stopOpacity=".45" />
+          <stop offset="1" stopColor="#7fb6ff" stopOpacity="0" />
+        </radialGradient>
+        <radialGradient id="he-cool">
+          <stop offset="0" stopColor="#8ab8ff" stopOpacity=".7" />
+          <stop offset="1" stopColor="#8ab8ff" stopOpacity="0" />
+        </radialGradient>
+      </defs>
+      <path d="M120 290 C 100 220 170 190 230 210 C 260 120 420 90 470 150 C 540 100 680 130 690 200 C 730 210 740 270 710 290Z" style={softer} />
+      <ellipse cx="420" cy="294" rx="270" ry="13" style={soft} />
+      <path d="M180 150 C 150 200 180 250 230 240" fill="none" strokeWidth="2.2" strokeDasharray="5 7" strokeLinecap="round" style={dash} />
+      <circle cx="232" cy="180" r="12" fill="none" strokeWidth="2.2" strokeDasharray="4 5" style={dash} />
+      {/* página com o mapa de calor */}
+      <g transform="translate(500 150) rotate(3)" filter="url(#he-sh)">
+        <Window w={300} h={210}>
+          <rect x="-130" y="-48" width="80" height="20" rx="10" style={softer} />
+          <ellipse cx="40" cy="-10" rx="80" ry="54" fill="url(#he-cool)" />
+          <ellipse cx="44" cy="-14" rx="56" ry="40" fill="url(#he-hot)" className="ill-sparks" />
+          <ellipse cx="-56" cy="32" rx="46" ry="30" fill="url(#he-hot)" opacity=".8" />
+          <ellipse cx="-10" cy="10" rx="40" ry="26" fill="url(#he-cool)" />
+          <rect x="30" y="66" width="62" height="18" rx="9" style={softer} />
+        </Window>
+        <g transform="translate(60 4) rotate(-14)">
+          <path d="M0 0 L 0 30 L 8 22 L 15 36 L 21 33 L 14 20 L 25 20Z" fill="#7c3aed" stroke="#fff" strokeWidth="2.5" strokeLinejoin="round" />
+        </g>
+      </g>
+      <g transform="translate(208 128) rotate(-12)" filter="url(#he-sh)" className="ill-bob-a">
+        <rect x="-46" y="-42" width="92" height="84" rx="18" style={card} />
+        <Bars x={0} y={4} />
+      </g>
+      <g transform="translate(700 104) rotate(10)" filter="url(#he-sh)" className="ill-bob-b">
+        <rect x="-40" y="-40" width="80" height="80" rx="18" style={card} />
+        <path d="M-4 -8 L -4 20 L 3 13 L 9 26 L 15 23 L 9 10 L 19 10Z" fill="#8b5cf6" />
+        <g stroke="#a78bfa" strokeWidth="3" strokeLinecap="round">
+          <line x1="-16" y1="-16" x2="-22" y2="-22" />
+          <line x1="-4" y1="-20" x2="-4" y2="-28" />
+          <line x1="-20" y1="-4" x2="-28" y2="-4" />
+        </g>
+      </g>
+      <SoftLeaf x={366} y={280} r={-16} s={0.7} />
+      <Leaf x={690} y={262} r={-70} s={0.9} className="ill-drift" />
+      <Sparks x={340} y={60} color="#a78bfa" r={20} />
+      {/* ameixa com a lupa */}
+      <Plum x={310} y={190} scale={1.28} mood="curious" look={0.8} idPrefix="he">
+        <Feet />
+        <ellipse cx="-58" cy="22" rx="15" ry="18" fill="#6127cf" transform="rotate(25 -58 22)" />
+        <path d="M70 34 L 100 -6" stroke="#8b5cf6" strokeWidth="10" strokeLinecap="round" />
+        <circle cx="114" cy="-30" r="34" fill="color-mix(in srgb, #ede6ff 55%, transparent)" stroke="#8b5cf6" strokeWidth="9" />
+        <path d="M96 -46 A24 24 0 0 1 120 -54" fill="none" stroke="#fff" strokeWidth="5" strokeLinecap="round" />
+        <ellipse cx="68" cy="34" rx="14" ry="16" fill="#7238e6" />
+      </Plum>
+    </svg>
+  );
+}
+
+/* ------------------------------------------------------------------ Insights IA vazio */
+export function InsightsEmptyArt({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 760 320" className={className} role="img" aria-label="A ameixa da Luumu com uma ideia, cercada de dados a analisar">
+      <defs>
+        <Shadow id="ie-sh" />
+      </defs>
+      <path d="M80 300 C 60 220 140 180 200 200 C 220 120 360 90 400 150 C 460 80 600 100 640 170 C 700 170 740 240 710 300Z" style={softer} />
+      <ellipse cx="400" cy="296" rx="270" ry="13" style={soft} />
+      <circle cx="160" cy="130" r="26" fill="none" strokeWidth="2.2" strokeDasharray="4 6" style={dash} />
+      <circle cx="680" cy="196" r="26" fill="none" strokeWidth="2.2" strokeDasharray="4 6" style={dash} />
+      {/* conversa */}
+      <g transform="translate(238 92) rotate(-2)" filter="url(#ie-sh)" className="ill-bob-a">
+        <rect x="-86" y="-38" width="172" height="76" rx="16" style={card} />
+        <circle cx="-48" cy="-2" r="17" fill="#c4b0f7" />
+        <rect x="-20" y="-16" width="86" height="10" rx="5" style={line} />
+        <rect x="-20" y="2" width="70" height="10" rx="5" style={line} />
+        <rect x="-20" y="20" width="50" height="10" rx="5" style={softer} />
+      </g>
+      {/* gráfico */}
+      <g transform="translate(206 210) rotate(-10)" filter="url(#ie-sh)" className="ill-bob-c">
+        <rect x="-92" y="-42" width="184" height="84" rx="16" style={card} />
+        <Bars x={-46} y={6} s={0.95} />
+        <rect x="-6" y="-18" width="76" height="10" rx="5" style={line} />
+        <rect x="-6" y="0" width="60" height="10" rx="5" style={line} />
+        <rect x="-6" y="18" width="40" height="10" rx="5" style={softer} />
+      </g>
+      {/* relatório da IA */}
+      <g transform="translate(590 160) rotate(8)" filter="url(#ie-sh)" className="ill-bob-b">
+        <Window w={210} h={220}>
+          {[
+            [-40, "#ffc233"],
+            [12, "#8b5cf6"],
+            [64, "#a78bfa"],
+          ].map(([dy, c], i) => (
+            <g key={i}>
+              <rect x="-80" y={(dy as number) - 14} width="30" height="30" rx="8" style={softer} />
+              <circle cx="-65" cy={(dy as number) + 1} r="7" fill={c as string} />
+              <rect x="-38" y={(dy as number) - 8} width="104" height="9" rx="4.5" style={line} />
+              <rect x="-38" y={(dy as number) + 6} width="70" height="9" rx="4.5" style={softer} />
+            </g>
+          ))}
+        </Window>
+      </g>
+      <Star4 x={470} y={58} s={1.1} color="#8b5cf6" cls="ill-sparks" />
+      <Star4 x={652} y={40} s={1.2} color="#8b5cf6" />
+      <Star4 x={712} y={262} s={1} color="#8b5cf6" cls="ill-sparks" />
+      <Star4 x={92} y={180} s={0.8} color="#c4b0f7" />
+      <Leaf x={470} y={276} r={-70} s={0.85} className="ill-drift" />
+      <Leaf x={140} y={288} r={-40} s={0.75} />
+      {/* ameixa com a ideia */}
+      <Plum x={410} y={196} scale={1.22} mood="curious" look={0.4} idPrefix="ie">
+        <Feet />
+        <ellipse cx="-60" cy="20" rx="15" ry="18" fill="#6127cf" transform="rotate(25 -60 20)" />
+        <ellipse cx="60" cy="20" rx="15" ry="18" fill="#7238e6" transform="rotate(-25 60 20)" />
+        {/* lâmpada acima da cabeça */}
+        <g transform="translate(-30 -112) scale(.85)" className="ill-sparks">
+          <g stroke="#ffc233" strokeWidth="4.5" strokeLinecap="round">
+            <line x1="-34" y1="-6" x2="-46" y2="-12" />
+            <line x1="-24" y1="-30" x2="-32" y2="-42" />
+            <line x1="0" y1="-40" x2="0" y2="-54" />
+            <line x1="24" y1="-30" x2="32" y2="-42" />
+            <line x1="34" y1="-6" x2="46" y2="-12" />
+          </g>
+        </g>
+        <g transform="translate(-30 -112) scale(.85)">
+          <circle r="24" fill="#8b5cf6" />
+          <circle cx="-8" cy="-8" r="7" fill="#b89bfa" />
+          <path d="M-8 4 L -4 -4 L 0 4 L 4 -4 L 8 4 M0 4 L 0 18" fill="none" stroke="#ede6ff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+          <rect x="-12" y="20" width="24" height="12" rx="4" fill="#c4b0f7" />
+          <rect x="-8" y="33" width="16" height="6" rx="3" fill="#a98bf3" />
+        </g>
+      </Plum>
+    </svg>
+  );
+}

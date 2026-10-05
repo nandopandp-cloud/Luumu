@@ -1,4 +1,8 @@
 import Link from "@/components/ui/Link";
+import { BarChart3 as DashBars, FileText, PlayCircle, Sparkles, Users } from "lucide-react";
+import { Button } from "@/components/ui/Button";
+import { IllustratedState } from "@/components/ui/IllustratedState";
+import { DashboardEmptyArt } from "@/components/illustrations/EmptyArt";
 import { hostList } from "@/lib/hosts";
 import { selectedPlatform } from "@/lib/platform";
 import { CalendarDays, MessagesSquare, Plus, Smile, Timer } from "lucide-react";
@@ -113,6 +117,33 @@ export default async function DashboardPage({
 
       <DataFilters surveys={surveyOptions} defaultSurveyId={defaultSurveyId} defaultPeriod={DASHBOARD_DEFAULT_PERIOD} />
 
+      {counts.all === 0 ? (
+        <IllustratedState
+          className="pt-2"
+          wideActions
+          art={<DashboardEmptyArt className="w-full" />}
+          title="Seu dashboard ainda está sem dados"
+          description="Assim que seus usuários responderem às pesquisas ou interagirem com o seu produto, os principais insights aparecerão aqui."
+          actions={
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <Button href="/surveys/new" className="w-full justify-center">
+                <DashBars className="size-4" /> Criar minha primeira pesquisa
+              </Button>
+              <Button href="/help?a=dashboard" variant="ghost" className="w-full justify-center">
+                <PlayCircle className="size-4" /> Ver como funciona
+              </Button>
+            </div>
+          }
+          steps={[
+            { icon: FileText, title: "1. Crie uma pesquisa", text: "Escolha um modelo ou crie do zero em poucos minutos." },
+            { icon: Users, title: "2. Compartilhe", text: "Envie o link por e-mail, WhatsApp ou integre ao seu produto." },
+            { icon: DashBars, title: "3. Colete respostas", text: "Os dados aparecem automaticamente no seu dashboard." },
+            { icon: Sparkles, title: "4. Descubra insights", text: "Acompanhe métricas como CSAT, NPS, engajamento e muito mais." },
+          ]}
+        />
+      ) : (
+        <>
+
       {/* Métricas */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <InsightCard
@@ -168,6 +199,8 @@ export default async function DashboardPage({
         <RecentSurveys items={recent} />
         <TemplatesTip />
       </div>
+        </>
+      )}
     </div>
   );
 }

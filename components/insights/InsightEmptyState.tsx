@@ -1,22 +1,33 @@
-import Link from "@/components/ui/Link";
-import { ArrowRight } from "lucide-react";
-import { Mascot } from "@/components/ui/Mascot";
+import { BarChart3, Layers, MessageCircle, PlayCircle, Sparkles } from "lucide-react";
+import { Button } from "@/components/ui/Button";
+import { IllustratedState } from "@/components/ui/IllustratedState";
+import { InsightsEmptyArt } from "@/components/illustrations/EmptyArt";
 
 /** Sem respostas suficientes para encontrar padrões. */
 export function InsightEmptyState() {
   return (
-    <div className="flex flex-col items-center rounded-2xl border border-dashed border-line bg-bg-elev/60 px-6 py-16 text-center">
-      <Mascot name="Analisando" size={120} float />
-      <h2 className="mt-5 font-display text-xl font-bold tracking-tight">Precisamos de mais feedbacks para encontrar padrões.</h2>
-      <p className="mt-2 max-w-md text-sm text-fg-mut">
-        Assim que sua pesquisa começar a receber respostas, a Luumu mostrará os principais insights aqui.
-      </p>
-      <Link
-        href="/surveys"
-        className="mt-6 inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold text-white shadow-[var(--shadow-glow)] transition hover:-translate-y-0.5 [background:var(--grad-roxo)]"
-      >
-        Ver pesquisas <ArrowRight className="size-4" />
-      </Link>
-    </div>
+    <IllustratedState
+      className="pt-2"
+      wideActions
+      art={<InsightsEmptyArt className="w-full" />}
+      title="Ainda não há insights por aqui"
+      description="Assim que você começar a receber respostas ou dados de interação, nossa IA vai analisar tudo e trazer insights valiosos para o seu produto."
+      actions={
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <Button href="/surveys" className="w-full justify-center">
+            <Sparkles className="size-4" /> Começar a coletar dados
+          </Button>
+          <Button href="/help?a=insights-ia" variant="ghost" className="w-full justify-center">
+            <PlayCircle className="size-4" /> Ver como funciona
+          </Button>
+        </div>
+      }
+      steps={[
+        { icon: MessageCircle, title: "1. Colete respostas", text: "Receba feedbacks através de pesquisas ou outros canais integrados." },
+        { icon: Layers, title: "2. Acumule dados", text: "Quanto mais dados, insights mais completos e precisos." },
+        { icon: Sparkles, title: "3. Nossa IA analisa", text: "Identificamos padrões, sentimentos, oportunidades e pontos de atenção." },
+        { icon: BarChart3, title: "4. Descubra insights", text: "Veja recomendações práticas para melhorar a experiência dos seus usuários." },
+      ]}
+    />
   );
 }
