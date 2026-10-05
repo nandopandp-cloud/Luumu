@@ -25,19 +25,36 @@ export function Dialog({
   size?: "md" | "lg" | "xl";
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  /*
+    onClose chega como função NOVA a cada render do pai (setOpen(false) inline). Com ele nas
+    dependências do efeito, cada letra digitada num campo do diálogo re-renderizava o pai, o efeito
+    rodava de novo e o foco era roubado ("só vai um caractere por vez"). Fica numa ref: o efeito de
+    foco roda UMA vez, ao abrir.
+  */
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null;
-    const first = ref.current?.querySelector<HTMLElement>("[autofocus], input, textarea, select, button");
-    first?.focus();
+    // prioridade: campo marcado com autoFocus, depois o 1º campo de texto, só então botões
+    // (o botão de fechar vem primeiro no DOM e, sozinho, ficaria com o foco)
+    const root = ref.current;
+    const first =
+      root?.querySelector<HTMLElement>("[autofocus]") ??
+      root?.querySelector<HTMLElement>("input:not([type=hidden]):not([disabled]), textarea:not([disabled]), select:not([disabled])") ??
+      root?.querySelector<HTMLElement>("button");
+    // não rouba o foco de um campo que o próprio conteúdo já focou (autoFocus do React)
+    if (!root?.contains(document.activeElement) || document.activeElement === document.body) first?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") onCloseRef.current();
     };
     document.addEventListener("keydown", onKey);
     return () => {
       document.removeEventListener("keydown", onKey);
       prev?.focus?.();
     };
-  }, [onClose]);
+  }, []);
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
