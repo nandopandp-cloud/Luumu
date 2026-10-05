@@ -67,6 +67,7 @@ export async function ResponsesWorkspace({
   const cards: ResponseCardData[] = feed.items.map((r) => ({
     id: r.id,
     who: r.respondentEmail ?? r.respondent ?? "Anônimo",
+    person: r.person,
     surveyName: r.surveyName,
     showSurvey: !scope.surveyId,
     host: r.host,

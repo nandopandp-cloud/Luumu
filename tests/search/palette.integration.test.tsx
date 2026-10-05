@@ -25,7 +25,7 @@ const RESULTS = {
   project: { id: "p1", name: "Geniex" },
   surveys: [{ id: "s1", name: "Pesquisa de Satisfação", type: "CSAT", status: "ativa", responses: 42, updatedAt: new Date().toISOString() }],
   responses: [
-    { id: "r1", surveyId: "s1", surveyName: "Pesquisa de Satisfação", comment: "A satisfação caiu porque o app está lento", respondent: "ana@x.com", score: 2, sentiment: "negativo", createdAt: new Date().toISOString() },
+    { id: "r1", surveyId: "s1", surveyName: "Pesquisa de Satisfação", comment: "A satisfação caiu porque o app está lento", respondent: "ana@x.com", person: { userId: null, email: "ana@x.com", name: "Ana Souza", avatar: null }, score: 2, sentiment: "negativo", createdAt: new Date().toISOString() },
   ],
   tours: [],
 };

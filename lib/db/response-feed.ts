@@ -1,3 +1,4 @@
+import { resolvePeople, type Person } from "./people";
 import "server-only";
 import { and, asc, desc, eq, sql, type SQL } from "drizzle-orm";
 import { db } from "./client";
@@ -80,6 +81,8 @@ export interface FeedItem {
   score: number | null;
   comment: string;
   createdAt: Date;
+  /** nome, e-mail e foto (de Analytics › Usuários) */
+  person: Person;
 }
 
 /** Página do feed: `limit` itens + se há mais. */
@@ -108,12 +111,15 @@ export async function getResponseFeed(
     .orderBy(...sortOrder(opts.sort))
     .limit(opts.limit + 1);
 
+  const page = rows.slice(0, opts.limit);
+  const personOf = await resolvePeople(scope.projectId, page);
   return {
     hasMore: rows.length > opts.limit,
-    items: rows.slice(0, opts.limit).map((r) => ({
+    items: page.map((r) => ({
       ...r,
       comment: r.comment ?? "",
       sentiment: r.sentiment as FeedItem["sentiment"],
+      person: personOf(r),
     })),
   };
 }

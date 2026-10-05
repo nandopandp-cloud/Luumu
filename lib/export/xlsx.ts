@@ -19,7 +19,8 @@ export async function toXlsx(rows: ExportRow[], title: string): Promise<Buffer> 
   ws.columns = [
     { header: "ID", key: "id", width: 16 },
     { header: "Pesquisa", key: "surveyName", width: 28 },
-    { header: "Respondente", key: "respondent", width: 22 },
+    { header: "Nome", key: "name", width: 24 },
+    { header: "Respondente", key: "respondent", width: 30 },
     { header: "Canal", key: "channel", width: 12 },
     { header: "Sentimento", key: "sentiment", width: 14 },
     { header: "Nota", key: "score", width: 8 },
@@ -40,6 +41,7 @@ export async function toXlsx(rows: ExportRow[], title: string): Promise<Buffer> 
     const row = ws.addRow({
       id: r.id,
       surveyName: r.surveyName,
+      name: r.name,
       respondent: r.respondent,
       channel: r.channel,
       sentiment: r.sentiment,

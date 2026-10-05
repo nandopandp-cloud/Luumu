@@ -1,3 +1,4 @@
+import { resolvePeople } from "./people";
 import "server-only";
 import { hostList } from "@/lib/hosts";
 import { and, asc, desc, eq, count, avg, sql, inArray, gte, lte, or, isNull, type SQL } from "drizzle-orm";
@@ -269,6 +270,8 @@ export async function getScoreDistribution(scope: Scope) {
 export interface ExportRow {
   id: string;
   surveyName: string;
+  /** nome da pessoa (de Analytics › Usuários); "" quando não se sabe */
+  name: string;
   respondent: string;
   channel: string;
   sentiment: string;
@@ -299,10 +302,11 @@ export async function listResponsesForExport(scope: Scope): Promise<ExportRow[]>
     .where(scopeWhere(scope))
     .orderBy(desc(responses.createdAt));
 
-  const commentByResponse = await commentsByResponseId(rows.map((r) => r.id));
+  const [commentByResponse, personOf] = await Promise.all([commentsByResponseId(rows.map((r) => r.id)), resolvePeople(scope.projectId, rows)]);
   return rows.map((r) => ({
     id: r.id,
     surveyName: r.surveyName,
+    name: personOf(r).name ?? "",
     respondent: r.respondentEmail ?? r.respondent ?? "Anônimo",
     channel: r.channel,
     sentiment: r.sentiment ?? "—",

@@ -32,6 +32,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { UserIdentity, displayName } from "@/components/ui/UserIdentity";
 import { Mascot } from "@/components/ui/Mascot";
 import { toggleTheme } from "@/components/shell/ThemeToggle";
 import { getResponseDetailAction } from "@/app/(app)/responses/actions";
@@ -246,11 +247,11 @@ function ResponsePreview({ hit, q }: { hit: ResponseHit; q: string }) {
       <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-xs">
         <dt className="text-fg-mut">Pesquisa</dt>
         <dd className="truncate font-semibold text-fg-soft">{hit.surveyName}</dd>
-        {hit.respondent && (
+        {(hit.respondent || hit.person.name) && (
           <>
-            <dt className="text-fg-mut">Quem</dt>
-            <dd className="truncate font-semibold text-fg-soft">
-              <Hl text={hit.respondent} q={q} />
+            <dt className="self-center text-fg-mut">Quem</dt>
+            <dd className="min-w-0">
+              <UserIdentity u={hit.person} size={28} />
             </dd>
           </>
         )}
@@ -506,7 +507,7 @@ export function CommandPalette({ projectName, onClose }: { projectName: string |
     }
     if (d && (tab === "all" || tab === "responses")) {
       for (const r of d.responses) {
-        const title = r.comment ? snippet(r.comment, term, 60) : (r.respondent ?? "Resposta sem comentário");
+        const title = r.comment ? snippet(r.comment, term, 60) : r.respondent || r.person.name ? displayName(r.person) : "Resposta sem comentário";
         const sub = `${r.surveyName} · ${relativeTime(r.createdAt)}`;
         const sc = scoreLabel(r.score);
         out.push({

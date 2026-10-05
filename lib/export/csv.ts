@@ -1,7 +1,7 @@
 import "server-only";
 import type { ExportRow } from "@/lib/db/responses";
 
-const HEADERS = ["ID", "Pesquisa", "Respondente", "Canal", "Sentimento", "Nota", "Comentário", "Data"];
+const HEADERS = ["ID", "Pesquisa", "Nome", "Respondente", "Canal", "Sentimento", "Nota", "Comentário", "Data"];
 
 function cell(v: string | number | null): string {
   const s = v == null ? "" : String(v);
@@ -18,6 +18,7 @@ export function toCsv(rows: ExportRow[]): Buffer {
       [
         cell(r.id),
         cell(r.surveyName),
+        cell(r.name),
         cell(r.respondent),
         cell(r.channel),
         cell(r.sentiment),

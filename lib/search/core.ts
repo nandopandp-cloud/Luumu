@@ -158,6 +158,8 @@ export interface ResponseHit {
   surveyName: string;
   comment: string | null;
   respondent: string | null;
+  /** nome, e-mail e foto (de Analytics › Usuários) */
+  person: { userId: string | null; email: string | null; name: string | null; avatar: string | null };
   score: number | null;
   sentiment: "positivo" | "neutro" | "negativo" | null;
   createdAt: string;

@@ -14,7 +14,7 @@ import type { AnalyticsData } from "../../lib/db/analytics";
 const pages = (buf: Buffer) => (buf.toString("latin1").match(/\/Type \/Page\b/g) ?? []).length;
 
 test("PDF de respostas: o rodapé não cria páginas em branco", async () => {
-  const row = (i: number) => ({ id: `r${i}`, surveyName: "CSAT", respondent: `a${i}@x.com`, channel: "web", sentiment: "positivo", score: 5, comment: "Gostei", createdAt: new Date() });
+  const row = (i: number) => ({ id: `r${i}`, surveyName: "CSAT", name: "", respondent: `a${i}@x.com`, channel: "web", sentiment: "positivo", score: 5, comment: "Gostei", createdAt: new Date() });
   // antes da correção: 90 linhas (3 páginas de conteúdo) viravam 6 páginas
   const buf = await toPdf(Array.from({ length: 90 }, (_, i) => row(i)) as never, { title: "T", summary: { total: 90, avgScore: 4, positivePct: 80 } });
   assert.equal(pages(buf), 3);

@@ -1,3 +1,4 @@
+import { resolvePeople } from "./people";
 import "server-only";
 import { and, count, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { db } from "./client";
@@ -75,12 +76,14 @@ export async function searchProject(projectId: string, q: string) {
 
   const surveyHits: SurveyHit[] = surveyRows.map((s) => ({ ...s, responses: nBy.get(s.id) ?? 0, updatedAt: s.updatedAt.toISOString() }));
   const tourHits: TourHit[] = tourRows.map((t) => ({ ...t, updatedAt: t.updatedAt.toISOString() }));
+  const personOf = await resolvePeople(projectId, responseRows);
   const responseHits: ResponseHit[] = responseRows.map((r) => ({
     id: r.id,
     surveyId: r.surveyId,
     surveyName: r.surveyName,
     comment: r.matched ?? r.comment,
     respondent: r.respondentEmail ?? r.respondent,
+    person: personOf(r),
     score: r.score,
     sentiment: r.sentiment === "positivo" || r.sentiment === "neutro" || r.sentiment === "negativo" ? r.sentiment : null,
     createdAt: r.createdAt.toISOString(),

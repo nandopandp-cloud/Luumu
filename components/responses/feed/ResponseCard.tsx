@@ -7,11 +7,13 @@ import { Dialog } from "@/components/ui/Dialog";
 import { HostBadge } from "@/components/ui/HostBadge";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils";
+import { UserIdentity, type PersonLike } from "@/components/ui/UserIdentity";
 import { getResponseDetailAction } from "@/app/(app)/responses/actions";
 
 export interface ResponseCardData {
   id: string;
-  who: string; // e-mail, id ou "Anônimo"
+  who: string; // e-mail, id ou "Anônimo" (o que se copia)
+  person: PersonLike; // nome, e-mail e foto, como em Analytics › Usuários
   surveyName: string;
   showSurvey: boolean;
   host: string | null;
@@ -22,13 +24,6 @@ export interface ResponseCardData {
   score: number | null;
   comment: string;
   tags: string[];
-}
-
-const AVATAR = ["#8B5CF6", "#3B82F6", "#A855F7", "#22C55E", "#F59E0B", "#EC4899", "#14B8A6", "#EF4444"];
-function avatarColor(s: string) {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
-  return AVATAR[Math.abs(h) % AVATAR.length];
 }
 
 const DEVICE_ICON: Record<DeviceKind, React.ReactNode> = {
@@ -87,25 +82,16 @@ export function ResponseCard({ r, hosts }: { r: ResponseCardData; hosts: string[
     <article className="group rounded-2xl border border-line bg-bg-elev p-4 shadow-[var(--shadow-sm)] transition hover:border-line-strong sm:p-5">
       <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,240px)_minmax(0,1fr)_auto]">
         {/* quem */}
-        <div className="flex min-w-0 items-start gap-3">
-          <span
-            className="grid size-10 shrink-0 place-items-center rounded-full text-sm font-bold uppercase text-white"
-            style={{ background: avatarColor(r.who) }}
-            aria-hidden
-          >
-            {r.who.charAt(0)}
-          </span>
-          <div className="min-w-0">
-            <div className="truncate text-sm font-bold" title={r.who}>
-              {r.who}
-            </div>
+        <UserIdentity
+          u={r.person}
+          extra={
             <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-fg-mut">
               {r.host ? <HostBadge host={r.host} all={hosts} /> : null}
               {r.showSurvey && <span className="max-w-[180px] truncate" title={r.surveyName}>{r.surveyName}</span>}
               <span>· {r.when}</span>
             </div>
-          </div>
-        </div>
+          }
+        />
 
         {/* o que disse */}
         <div className="min-w-0">
@@ -187,9 +173,11 @@ export function ResponseCard({ r, hosts }: { r: ResponseCardData; hosts: string[
       {detail && detail !== "loading" && (
         <Dialog title="Detalhes da resposta" description={`${detail.surveyName} · ${new Date(detail.createdAt).toLocaleString("pt-BR")}`} onClose={() => setDetail(null)} size="lg">
           <dl className="mb-5 grid grid-cols-2 gap-3 rounded-xl bg-bg-sunken p-4 text-sm sm:grid-cols-4">
-            <div>
+            <div className="col-span-2 min-w-0">
               <dt className="text-xs text-fg-mut">Pessoa</dt>
-              <dd className="truncate font-semibold" title={r.who}>{r.who}</dd>
+              <dd className="mt-1">
+                <UserIdentity u={r.person} size={28} />
+              </dd>
             </div>
             <div>
               <dt className="text-xs text-fg-mut">Plataforma</dt>

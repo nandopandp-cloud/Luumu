@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   pgTable,
   text,
@@ -673,6 +674,9 @@ export const analyticsUsers = pgTable(
   (t) => [
     uniqueIndex("analytics_users_pk").on(t.projectId, t.anonId),
     index("analytics_users_first_idx").on(t.projectId, t.firstSeenAt),
+    // busca por ID/e-mail (lib/db/people.ts) — migração 0030
+    index("analytics_users_user_id_idx").on(t.projectId, t.userId).where(sql`${t.userId} is not null`),
+    index("analytics_users_email_idx").on(t.projectId, sql`lower(${t.userEmail})`).where(sql`${t.userEmail} is not null`),
   ]
 );
 

@@ -12,7 +12,6 @@ import {
   Clock,
   Copy,
   FileText,
-  Fingerprint,
   Layers,
   LogIn,
   Monitor,
@@ -24,11 +23,11 @@ import {
   UserCheck,
   UserPlus,
   Users,
-  UserRound,
   Zap,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { UserAvatar, displayName, secondaryLine } from "@/components/ui/UserIdentity";
 import { Drawer } from "@/components/ui/Drawer";
 import { Select } from "@/components/ui/Select";
 import { useToast } from "@/components/ui/Toast";
@@ -64,71 +63,8 @@ const fmtDate = (iso: string) => new Date(iso).toLocaleDateString("pt-BR", { day
 const fmtDateTime = (iso: string) =>
   new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" }).replace(".", "");
 
-/** Nome para exibir: nome → e-mail → ID do produto → visitante anônimo. */
-export function displayName(u: { name: string | null; email: string | null; userId: string | null; anonId: string }) {
-  if (u.name) return u.name;
-  if (u.email) return u.email;
-  if (u.userId) return `Usuário ${u.userId}`;
-  return `Visitante ${u.anonId.slice(-6).toUpperCase()}`;
-}
-
-/** Cor estável por usuário (avatar). */
-function hue(id: string) {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) % 360;
-  return h;
-}
-
 // colunas secundárias: somem quando a área é estreita (o perfil mostra tudo)
 const WIDE = "hidden @[62rem]:table-cell";
-
-function Avatar({ u, size = 36 }: { u: { name: string | null; email: string | null; avatar?: string | null; userId: string | null; anonId: string }; size?: number }) {
-  // foto vinda da plataforma do cliente (Luumu.identify({ avatar })): carregada direto de lá,
-  // sem passar pela Luumu; se não abrir (expirada, privada), voltam as iniciais
-  const [broken, setBroken] = useState<string | null>(null);
-  const identified = !!(u.userId || u.email || u.name);
-  if (u.avatar && broken !== u.avatar)
-    return (
-      // eslint-disable-next-line @next/next/no-img-element -- imagem externa e pequena: o otimizador da Vercel só custaria
-      <img
-        src={u.avatar}
-        alt=""
-        width={size}
-        height={size}
-        loading="lazy"
-        decoding="async"
-        referrerPolicy="no-referrer"
-        onError={() => setBroken(u.avatar ?? null)}
-        className="shrink-0 rounded-full bg-bg-sunken object-cover"
-        style={{ width: size, height: size }}
-      />
-    );
-  const text = (u.name || u.email || "").trim();
-  const initials = text
-    ? text
-        .replace(/@.*/, "")
-        .split(/[\s._-]+/)
-        .filter(Boolean)
-        .slice(0, 2)
-        .map((w) => w[0]!.toUpperCase())
-        .join("")
-    : "";
-  return (
-    <span
-      className="grid shrink-0 place-items-center rounded-full font-display font-bold text-white"
-      style={{
-        width: size,
-        height: size,
-        fontSize: size * 0.38,
-        background: identified ? `linear-gradient(135deg, hsl(${hue(u.anonId)} 70% 55%), hsl(${(hue(u.anonId) + 40) % 360} 70% 45%))` : "var(--bg-sunken)",
-        color: identified ? "#fff" : "var(--text-mut)",
-      }}
-      aria-hidden
-    >
-      {identified ? initials || <UserRound className="size-[45%]" /> : <Fingerprint className="size-[48%]" />}
-    </span>
-  );
-}
 
 function ChannelTag({ ch }: { ch: Channel }) {
   return (
@@ -297,14 +233,14 @@ export function UsersView({ data }: { data: UsersData }) {
                     >
                       <td className="border-b border-line/60 py-2.5 pr-3">
                         <span className="flex items-center gap-3">
-                          <Avatar u={u} />
+                          <UserAvatar u={u} />
                           <span className="min-w-0">
                             <span className="flex items-center gap-1.5">
                               <span className="max-w-[240px] truncate text-sm font-semibold text-fg group-hover:text-accent">{displayName(u)}</span>
                               {!identified && <span className="rounded-full bg-bg-sunken px-1.5 py-px text-[10px] font-semibold text-fg-mut">anônimo</span>}
                             </span>
                             <span className="block max-w-[260px] truncate text-xs text-fg-mut">
-                              {u.name && u.email ? u.email : u.userId ? `ID ${u.userId}` : `ID anônimo ${u.anonId.slice(0, 10)}…`}
+                              {secondaryLine(u)}
                             </span>
                           </span>
                         </span>
@@ -483,7 +419,7 @@ export function Profile({ p }: { p: AnalyticsUserProfile }) {
     <div>
       {/* quem é */}
       <div className="flex items-start gap-4">
-        <Avatar u={p} size={56} />
+        <UserAvatar u={p} size={56} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="truncate font-display text-xl font-extrabold tracking-tight">{displayName(p)}</h3>

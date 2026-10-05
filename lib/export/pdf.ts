@@ -241,7 +241,7 @@ export function toPdf(rows: ExportRow[], opts: { title: string; subtitle?: strin
     const rowText = (r: ExportRow) => ({
       createdAt: fmtDate(r.createdAt),
       surveyName: r.surveyName,
-      respondent: r.respondent,
+      respondent: r.name || r.respondent,
       score: r.score != null ? String(r.score) : "—",
       sentiment: r.sentiment,
       comment: r.comment,
