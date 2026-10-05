@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils";
 import { saveIdentityCaptureAction } from "@/app/(app)/settings/actions";
+import { isSafeSelector, stabilizeSelector } from "@/lib/analytics/selectors";
 
 /**
  * Nome e foto dos usuários sem mexer no Luumu.identify do produto: o SDK lê o que a própria
@@ -96,26 +97,20 @@ export function IdentityCaptureCard({
         </div>
         {custom ? (
           <>
-            <label className="flex flex-col gap-1">
-              <span className="text-xs font-semibold text-fg-soft">Nome</span>
-              <Input
-                value={v.nameSelector}
-                disabled={!canManage}
-                onChange={(e) => setV({ ...v, nameSelector: e.target.value })}
-                placeholder="ex.: header [data-user-name]"
-                className="py-1.5 font-mono text-xs"
-              />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-xs font-semibold text-fg-soft">Foto</span>
-              <Input
-                value={v.avatarSelector}
-                disabled={!canManage}
-                onChange={(e) => setV({ ...v, avatarSelector: e.target.value })}
-                placeholder="ex.: header img.avatar"
-                className="py-1.5 font-mono text-xs"
-              />
-            </label>
+            <SelectorField
+              label="Nome"
+              value={v.nameSelector}
+              disabled={!canManage}
+              placeholder="ex.: header [data-user-name]"
+              onChange={(nameSelector) => setV({ ...v, nameSelector })}
+            />
+            <SelectorField
+              label="Foto"
+              value={v.avatarSelector}
+              disabled={!canManage}
+              placeholder="ex.: header img.avatar"
+              onChange={(avatarSelector) => setV({ ...v, avatarSelector })}
+            />
             <p className="text-[11px] leading-relaxed text-fg-mut">
               No seu produto, clique com o botão direito no nome (ou na foto) → Inspecionar → copie o seletor. Campo
               vazio = automático.
@@ -128,7 +123,7 @@ export function IdentityCaptureCard({
           </p>
         )}
         {canManage && (changed || custom !== !!(initial.nameSelector || initial.avatarSelector)) && (
-          <Button size="sm" onClick={() => save()} disabled={busy} className="w-fit">
+          <Button size="sm" onClick={() => save()} disabled={busy || (custom && (!selectorOk(v.nameSelector) || !selectorOk(v.avatarSelector)))} className="w-fit">
             {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />} Salvar
           </Button>
         )}
@@ -193,5 +188,56 @@ function CaptureHealth({ status }: { status: { identified: number; withName: num
         </span>
       </div>
     </div>
+  );
+}
+
+/** Vazio (= automático) ou um seletor CSS válido e seguro. */
+function selectorOk(s: string): boolean {
+  if (!s.trim()) return true;
+  if (!isSafeSelector(s.trim())) return false;
+  try {
+    document.createDocumentFragment().querySelector(s.trim());
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Campo de seletor: ao colar/sair do campo, troca o ID gerado pelo React/Radix (que muda entre
+ * telas e versões do produto) por um atributo estável e avisa; seletor inválido aparece na hora.
+ */
+function SelectorField({ label, value, disabled, placeholder, onChange }: { label: string; value: string; disabled: boolean; placeholder: string; onChange: (v: string) => void }) {
+  const [note, setNote] = useState(false);
+  const fix = (raw: string) => {
+    const r = stabilizeSelector(raw);
+    if (r.changed && r.value) setNote(true);
+    onChange(r.value);
+  };
+  const bad = !selectorOk(value);
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-xs font-semibold text-fg-soft">{label}</span>
+      <Input
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value)}
+        onPaste={(e) => {
+          e.preventDefault();
+          fix(e.clipboardData.getData("text"));
+        }}
+        onBlur={(e) => fix(e.target.value)}
+        placeholder={placeholder}
+        aria-invalid={bad}
+        className={cn("py-1.5 font-mono text-xs", bad && "border-erro focus:border-erro")}
+      />
+      {bad ? (
+        <span className="text-[11px] text-erro">Seletor CSS inválido. Copie de novo pelo Inspecionar → Copiar → Copiar seletor.</span>
+      ) : note ? (
+        <span className="text-[11px] leading-relaxed text-sucesso">
+          Ajustado: o ID automático do React (#radix-…) muda a cada tela, então usamos o botão do menu do usuário no lugar.
+        </span>
+      ) : null}
+    </label>
   );
 }

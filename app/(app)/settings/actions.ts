@@ -228,8 +228,8 @@ export async function removeMemberAction(targetUserId: string): Promise<ActionRe
 
 const captureSchema = z.object({
   enabled: z.boolean(),
-  nameSelector: z.string().max(200),
-  avatarSelector: z.string().max(200),
+  nameSelector: z.string().max(300),
+  avatarSelector: z.string().max(300),
 });
 
 /** Captura de nome e foto da página (toda a workspace). Só owner/admin. */
@@ -241,7 +241,7 @@ export async function saveIdentityCaptureAction(input: unknown): Promise<ActionR
   const nameSelector = cleanSelector(p.data.nameSelector);
   const avatarSelector = cleanSelector(p.data.avatarSelector);
   if ((p.data.nameSelector.trim() && !nameSelector) || (p.data.avatarSelector.trim() && !avatarSelector)) {
-    return { ok: false, error: "Use um seletor CSS simples (ex.: header .user-name)." };
+    return { ok: false, error: "Seletor não aceito: use só o seletor CSS copiado do navegador (sem <, { } ou ;)." };
   }
   try {
     await saveIdentityCapture(session.workspaceId, session.userId, { enabled: p.data.enabled, nameSelector, avatarSelector });

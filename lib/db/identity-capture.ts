@@ -2,6 +2,7 @@ import "server-only";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { identityCaptureSettings } from "@/db/schema";
+import { isSafeSelector, stabilizeSelector } from "@/lib/analytics/selectors";
 
 export interface IdentityCapture {
   enabled: boolean;
@@ -32,10 +33,13 @@ export async function saveIdentityCapture(workspaceId: string, userId: string, v
   cache.delete(workspaceId);
 }
 
-/** Seletor CSS aceito: curto e sem nada que pareça código (vai para o SDK no site do cliente). */
+/**
+ * Seletor CSS que vai para o SDK no site do cliente: estabilizado (sem IDs gerados pelo React) e
+ * sem nada que pareça código. "" = vazio ou recusado.
+ */
 export function cleanSelector(v: unknown): string {
-  const s = typeof v === "string" ? v.trim() : "";
-  return s.length <= 200 && !/[<>{}`]|javascript:/i.test(s) ? s : "";
+  const { value } = stabilizeSelector(typeof v === "string" ? v : "");
+  return isSafeSelector(value) ? value : "";
 }
 
 // só conta o que é DE UMA pessoa (mesma regra da lista em lib/db/analytics.ts)
