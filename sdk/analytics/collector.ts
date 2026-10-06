@@ -55,8 +55,11 @@ export interface AnalyticsCollector {
   boot(cfg: AnalyticsBootConfig): void;
   route(): void;
   event(name: string): void;
-  /** entrega o que está pendente ao core, que faz UM envio junto com os heatmaps */
-  collect(): AnalyticsBatch | null;
+  /**
+   * entrega o que está pendente ao core, que faz UM envio junto com os heatmaps.
+   * `partial`: envio por aba oculta (a página continua viva) — pode segurar continuações pequenas.
+   */
+  collect(partial?: boolean): AnalyticsBatch | null;
   /** diagnóstico (Luumu.debugIdentity): o que o identify mandou e o que a página mostra agora */
   peek(): Promise<{
     capture: CaptureConfig | null;
@@ -89,6 +92,13 @@ interface Session {
 
 const SESSION_KEY = "luumu_an_session";
 const IDLE_MS = 30_000;
+/*
+  Continuação abaixo disso (só tempo, sem tela nova nem evento) não sai na aba oculta: cada troca
+  de aba virava um POST /collect (uma invocação) para somar 1–2s a uma tela já gravada. O tempo
+  segue acumulando e vai no próximo envio ou no pagehide; o risco é perder <15s de uma aba que o
+  navegador mata em segundo plano.
+*/
+const MIN_CONTINUATION_MS = 15_000;
 const rand = () => (Math.random().toString(36).slice(2, 10) + Date.now().toString(36)).replace(/[^a-z0-9]/g, "").slice(0, 24);
 
 let cfg: AnalyticsBootConfig | null = null;
@@ -259,11 +269,12 @@ function scheduleAvatar(delay: number) {
   snapTimer = window.setTimeout(() => void prepareAvatar(), delay);
 }
 
-function collect(): AnalyticsBatch | null {
+function collect(partial = false): AnalyticsBatch | null {
   const c = cfg;
   if (!c || !session) return null;
   const send = pages.filter((p) => !p.sent || p.dur > 0 || p.ev.size > 0);
   if (!send.length) return null;
+  if (partial && send.every((p) => p.sent && p.ev.size === 0) && send.reduce((a, p) => a + p.dur, 0) < MIN_CONTINUATION_MS) return null;
   const payload: AnalyticsBatch = {
     aid: anonymousId().replace(/[^A-Za-z0-9_-]/g, "").slice(0, 64).padEnd(6, "0"),
     ...(() => {

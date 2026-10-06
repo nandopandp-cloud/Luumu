@@ -833,12 +833,13 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     fetch(url, { method: "POST", body, keepalive: true, headers: { "Content-Type": SIMPLE_CONTENT_TYPE } }).catch(() => {});
   }
 
-  function flushBeacon() {
+  /** `partial`: aba oculta, a página segue viva (o analytics pode segurar continuações pequenas) */
+  function flushBeacon(partial = false) {
     const key = activeKey || keyFromAttr;
     if (!key) return;
     let a: unknown = null;
     let h: unknown[] = [];
-    safe(() => (a = analytics?.collect() ?? null));
+    safe(() => (a = analytics?.collect(partial) ?? null));
     safe(() => (h = heatmaps?.collect() ?? []));
     if (!a && !h.length) return;
     const all = JSON.stringify({ key, host: HOST, a, h });
@@ -863,9 +864,9 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     if (beaconInstalled) return;
     beaconInstalled = true;
     document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "hidden") flushBeacon();
+      if (document.visibilityState === "hidden") flushBeacon(true);
     });
-    window.addEventListener("pagehide", flushBeacon);
+    window.addEventListener("pagehide", () => flushBeacon());
   }
 
   /**
