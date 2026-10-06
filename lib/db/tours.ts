@@ -405,6 +405,14 @@ export async function restoreTourVersion(id: string, projectId: string, versionI
   "paused" tira do ar sem perder nada: a versão publicada continua guardada e "active" devolve o
   tour exatamente a ela. A entrega ao SDK só serve status "published", então pausar basta.
 */
+/** Renomeia um tour. Não exige rascunho nem gera nova versão — não afeta o que já está publicado. */
+export async function renameTour(id: string, projectId: string, name: string): Promise<boolean> {
+  const tour = await ownedTour(id, projectId);
+  if (!tour) return false;
+  await db.update(tours).set({ name, updatedAt: new Date() }).where(eq(tours.id, id));
+  return true;
+}
+
 export async function setTourStatus(id: string, projectId: string, status: "archived" | "active" | "paused"): Promise<boolean> {
   const tour = await ownedTour(id, projectId);
   if (!tour) return false;

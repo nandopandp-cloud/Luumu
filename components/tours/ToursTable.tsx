@@ -9,7 +9,7 @@ import { createPortal } from "react-dom";
 import Link from "@/components/ui/Link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { MoreHorizontal, Pencil, Copy, Archive, ArchiveRestore, Trash2, BarChart3, Loader2, Pause, Play } from "lucide-react";
+import { MoreHorizontal, Pencil, PencilLine, Copy, Archive, ArchiveRestore, Trash2, BarChart3, Loader2, Pause, Play } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -18,7 +18,7 @@ import { HostBadge } from "@/components/ui/HostBadge";
 import { HostPicker } from "@/components/ui/HostPicker";
 import { Field, Input } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
-import { deleteTourAction, duplicateTourAction, setTourStatusAction } from "@/app/(app)/tours/actions";
+import { deleteTourAction, duplicateTourAction, renameTourAction, setTourStatusAction } from "@/app/(app)/tours/actions";
 import type { TourListItem } from "@/lib/db/tours";
 
 export type TourRow = Omit<TourListItem, "updatedAt"> & { updatedAtLabel: string; updatedAt?: undefined };
@@ -48,6 +48,7 @@ export function ToursTable({ items, hosts, newTour }: { items: TourRow[]; hosts:
   const [menu, setMenu] = useState<{ id: string; top: number; right: number } | null>(null);
   const [deleting, setDeleting] = useState<TourRow | null>(null);
   const [duplicating, setDuplicating] = useState<{ tour: TourRow; name: string; targetHosts: string[] } | null>(null);
+  const [renaming, setRenaming] = useState<{ tour: TourRow; name: string } | null>(null);
   // "Atualizado" usa a ordem do servidor (mais recente primeiro)
   const position = new Map(items.map((x, i) => [x.id, items.length - i]));
   const { sorted, sort, toggle } = useTableSort(items, {
@@ -229,6 +230,15 @@ export function ToursTable({ items, hosts, newTour }: { items: TourRow[]; hosts:
                 Analytics
               </MenuItem>
               <MenuItem
+                icon={<PencilLine className="size-4" />}
+                onClick={() => {
+                  setRenaming({ tour: current, name: current.name });
+                  setMenu(null);
+                }}
+              >
+                Renomear…
+              </MenuItem>
+              <MenuItem
                 icon={<Copy className="size-4" />}
                 onClick={() => {
                   setDuplicating({ tour: current, name: `${current.name} (cópia)`, targetHosts: current.targetHosts });
@@ -328,6 +338,46 @@ export function ToursTable({ items, hosts, newTour }: { items: TourRow[]; hosts:
               />
             </Field>
           </div>
+        </Dialog>
+      )}
+
+      {renaming && (
+        <Dialog
+          title="Renomear tour"
+          onClose={() => setRenaming(null)}
+          footer={
+            <>
+              <Button variant="ghost" size="sm" onClick={() => setRenaming(null)}>
+                Cancelar
+              </Button>
+              <Button
+                size="sm"
+                disabled={!renaming.name.trim() || renaming.name.trim() === renaming.tour.name}
+                onClick={() => {
+                  const { tour, name } = renaming;
+                  setRenaming(null);
+                  run(() => renameTourAction(tour.id, name.trim()), "Tour renomeado.");
+                }}
+              >
+                <PencilLine className="size-4" /> Salvar
+              </Button>
+            </>
+          }
+        >
+          <Field label="Nome do tour">
+            <Input
+              value={renaming.name}
+              maxLength={120}
+              autoFocus
+              onChange={(e) => setRenaming({ ...renaming, name: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter" || !renaming.name.trim() || renaming.name.trim() === renaming.tour.name) return;
+                const { tour, name } = renaming;
+                setRenaming(null);
+                run(() => renameTourAction(tour.id, name.trim()), "Tour renomeado.");
+              }}
+            />
+          </Field>
         </Dialog>
       )}
 

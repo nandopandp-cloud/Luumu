@@ -8,6 +8,7 @@ import {
   deleteTour,
   duplicateTour,
   publishTour,
+  renameTour,
   restoreTourVersion,
   saveTourDraft,
   setTourStatus,
@@ -95,6 +96,16 @@ export async function setTourStatusAction(id: string, status: "archived" | "acti
   revalidatePath(`/tours/${id}`, "layout");
   revalidatePath("/tours");
   return { ok };
+}
+
+export async function renameTourAction(id: string, name: string) {
+  const parsed = nameSchema.safeParse(name);
+  if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0].message };
+  const projectId = await getCurrentProjectId();
+  const ok = await renameTour(id, projectId, parsed.data);
+  revalidatePath(`/tours/${id}`, "layout");
+  revalidatePath("/tours");
+  return ok ? { ok: true as const } : { ok: false as const, error: "Tour não encontrado." };
 }
 
 const duplicateSchema = z.object({
