@@ -44,18 +44,9 @@ export async function recordTourEvents(
   if (!events.length) return 0;
 
   const ids = Array.from(new Set(events.map((e) => e.tourId))).slice(0, 10);
-  const owned = new Set(
-    (
-      await db
-        .select({ id: tours.id })
-        .from(tours)
-        .where(and(eq(tours.projectId, projectId), inArray(tours.id, ids)))
-    ).map((t) => t.id)
-  );
-  const now = Date.now();
-  const rows = events
-    .filter((e) => owned.has(e.tourId))
-    .map((e) => {
+  const rowsFor = (owned: Set<string>) => {
+    const now = Date.now();
+    return events.filter((e) => owned.has(e.tourId)).map((e) => {
       // relógio do navegador só é aceito se plausível (até 1 dia atrás, sem futuro)
       const ts = typeof e.ts === "number" && e.ts <= now + 60_000 && e.ts > now - 86_400_000 ? e.ts : now;
       return {
@@ -75,10 +66,60 @@ export async function recordTourEvents(
         createdAt: new Date(ts),
       };
     });
+  };
+
+  let rows = rowsFor(await ownedTours(projectId, ids));
   if (!rows.length) return 0;
-  await db.insert(tourEvents).values(rows);
+  try {
+    await db.insert(tourEvents).values(rows);
+  } catch (e) {
+    // tour apagado depois de entrar no cache: confere de novo no banco e grava só o que sobrou
+    if (!isForeignKeyViolation(e)) throw e;
+    rows = rowsFor(await ownedTours(projectId, ids, true));
+    if (!rows.length) return 0;
+    await db.insert(tourEvents).values(rows);
+  }
   return rows.length;
 }
+
+/*
+  Posse dos tours em cache por instância. Conferir no banco a cada lote era um SELECT por
+  POST /tours/events, a rota de maior volume dos tours. Um tour nunca muda de projeto, então
+  o cache só pode errar com um tour apagado nos últimos minutos: a FK de tour_events recusa o
+  INSERT e recordTourEvents refaz a conferência sem cache. Só posse confirmada entra no cache;
+  id desconhecido volta ao banco (e cai no rate limit da rota se for abuso).
+*/
+const OWNED_TTL_MS = 5 * 60_000;
+const ownedUntil = new Map<string, number>();
+
+async function ownedTours(projectId: string, ids: string[], fresh = false): Promise<Set<string>> {
+  const now = Date.now();
+  const owned = new Set<string>();
+  const unknown: string[] = [];
+  for (const id of ids) {
+    if (!fresh && (ownedUntil.get(`${projectId}|${id}`) ?? 0) > now) owned.add(id);
+    else unknown.push(id);
+  }
+  if (unknown.length) {
+    const found = await db
+      .select({ id: tours.id })
+      .from(tours)
+      .where(and(eq(tours.projectId, projectId), inArray(tours.id, unknown)));
+    for (const t of found) {
+      owned.add(t.id);
+      ownedUntil.set(`${projectId}|${t.id}`, now + OWNED_TTL_MS);
+    }
+    if (fresh) for (const id of unknown) if (!owned.has(id)) ownedUntil.delete(`${projectId}|${id}`);
+  }
+  return owned;
+}
+
+const isForeignKeyViolation = (e: unknown) => {
+  for (let x = e as { code?: string; cause?: unknown } | undefined, i = 0; x && i < 4; x = x.cause as typeof x, i++) {
+    if (x.code === "23503") return true;
+  }
+  return false;
+};
 
 export interface StepFunnelRow {
   stepKey: string;

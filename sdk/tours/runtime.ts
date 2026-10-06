@@ -95,8 +95,13 @@ function emit(type: TourEventType, stepKey?: string | null, meta?: TourEventInpu
     ts: Date.now(),
     meta,
   });
+  /*
+    Janela de 10s: com 3s, quem avança um passo a cada poucos segundos gerava um POST (uma
+    invocação) por passo. Nada se perde com a espera: o fim do tour (finish) e a saída da
+    página (pagehide / aba oculta, via sendBeacon) descarregam a fila na hora.
+  */
   if (queue.length >= 20) flush();
-  else if (!flushTimer) flushTimer = setTimeout(() => flush(), 3000);
+  else if (!flushTimer) flushTimer = setTimeout(() => flush(), 10_000);
 }
 
 function flush(beacon = false) {

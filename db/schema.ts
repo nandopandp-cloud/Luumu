@@ -569,7 +569,10 @@ export const heatmapPageviews = pgTable(
   },
   (t) => [
     index("heatmap_pv_page_idx").on(t.projectId, t.host, t.path, t.createdAt),
-    index("heatmap_pv_ws_idx").on(t.workspaceId, t.createdAt),
+    // session_id / sample_rate no fim da chave: a cota e a estimativa diária (lib/db/heatmaps.ts)
+    // viram index-only scan em vez de ler a tabela inteira — ver migração 0031
+    index("heatmap_pv_ws_session_idx").on(t.workspaceId, t.createdAt, t.sessionId),
+    index("heatmap_pv_project_session_idx").on(t.projectId, t.createdAt, t.sessionId, t.sampleRate),
   ]
 );
 
