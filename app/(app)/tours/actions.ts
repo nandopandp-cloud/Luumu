@@ -97,9 +97,18 @@ export async function setTourStatusAction(id: string, status: "archived" | "acti
   return { ok };
 }
 
-export async function duplicateTourAction(id: string) {
+const duplicateSchema = z.object({
+  name: nameSchema.optional(),
+  // plataformas da cópia; ausente = mantém as do original
+  targetHosts: z.array(z.string().max(253)).max(50).optional(),
+});
+
+export async function duplicateTourAction(id: string, input: unknown = {}) {
+  const parsed = duplicateSchema.safeParse(input);
+  if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
   const [projectId, user] = await Promise.all([getCurrentProjectId(), requireUser()]);
-  const newId = await duplicateTour(id, projectId, user.userId);
+  const targetHosts = parsed.data.targetHosts && Array.from(new Set(parsed.data.targetHosts.map(normalizeHost).filter(Boolean)));
+  const newId = await duplicateTour(id, projectId, user.userId, { name: parsed.data.name, targetHosts });
   revalidatePath("/tours");
   return newId ? { ok: true as const, id: newId } : { ok: false as const, error: "Tour não encontrado." };
 }

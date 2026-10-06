@@ -6,6 +6,7 @@ import { tourId as newTourId, tourVersionId, tourStepId } from "./ids";
 import { defaultSettings, starterSteps } from "@/lib/tours/defaults";
 import { normalizeSettings, normalizeSteps, normalizeStep, normalizeTarget, normalizeRoute } from "@/lib/tours/normalize";
 import { normalizeHost } from "@/lib/hosts";
+import { retargetHosts } from "@/lib/tours/retarget";
 import type { ElementTarget, TourCatalogEntry, TourPayload, TourSettings, TourStep } from "@/lib/tours/types";
 
 /*
@@ -414,25 +415,37 @@ export async function setTourStatus(id: string, projectId: string, status: "arch
   return true;
 }
 
-export async function duplicateTour(id: string, projectId: string, userId: string): Promise<string | null> {
+/**
+ * Duplica o rascunho de um tour (a cópia nasce sempre como rascunho, fora do ar).
+ * `targetHosts` reatribui a cópia a outras plataformas — ex.: um tour feito para
+ * preparasp.cliente.com reaproveitado em matematicaem.cliente.com. Ver retargetHosts.
+ */
+export async function duplicateTour(
+  id: string,
+  projectId: string,
+  userId: string,
+  opts: { name?: string; targetHosts?: string[] } = {}
+): Promise<string | null> {
   const tour = await ownedTour(id, projectId);
   if (!tour) return null;
   const draft = await ensureDraft(tour);
-  const steps = await stepsOf(draft.id);
+  let settings = settingsOf(draft.settings);
+  let steps = await stepsOf(draft.id);
+  if (opts.targetHosts) ({ settings, steps } = retargetHosts(settings, steps, opts.targetHosts));
   const newId = newTourId();
   const versionId = tourVersionId();
   const insertTour = db.insert(tours).values({
     id: newId,
     workspaceId: tour.workspaceId,
     projectId,
-    name: `${tour.name} (cópia)`.slice(0, 120),
+    name: (opts.name || `${tour.name} (cópia)`).slice(0, 120),
     description: tour.description,
     status: "draft",
     createdBy: userId,
   });
   const insertVersion = db
     .insert(tourVersions)
-    .values({ id: versionId, tourId: newId, projectId, version: 0, status: "draft", settings: settingsOf(draft.settings) });
+    .values({ id: versionId, tourId: newId, projectId, version: 0, status: "draft", settings });
   if (steps.length) {
     await db.batch([
       insertTour,

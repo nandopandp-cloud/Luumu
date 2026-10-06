@@ -15,6 +15,8 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { HostBadge } from "@/components/ui/HostBadge";
+import { HostPicker } from "@/components/ui/HostPicker";
+import { Field, Input } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
 import { deleteTourAction, duplicateTourAction, setTourStatusAction } from "@/app/(app)/tours/actions";
 import type { TourListItem } from "@/lib/db/tours";
@@ -45,6 +47,7 @@ export function TourStatusBadge({ status, version, dirty }: { status: TourListIt
 export function ToursTable({ items, hosts, newTour }: { items: TourRow[]; hosts: string[]; newTour: React.ReactNode }) {
   const [menu, setMenu] = useState<{ id: string; top: number; right: number } | null>(null);
   const [deleting, setDeleting] = useState<TourRow | null>(null);
+  const [duplicating, setDuplicating] = useState<{ tour: TourRow; name: string; targetHosts: string[] } | null>(null);
   // "Atualizado" usa a ordem do servidor (mais recente primeiro)
   const position = new Map(items.map((x, i) => [x.id, items.length - i]));
   const { sorted, sort, toggle } = useTableSort(items, {
@@ -227,9 +230,12 @@ export function ToursTable({ items, hosts, newTour }: { items: TourRow[]; hosts:
               </MenuItem>
               <MenuItem
                 icon={<Copy className="size-4" />}
-                onClick={() => run(() => duplicateTourAction(current.id), "Tour duplicado.", (id) => id && router.push(`/tours/${id}`))}
+                onClick={() => {
+                  setDuplicating({ tour: current, name: `${current.name} (cópia)`, targetHosts: current.targetHosts });
+                  setMenu(null);
+                }}
               >
-                Duplicar
+                Duplicar…
               </MenuItem>
               {current.status === "published" && (
                 <MenuItem
@@ -277,6 +283,53 @@ export function ToursTable({ items, hosts, newTour }: { items: TourRow[]; hosts:
           </>,
           document.body
         )}
+
+      {duplicating && (
+        <Dialog
+          title="Duplicar tour"
+          description="A cópia nasce como rascunho, fora do ar. Escolha onde ela vai aparecer: ao trocar de plataforma, a URL inicial, os links dos passos e as regras de plataforma passam a apontar para o destino."
+          onClose={() => setDuplicating(null)}
+          footer={
+            <>
+              <Button variant="ghost" size="sm" onClick={() => setDuplicating(null)}>
+                Cancelar
+              </Button>
+              <Button
+                size="sm"
+                disabled={!duplicating.name.trim()}
+                onClick={() => {
+                  const { tour, name, targetHosts } = duplicating;
+                  setDuplicating(null);
+                  run(
+                    () => duplicateTourAction(tour.id, { name: name.trim(), targetHosts }),
+                    "Tour duplicado. Revise os passos no builder antes de publicar.",
+                    (id) => id && router.push(`/tours/${id}`)
+                  );
+                }}
+              >
+                <Copy className="size-4" /> Duplicar
+              </Button>
+            </>
+          }
+        >
+          <div className="flex flex-col gap-4">
+            <Field label="Nome da cópia">
+              <Input
+                value={duplicating.name}
+                maxLength={120}
+                onChange={(e) => setDuplicating({ ...duplicating, name: e.target.value })}
+              />
+            </Field>
+            <Field label="Plataforma">
+              <HostPicker
+                hosts={hosts}
+                selected={duplicating.targetHosts}
+                onChange={(targetHosts) => setDuplicating({ ...duplicating, targetHosts })}
+              />
+            </Field>
+          </div>
+        </Dialog>
+      )}
 
       {deleting && (
         <Dialog
