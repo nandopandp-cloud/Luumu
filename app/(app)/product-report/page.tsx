@@ -3,7 +3,9 @@ import { requireProductReportAccess } from "@/lib/product-report/access";
 import { getVisibleProjects } from "@/lib/auth/current";
 import { getUserById } from "@/lib/db/users";
 import { getProductReportSettings, listGeneratedReports } from "@/lib/db/product-report";
-import { loadReportModel } from "@/lib/product-report/load";
+import { isProductReportSchemaMissing, loadReportModel } from "@/lib/product-report/load";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { reportStatus } from "@/lib/product-report/html";
 import { lastClosedPeriod, parsePeriod, periodCode, periodDatesShort, periodLabel, periodOf, periodsUntil } from "@/lib/product-report/period";
 
@@ -20,12 +22,29 @@ export default async function ProductReportPage({ searchParams }: { searchParams
 
   const me = await getUserById(session.userId);
   const author = { name: me?.name ?? session.name, avatarUrl: me?.avatarUrl ?? null };
-  const [model, settings, projects, reports] = await Promise.all([
-    loadReportModel(session.workspaceId, period, { author }),
-    getProductReportSettings(session.workspaceId),
-    getVisibleProjects(),
-    listGeneratedReports(session.workspaceId),
-  ]);
+  let data;
+  try {
+    data = await Promise.all([
+      loadReportModel(session.workspaceId, period, { author }),
+      getProductReportSettings(session.workspaceId),
+      getVisibleProjects(),
+      listGeneratedReports(session.workspaceId),
+    ]);
+  } catch (err) {
+    // banco sem as tabelas/colunas do módulo: diz o que aplicar em vez do erro genérico
+    if (!isProductReportSchemaMissing(err)) throw err;
+    console.error("[product-report] migrações pendentes:", err instanceof Error ? err.message.slice(0, 200) : err);
+    return (
+      <div className="flex flex-col gap-4">
+        <PageHeader eyebrow="Inteligência" title="Report Quinzenal de Produto" />
+        <EmptyState
+          title="Falta atualizar o banco de dados"
+          description="As tabelas do Report Quinzenal ainda não existem (ou estão incompletas) no banco. Aplique as migrações db/migrations/0032_product_report.sql, 0033_product_report_history.sql e 0034_product_report_intro.sql e recarregue a página."
+        />
+      </div>
+    );
+  }
+  const [model, settings, projects, reports] = data;
 
   const current = periodOf(new Date());
   const options = periodsUntil(current, PICKER_SIZE).reverse();
