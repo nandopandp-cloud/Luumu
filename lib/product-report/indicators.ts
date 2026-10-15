@@ -126,8 +126,9 @@ export function goalStatus(value: number | null, target: number | null): GoalSta
 
 const dec = (v: number, digits: number) => v.toLocaleString("pt-BR", { minimumFractionDigits: digits, maximumFractionDigits: digits });
 
+/** A North Star é exibida em % (100% = todos os componentes exatamente na meta), como no report. */
 export function unitOf(key: GoalKey): "%" | "min" | "pts" {
-  if (key === NORTH_STAR) return "pts";
+  if (key === NORTH_STAR) return "%";
   return METRIC_META[key.split(".")[1] as Metric].unit;
 }
 
@@ -137,6 +138,13 @@ export function formatValue(v: number | null | undefined, unit: "%" | "min" | "p
   if (unit === "%") return `${dec(v, 1)}%`;
   if (unit === "min") return `${dec(v, 1)} min`;
   return dec(v, 1);
+}
+
+/** Forma curta do report: "50%", "43,7%", "22 min", "98,8%" (sem ",0" à toa). */
+export function formatCompact(v: number | null | undefined, unit: "%" | "min" | "pts"): string {
+  if (!num(v)) return "—";
+  const s = v.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
+  return unit === "min" ? `${s} min` : unit === "%" ? `${s}%` : s;
 }
 
 /** Variação absoluta com sinal: "+3,2 p.p.", "−1,0 min", "+4,1 pts" */

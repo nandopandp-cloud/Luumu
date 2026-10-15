@@ -774,6 +774,8 @@ export const productReportPeriods = pgTable(
     goals: jsonb("goals").notNull().default({}),
     // valores sem dado na Luumu: { "geniex.usage": { value: 22, source: "manual" | "planilha" } }
     manual: jsonb("manual").notNull().default({}),
+    // mensagem de abertura do report ("Fala pessoal, boa tarde…")
+    intro: text("intro").notNull().default(""),
     notes: text("notes").notNull().default(""),
     updatedBy: text("updated_by").references(() => users.id, { onDelete: "set null" }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

@@ -64,7 +64,7 @@ function parsePeriodRow(r: typeof productReportPeriods.$inferSelect): StoredPeri
       ([k, v]) => isPlatformIndicatorKey(k) && v && isNum(v.value) && (v.source === "manual" || v.source === "planilha")
     )
   );
-  return { period: r.period, goals, manual, notes: r.notes, updatedAt: r.updatedAt.toISOString() };
+  return { period: r.period, goals, manual, intro: r.intro, notes: r.notes, updatedAt: r.updatedAt.toISOString() };
 }
 
 /** Todas as quinzenas salvas (poucas: 24 por ano). As metas herdadas precisam do passado inteiro. */
@@ -77,17 +77,18 @@ export async function saveStoredPeriod(
   workspaceId: string,
   userId: string,
   period: PeriodId,
-  patch: Partial<Pick<StoredPeriod, "goals" | "manual" | "notes">>
+  patch: Partial<Pick<StoredPeriod, "goals" | "manual" | "intro" | "notes">>
 ) {
   const [current] = await db
     .select()
     .from(productReportPeriods)
     .where(and(eq(productReportPeriods.workspaceId, workspaceId), eq(productReportPeriods.period, period)))
     .limit(1);
-  const base = current ? parsePeriodRow(current) : { goals: {}, manual: {}, notes: "" };
+  const base = current ? parsePeriodRow(current) : { goals: {}, manual: {}, intro: "", notes: "" };
   const values = {
     goals: patch.goals ?? base.goals,
     manual: patch.manual ?? base.manual,
+    intro: patch.intro ?? base.intro,
     notes: patch.notes ?? base.notes,
     updatedBy: userId,
     updatedAt: new Date(),

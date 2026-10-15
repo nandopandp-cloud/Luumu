@@ -27,7 +27,21 @@ import {
   type Targets,
   type Weights,
 } from "./indicators";
-import { isClosed, periodDates, periodLabel, periodRange, periodShortLabel, periodsUntil, shiftPeriod, type PeriodId } from "./period";
+import {
+  isClosed,
+  periodCode,
+  periodDates,
+  periodDatesShort,
+  periodLabel,
+  periodRange,
+  periodShortLabel,
+  periodsUntil,
+  periodTick,
+  periodTitle,
+  shiftPeriod,
+  yearPeriodsUntil,
+  type PeriodId,
+} from "./period";
 
 export type ManualSource = "manual" | "planilha";
 
@@ -41,6 +55,8 @@ export interface StoredPeriod {
   period: PeriodId;
   goals: Targets;
   manual: Partial<Record<PlatformIndicatorKey, ManualValue>>;
+  /** mensagem de abertura do report (ex.: "Fala pessoal, boa tarde. Segue o report…") */
+  intro: string;
   notes: string;
   updatedAt: string | null;
 }
@@ -91,6 +107,8 @@ export interface IndicatorRow {
 export interface HistoryPoint {
   period: PeriodId;
   label: string;
+  /** "16/Jun": eixo X dos gráficos */
+  tick: string;
   values: Partial<Record<GoalKey, number | null>>;
   targets: Partial<Record<GoalKey, number | null>>;
 }
@@ -103,7 +121,13 @@ export interface Alert {
 export interface ReportModel {
   period: PeriodId;
   label: string;
+  /** "Q2/09" */
+  code: string;
+  /** "Q2 Setembro" */
+  title: string;
   dates: string;
+  /** "16/09 a 30/09" */
+  datesShort: string;
   closed: boolean;
   builtAt: string;
   sync: { at: string | null; status: SyncSnapshot["status"] | null; error: string | null };
@@ -112,8 +136,15 @@ export interface ReportModel {
   components: (NorthStarComponent & { row: IndicatorRow })[];
   groups: { key: "produto" | PlatformKey; title: string; rows: IndicatorRow[] }[];
   history: HistoryPoint[];
+  /** média da North Star nas quinzenas do ano até esta (as que têm valor) */
+  yearAverage: number | null;
   alerts: Alert[];
+  intro: string;
   notes: string;
+  /** última edição de metas/textos da quinzena */
+  editedAt: string | null;
+  /** quem assina a mensagem de abertura (preenchido por quem carrega o modelo) */
+  author: { name: string; avatarUrl: string | null } | null;
   manual: StoredPeriod["manual"];
   projects: SyncSnapshot["projects"];
 }
@@ -176,6 +207,7 @@ export function buildReportModel(input: {
   weights: Weights;
   now?: Date;
   historySize?: number;
+  author?: ReportModel["author"];
 }): ReportModel {
   const { period, weights } = input;
   const now = input.now ?? new Date();
@@ -233,13 +265,22 @@ export function buildReportModel(input: {
 
   const history: HistoryPoint[] = periodsUntil(period, input.historySize ?? 8).map((p) => {
     const pt = p === period ? cur : p === prevPeriod ? prev : pointFor(p, input.syncs[p], byPeriod, weights);
-    return { period: p, label: periodShortLabel(p), values: pt.values, targets: pt.targets };
+    return { period: p, label: periodShortLabel(p), tick: periodTick(p), values: pt.values, targets: pt.targets };
   });
+
+  // média anual (aba "Meta Geral" da planilha): quinzenas do ano com North Star calculável
+  const yearValues = yearPeriodsUntil(period)
+    .map((p) => (p === period ? cur.ns.value : pointFor(p, input.syncs[p], byPeriod, weights).ns.value))
+    .filter((v): v is number => v !== null);
+  const yearAverage = yearValues.length ? yearValues.reduce((a, v) => a + v, 0) / yearValues.length : null;
 
   return {
     period,
     label: periodLabel(period),
+    code: periodCode(period),
+    title: periodTitle(period),
     dates: periodDates(period),
+    datesShort: periodDatesShort(period),
     closed: isClosed(period, now),
     builtAt: now.toISOString(),
     sync: { at: sync?.createdAt ?? null, status: sync?.status ?? null, error: sync?.error ?? null },
@@ -248,8 +289,12 @@ export function buildReportModel(input: {
     components,
     groups,
     history,
+    yearAverage,
     alerts: buildAlerts({ period, now, sync, lastAttempt: input.lastAttempt, resolved: cur.resolved, components }),
+    intro: byPeriod.get(period)?.intro ?? "",
     notes: byPeriod.get(period)?.notes ?? "",
+    editedAt: byPeriod.get(period)?.updatedAt ?? null,
+    author: input.author ?? null,
     manual: byPeriod.get(period)?.manual ?? {},
     projects: sync?.projects ?? {},
   };

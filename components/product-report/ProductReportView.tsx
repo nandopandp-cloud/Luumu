@@ -1,19 +1,21 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Check, FileDown, FileText, Info, Loader2, Pencil, RefreshCw, Save, Star, X, XCircle } from "lucide-react";
-import { Card, CardSubtitle, CardTitle } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
+import Image from "next/image";
+import { AlertTriangle, CalendarRange, Check, ChevronRight, ClipboardCopy, FileDown, FileText, Info, Loader2, Pencil, RefreshCw, Share2, X, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, Textarea } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
+import { downloadExport } from "@/components/ui/ShareMenu";
 import { cn } from "@/lib/utils";
-import { formatDelta, formatValue, METRIC_META, type GoalKey, type GoalStatus, type Metric } from "@/lib/product-report/indicators";
-import { periodShortLabel, shiftPeriod } from "@/lib/product-report/period";
+import { formatCompact, type GoalKey, type GoalStatus } from "@/lib/product-report/indicators";
+import { shiftPeriod, periodCode } from "@/lib/product-report/period";
 import type { IndicatorRow, ReportModel } from "@/lib/product-report/model";
-import { generateReportAction, saveGoalsAction, saveNotesAction, syncAction } from "@/app/(app)/product-report/actions";
-import { ProductReportCharts } from "./ProductReportCharts";
+import { buildCharts, chartCardHtml } from "@/lib/product-report/charts";
+import { formatLongTs, introText, REPORT_STATUS, type ReportStatus } from "@/lib/product-report/html";
+import { GROUP_STYLE, rowName } from "@/lib/product-report/render-html";
+import { generateReportAction, saveGoalsAction, saveTextsAction, syncAction } from "@/app/(app)/product-report/actions";
 import { ProductReportSettings, type SettingsValue } from "./ProductReportSettings";
 
 export interface GeneratedReportItem {
@@ -24,14 +26,10 @@ export interface GeneratedReportItem {
   trigger: string;
 }
 
-const STATUS: Record<GoalStatus, { label: string; tone: "success" | "error" | "neutral" | "warn" }> = {
-  met: { label: "Atingiu", tone: "success" },
-  missed: { label: "Abaixo da meta", tone: "error" },
-  no_target: { label: "Sem meta", tone: "neutral" },
-  no_data: { label: "Sem dado", tone: "warn" },
-};
+type Drafts = { cur: Record<string, string>; next: Record<string, string> };
 
 const fmtTs = (iso: string) => new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+const toText = (v: number | null) => (v === null ? "" : String(v).replace(".", ","));
 
 /** "12,5" ou "12.5" → 12.5; vazio → null; inválido → undefined */
 function parseNum(s: string): number | null | undefined {
@@ -41,206 +39,61 @@ function parseNum(s: string): number | null | undefined {
   return Number.isFinite(n) && n >= 0 ? n : undefined;
 }
 
-const linkCls =
-  "inline-flex items-center gap-2 rounded-full border border-line-strong px-3.5 py-2 text-[13px] font-semibold text-fg transition hover:border-accent hover:text-accent";
-
-export function ProductReportView({
-  model,
-  periodOptions,
-  settings,
-  projects,
-  reports,
-}: {
-  model: ReportModel;
-  periodOptions: { value: string; label: string }[];
-  settings: SettingsValue;
-  projects: { id: string; name: string }[];
-  reports: GeneratedReportItem[];
-}) {
-  return (
-    <div className="flex flex-col gap-4">
-      <Toolbar model={model} periodOptions={periodOptions} />
-      <Alerts alerts={model.alerts} />
-      <Summary model={model} />
-      <GoalsTables model={model} />
-      <ProductReportCharts model={model} />
-      <Notes key={model.period} period={model.period} initial={model.notes} />
-      <ProductReportSettings model={model} settings={settings} projects={projects} />
-      <ReportHistory reports={reports} />
-    </div>
-  );
-}
-
-/* ---------- barra superior ---------- */
-
-function Toolbar({ model, periodOptions }: { model: ReportModel; periodOptions: { value: string; label: string }[] }) {
-  const router = useRouter();
-  const toast = useToast();
-  const [busy, setBusy] = useState<"sync" | "report" | null>(null);
-  const [, startTransition] = useTransition();
-  const q = `period=${encodeURIComponent(model.period)}`;
-
-  const run = (kind: "sync" | "report") => {
-    setBusy(kind);
-    startTransition(async () => {
-      const r = kind === "sync" ? await syncAction(model.period) : await generateReportAction(model.period);
-      setBusy(null);
-      if (!r.ok) return toast("error", r.error);
-      toast("success", kind === "sync" ? "Indicadores atualizados." : "Relatório gerado e salvo no histórico.");
-      router.refresh();
-    });
-  };
-
-  return (
-    <Card className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between">
-      <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
-        <div className="w-full sm:w-80">
-          <Select value={model.period} onChange={(e) => router.push(`/product-report?period=${e.target.value}`)} aria-label="Quinzena de referência">
-            {periodOptions.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </Select>
-        </div>
-        <div className="text-xs text-fg-mut">
-          <div>{model.dates}</div>
-          <div>{model.sync.at ? `Luumu atualizada em ${fmtTs(model.sync.at)}` : "Ainda não atualizada na Luumu"}</div>
-        </div>
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <Button variant="ghost" size="sm" onClick={() => run("sync")} disabled={busy !== null}>
-          {busy === "sync" ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />} Atualizar indicadores
-        </Button>
-        <a className={linkCls} href={`/api/product-report/export?format=html&${q}`} target="_blank" rel="noopener">
-          <FileText className="size-4" /> Revisar HTML
-        </a>
-        <a className={linkCls} href={`/api/product-report/export?format=pdf&${q}`}>
-          <FileDown className="size-4" /> PDF
-        </a>
-        <Button size="sm" onClick={() => run("report")} disabled={busy !== null}>
-          {busy === "report" ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />} Gerar relatório
-        </Button>
-      </div>
-    </Card>
-  );
-}
-
-/* ---------- alertas ---------- */
-
-function Alerts({ alerts }: { alerts: ReportModel["alerts"] }) {
-  if (!alerts.length) return null;
-  const order = { error: 0, warn: 1, info: 2 };
-  const sorted = [...alerts].sort((a, b) => order[a.tone] - order[b.tone]);
-  const Icon = { error: XCircle, warn: AlertTriangle, info: Info };
-  const color = { error: "text-erro", warn: "text-aviso", info: "text-info" };
-  return (
-    <Card className="p-5">
-      <CardTitle className="mb-2 text-sm">Pontos de atenção nos dados</CardTitle>
-      <ul className="flex flex-col gap-1.5">
-        {sorted.map((a, i) => {
-          const I = Icon[a.tone];
-          return (
-            <li key={i} className="flex items-start gap-2 text-sm text-fg-soft">
-              <I className={cn("mt-0.5 size-4 shrink-0", color[a.tone])} />
-              {a.text}
-            </li>
-          );
-        })}
-      </ul>
-    </Card>
-  );
-}
-
-/* ---------- resumo executivo ---------- */
-
-function StatusBadge({ status }: { status: GoalStatus }) {
-  return <Badge tone={STATUS[status].tone}>{STATUS[status].label}</Badge>;
-}
-
-function Delta({ row }: { row: IndicatorRow }) {
-  if (row.delta === null) return <span className="text-xs text-fg-mut">sem comparação com a quinzena anterior</span>;
-  const tone = row.delta > 0 ? "text-sucesso" : row.delta < 0 ? "text-erro" : "text-fg-mut";
-  return (
-    <span className={cn("text-xs font-semibold", tone)}>
-      {formatDelta(row.delta, row.unit)} <span className="font-normal text-fg-mut">vs. quinzena anterior</span>
-    </span>
-  );
-}
-
-function SummaryCard({ row, title, hint, big = false }: { row: IndicatorRow; title: string; hint?: string; big?: boolean }) {
-  return (
-    <Card className={cn("flex flex-col gap-2 p-5", big && "border-accent/40 bg-surface-brand/40", row.status === "missed" && "border-erro/40")}>
-      <div className="flex items-start justify-between gap-2">
-        <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-fg-mut">
-          {big && <Star className="size-3.5 text-accent" />}
-          {title}
-        </span>
-        <StatusBadge status={row.status} />
-      </div>
-      <div className={cn("font-display font-extrabold leading-none tracking-tight", big ? "text-[44px] text-accent" : "text-[32px]")}>
-        {formatValue(row.value, row.unit)}
-      </div>
-      <div className="text-xs text-fg-mut">
-        Meta {formatValue(row.target, row.unit)}
-        {row.targetFrom && ` (mantida de ${periodShortLabel(row.targetFrom)})`}
-        {hint && ` · ${hint}`}
-      </div>
-      <Delta row={row} />
-    </Card>
-  );
-}
-
-function Summary({ model }: { model: ReportModel }) {
-  return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-      <SummaryCard row={model.northStar} title="North Star" big hint={`pesos ${model.weights.csat}/${model.weights.adherence}/${model.weights.usage}`} />
-      {model.components.map((c) => (
-        <SummaryCard
-          key={c.metric}
-          row={c.row}
-          title={METRIC_META[c.metric].label}
-          hint={c.result === null ? undefined : `${formatValue(c.result, "pts")} de ${c.weight} pts`}
-        />
-      ))}
-    </div>
-  );
-}
-
-/* ---------- tabelas de metas e resultados ---------- */
-
-type Drafts = { cur: Record<string, string>; next: Record<string, string> };
-
+/** Meta definida na própria quinzena (as herdadas não contam como edição). */
 const ownGoal = (r: IndicatorRow, which: "cur" | "next") => {
   const v = which === "cur" ? r.target : r.nextTarget;
   const from = which === "cur" ? r.targetFrom : r.nextTargetFrom;
   return from === null && v !== null ? v : null;
 };
 
-function GoalsTables({ model }: { model: ReportModel }) {
+const exportUrl = (format: "html" | "pdf", period: string, extra = "") => `/api/product-report/export?format=${format}&period=${encodeURIComponent(period)}${extra}`;
+
+export function ProductReportView({
+  model,
+  status,
+  periodOptions,
+  settings,
+  projects,
+  reports,
+}: {
+  model: ReportModel;
+  status: ReportStatus;
+  periodOptions: { value: string; label: string }[];
+  settings: SettingsValue;
+  projects: { id: string; name: string }[];
+  reports: GeneratedReportItem[];
+}) {
   const router = useRouter();
   const toast = useToast();
   const rows = model.groups.flatMap((g) => g.rows);
   const initial = (): Drafts => ({
-    cur: Object.fromEntries(rows.map((r) => [r.key, ownGoal(r, "cur")?.toString().replace(".", ",") ?? ""])),
-    next: Object.fromEntries(rows.map((r) => [r.key, ownGoal(r, "next")?.toString().replace(".", ",") ?? ""])),
+    cur: Object.fromEntries(rows.map((r) => [r.key, toText(ownGoal(r, "cur"))])),
+    next: Object.fromEntries(rows.map((r) => [r.key, toText(ownGoal(r, "next"))])),
   });
   const [editing, setEditing] = useState(false);
   const [drafts, setDrafts] = useState<Drafts>(initial);
-  const [pending, startTransition] = useTransition();
+  const [intro, setIntro] = useState(model.intro);
+  const [saving, startSaving] = useTransition();
+  const charts = useMemo(() => buildCharts(model), [model]);
 
-  const diff = (which: "cur" | "next") => {
-    const out: Partial<Record<GoalKey, number | null>> = {};
-    for (const r of rows) {
-      const v = parseNum(drafts[which][r.key]);
-      if (v === undefined) throw new Error(`Valor inválido em ${r.label}.`);
-      if (v !== ownGoal(r, which)) out[r.key] = v;
-    }
-    return out;
+  const startEdit = () => {
+    // parte do que está salvo agora (a página pode ter trocado de quinzena ou recarregado)
+    setDrafts(initial());
+    setIntro(model.intro);
+    setEditing(true);
   };
 
-  const save = () =>
-    startTransition(async () => {
+  const saveEdit = () =>
+    startSaving(async () => {
+      const diff = (which: "cur" | "next") => {
+        const out: Partial<Record<GoalKey, number | null>> = {};
+        for (const r of rows) {
+          const v = parseNum(drafts[which][r.key]);
+          if (v === undefined) throw new Error(`Valor inválido em ${r.label}.`);
+          if (v !== ownGoal(r, which)) out[r.key] = v;
+        }
+        return out;
+      };
       let cur, next;
       try {
         cur = diff("cur");
@@ -251,134 +104,435 @@ function GoalsTables({ model }: { model: ReportModel }) {
       const calls = [];
       if (Object.keys(cur).length) calls.push(saveGoalsAction({ period: model.period, goals: cur }));
       if (Object.keys(next).length) calls.push(saveGoalsAction({ period: shiftPeriod(model.period, 1), goals: next }));
+      if (intro !== model.intro) calls.push(saveTextsAction({ period: model.period, intro }));
       const res = await Promise.all(calls);
       const err = res.find((r) => !r.ok);
       if (err && !err.ok) return toast("error", err.error);
-      toast("success", calls.length ? "Metas salvas." : "Nada mudou.");
+      toast("success", calls.length ? "Alterações salvas." : "Nada mudou.");
       setEditing(false);
       router.refresh();
     });
 
-  const componentOf = (key: GoalKey) => model.components.find((c) => key === `ns.${c.metric}`);
-
   return (
-    <Card padded={false}>
-      <div className="flex flex-col gap-3 p-6 pb-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <CardTitle>Metas e resultados</CardTitle>
-          <CardSubtitle>
-            Meta vazia herda a da quinzena anterior. &quot;Nova meta&quot; vale para {periodShortLabel(shiftPeriod(model.period, 1))}.
-          </CardSubtitle>
-        </div>
-        {editing ? (
-          <div className="flex gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setDrafts(initial());
-                setEditing(false);
-              }}
-              disabled={pending}
-            >
-              <X className="size-4" /> Cancelar
-            </Button>
-            <Button size="sm" onClick={save} disabled={pending}>
-              {pending ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />} Salvar metas
-            </Button>
+    <div className="flex flex-col gap-5 pb-6">
+      <Header
+        model={model}
+        status={status}
+        periodOptions={periodOptions}
+        editing={editing}
+        saving={saving}
+        onEdit={startEdit}
+        onCancel={() => setEditing(false)}
+        onSave={saveEdit}
+      />
+
+      <DataNotice model={model} />
+
+      {/* mensagem de abertura */}
+      <div className="flex items-start gap-3 rounded-2xl border border-line bg-bg-elev p-4">
+        <Avatar author={model.author} />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <span className="text-sm font-semibold">{model.author?.name ?? "Gestão de Produto"}</span>
+            <span className="text-xs text-fg-mut">{formatLongTs(model.editedAt ?? model.builtAt)}</span>
           </div>
-        ) : (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              // parte do que está salvo agora (a página pode ter mudado de quinzena ou recarregado)
-              setDrafts(initial());
-              setEditing(true);
-            }}
-          >
-            <Pencil className="size-4" /> Editar metas
-          </Button>
-        )}
+          {editing ? (
+            <Textarea rows={3} className="mt-2" value={intro} placeholder={introText({ intro: "", period: model.period })} onChange={(e) => setIntro(e.target.value)} />
+          ) : (
+            <p className="mt-1 whitespace-pre-wrap text-[13px] leading-relaxed text-fg-soft">{introText(model)}</p>
+          )}
+        </div>
       </div>
 
-      {model.groups.map((g) => (
-        <div key={g.key} className="px-6 pb-5">
-          <h4 className="mb-2 mt-3 text-sm font-bold text-accent">{g.title}</h4>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[820px] text-sm">
-              <thead>
-                <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-fg-mut">
-                  <th className="py-2 pr-3 font-semibold">Indicador</th>
-                  <th className="py-2 pr-3 text-right font-semibold">Meta</th>
-                  <th className="py-2 pr-3 text-right font-semibold">Realizado</th>
-                  <th className="py-2 pr-3 font-semibold">Status</th>
-                  <th className="py-2 pr-3 text-right font-semibold">Anterior</th>
-                  <th className="py-2 pr-3 text-right font-semibold">Variação</th>
-                  <th className="py-2 pr-3 text-right font-semibold">Nova meta</th>
-                  <th className="py-2 font-semibold">Fonte</th>
-                </tr>
-              </thead>
-              <tbody>
-                {g.rows.map((r) => {
-                  const comp = componentOf(r.key);
-                  const label = g.key === "produto" ? r.label : METRIC_META[r.key.split(".")[1] as Metric].label;
-                  return (
-                    <tr key={r.key} className={cn("border-b border-line/70 align-top", r.status === "missed" && "bg-erro/5")}>
-                      <td className="py-2.5 pr-3">
-                        <span className={cn("font-semibold", r.key === "northstar" && "text-accent")}>{label}</span>
-                        <span className="ml-1 text-xs text-fg-mut">({r.unit})</span>
-                      </td>
-                      <td className="py-2.5 pr-3 text-right">
-                        {editing ? (
-                          <GoalInput value={drafts.cur[r.key]} placeholder={r.targetFrom ? formatValue(r.target, r.unit) : ""} onChange={(v) => setDrafts((d) => ({ ...d, cur: { ...d.cur, [r.key]: v } }))} />
-                        ) : (
-                          <GoalText value={r.target} from={r.targetFrom} unit={r.unit} />
-                        )}
-                      </td>
-                      <td className="py-2.5 pr-3 text-right font-semibold">{formatValue(r.value, r.unit)}</td>
-                      <td className="py-2.5 pr-3">
-                        <StatusBadge status={r.status} />
-                      </td>
-                      <td className="py-2.5 pr-3 text-right text-fg-soft">{formatValue(r.prev, r.unit)}</td>
-                      <td className={cn("py-2.5 pr-3 text-right", r.delta !== null && r.delta < 0 ? "text-erro" : r.delta ? "text-sucesso" : "text-fg-mut")}>
-                        {formatDelta(r.delta, r.unit)}
-                      </td>
-                      <td className="py-2.5 pr-3 text-right">
-                        {editing ? (
-                          <GoalInput value={drafts.next[r.key]} placeholder={r.nextTargetFrom ? formatValue(r.nextTarget, r.unit) : ""} onChange={(v) => setDrafts((d) => ({ ...d, next: { ...d.next, [r.key]: v } }))} />
-                        ) : (
-                          <GoalText value={r.nextTarget} from={r.nextTargetFrom} unit={r.unit} />
-                        )}
-                      </td>
-                      <td className="max-w-[260px] py-2.5 text-xs text-fg-mut">
-                        {comp ? `Peso ${comp.weight} · resultado ${formatValue(comp.result, "pts")} pts` : r.source ?? "—"}
-                        {r.detail && <div>{r.detail}</div>}
-                        {r.updatedAt && !comp && <div>{fmtTs(r.updatedAt)}</div>}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+      <section>
+        <h2 className="mb-3 text-[17px] font-bold">1. Resumo dos Indicadores</h2>
+        <div className="flex flex-col gap-3.5">
+          {model.groups.map((g) => (
+            <SummaryTable
+              key={g.key}
+              group={g}
+              code={model.code}
+              editing={editing}
+              drafts={drafts}
+              onDraft={(which, key, v) => setDrafts((d) => ({ ...d, [which]: { ...d[which], [key]: v } }))}
+            />
+          ))}
+        </div>
+      </section>
+
+      <section>
+        <h2 className="mb-3 text-[17px] font-bold">2. Evolução dos Indicadores</h2>
+        {/* mesmo cartão do HTML/PDF exportado (lib/product-report/charts.ts): o que se vê aqui é o que sai no arquivo */}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {charts.map((c) => (
+            <div key={c.id} dangerouslySetInnerHTML={{ __html: chartCardHtml(c) }} />
+          ))}
+        </div>
+      </section>
+
+      <Notes key={model.period} period={model.period} initial={model.notes} />
+
+      {editing && (
+        <section className="flex flex-col gap-4 rounded-2xl border border-dashed border-accent/40 bg-surface-brand/30 p-4">
+          <div>
+            <h2 className="text-[15px] font-bold">Dados, fontes e histórico</h2>
+            <p className="text-xs text-fg-mut">Visível só no modo de edição. Nada daqui aparece no report exportado.</p>
+          </div>
+          <SyncCard model={model} />
+          <ProductReportSettings model={model} settings={settings} projects={projects} />
+          <ReportHistory reports={reports} />
+        </section>
+      )}
+    </div>
+  );
+}
+
+/* ---------- cabeçalho ---------- */
+
+function Header({
+  model,
+  status,
+  periodOptions,
+  editing,
+  saving,
+  onEdit,
+  onCancel,
+  onSave,
+}: {
+  model: ReportModel;
+  status: ReportStatus;
+  periodOptions: { value: string; label: string }[];
+  editing: boolean;
+  saving: boolean;
+  onEdit: () => void;
+  onCancel: () => void;
+  onSave: () => void;
+}) {
+  const router = useRouter();
+  const st = REPORT_STATUS[status];
+  const toast = useToast();
+  const [busy, setBusy] = useState<string | null>(null);
+  const download = async (format: "html" | "pdf") => {
+    setBusy(format);
+    try {
+      await downloadExport(exportUrl(format, model.period, format === "html" ? "&download=1" : ""), `report-quinzenal-${model.period}.${format}`);
+    } catch {
+      toast("error", "Não foi possível gerar o arquivo.");
+    }
+    setBusy(null);
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      <nav className="flex items-center gap-1.5 text-xs text-fg-mut" aria-label="Trilha">
+        <FileText className="size-3.5 text-accent" />
+        <span>Relatórios</span>
+        <ChevronRight className="size-3" />
+        <span className="text-fg-soft">Report Quinzenal</span>
+      </nav>
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div>
+          <h1 className="font-display text-[26px] font-extrabold tracking-tight">Report da Área - Gestão de Produto</h1>
+          <div className="mt-1 flex flex-wrap items-center gap-2.5 text-[15px] text-fg-soft">
+            Período: {model.datesShort} ({model.code})
+            <span className="rounded-full px-2.5 py-0.5 text-xs font-bold" style={{ background: st.bg, color: st.fg }}>
+              {st.label}
+            </span>
           </div>
         </div>
-      ))}
-    </Card>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="w-full sm:w-64">
+            <Select value={model.period} icon={<CalendarRange className="size-4" />} onChange={(e) => router.push(`/product-report?period=${e.target.value}`)} aria-label="Quinzena do report">
+              {periodOptions.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </Select>
+          </div>
+          {editing ? (
+            <>
+              <Button variant="ghost" size="sm" onClick={onCancel} disabled={saving}>
+                <X className="size-4" /> Cancelar
+              </Button>
+              <Button size="sm" onClick={onSave} disabled={saving}>
+                {saving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />} Salvar edição
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button variant="ghost" size="sm" onClick={onEdit}>
+                <Pencil className="size-4" /> Editar
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => download("html")} disabled={busy !== null}>
+                {busy === "html" ? <Loader2 className="size-4 animate-spin" /> : <FileText className="size-4" />} Exportar HTML
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => download("pdf")} disabled={busy !== null}>
+                {busy === "pdf" ? <Loader2 className="size-4 animate-spin" /> : <FileDown className="size-4" />} Exportar PDF
+              </Button>
+              <ShareButton model={model} status={status} />
+            </>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
-function GoalText({ value, from, unit }: { value: number | null; from: string | null; unit: IndicatorRow["unit"] }) {
+/** Compartilhar: fecha a versão final (status Concluído) e entrega o report para enviar. */
+function ShareButton({ model, status }: { model: ReportModel; status: ReportStatus }) {
+  const router = useRouter();
+  const toast = useToast();
+  const [open, setOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => ref.current && !ref.current.contains(e.target as Node) && setOpen(false);
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const finalize = () =>
+    startTransition(async () => {
+      const r = await generateReportAction(model.period);
+      if (!r.ok) return toast("error", r.error);
+      toast("success", "Versão final gerada: o report está Concluído.");
+      setOpen(false);
+      router.refresh();
+    });
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(summaryText(model));
+      toast("success", "Resumo copiado. Cole no e-mail ou no Slack.");
+      setOpen(false);
+    } catch {
+      toast("error", "Não foi possível copiar.");
+    }
+  };
+
+  const item = "flex w-full items-start gap-2.5 rounded-lg px-3 py-2 text-left text-sm hover:bg-surface-brand";
   return (
-    <span>
-      {formatValue(value, unit)}
-      {from && value !== null && <span className="block text-[10px] text-fg-mut">de {periodShortLabel(from)}</span>}
-    </span>
+    <div ref={ref} className="relative">
+      <Button size="sm" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+        <Share2 className="size-4" /> Compartilhar
+      </Button>
+      {open && (
+        <div className="absolute right-0 top-full z-30 mt-2 w-72 rounded-xl border border-line bg-bg-elev p-1.5 shadow-[var(--shadow-lg)]">
+          <button className={item} onClick={finalize} disabled={pending}>
+            {pending ? <Loader2 className="mt-0.5 size-4 animate-spin text-accent" /> : <Check className="mt-0.5 size-4 text-accent" />}
+            <span>
+              <span className="block font-semibold">{status === "concluido" ? "Gerar nova versão final" : "Concluir e gerar versão final"}</span>
+              <span className="block text-xs text-fg-mut">Congela números, metas e textos no histórico.</span>
+            </span>
+          </button>
+          <button className={item} onClick={copy}>
+            <ClipboardCopy className="mt-0.5 size-4 text-accent" />
+            <span>
+              <span className="block font-semibold">Copiar resumo em texto</span>
+              <span className="block text-xs text-fg-mut">Para colar no e-mail ou no Slack.</span>
+            </span>
+          </button>
+          <a className={item} href={exportUrl("html", model.period)} target="_blank" rel="noopener">
+            <FileText className="mt-0.5 size-4 text-accent" />
+            <span>
+              <span className="block font-semibold">Abrir versão para envio</span>
+              <span className="block text-xs text-fg-mut">HTML pronto para imprimir ou anexar.</span>
+            </span>
+          </a>
+        </div>
+      )}
+    </div>
   );
 }
 
-function GoalInput({ value, placeholder, onChange }: { value: string; placeholder: string; onChange: (v: string) => void }) {
-  return <Input value={value} placeholder={placeholder} inputMode="decimal" onChange={(e) => onChange(e.target.value)} className="ml-auto w-24 px-2.5 py-1.5 text-right" />;
+const MARK: Record<GoalStatus, string> = { met: "✅", missed: "❌", no_target: "—", no_data: "—" };
+
+/** Resumo em texto puro do report (Compartilhar → copiar). */
+export function summaryText(m: ReportModel): string {
+  const lines = [`Report da Área - Gestão de Produto · ${m.code} (${m.datesShort})`, "", introText(m), ""];
+  for (const g of m.groups) {
+    const rows = g.key === "produto" ? g.rows.filter((r) => r.key === "northstar") : g.rows;
+    lines.push(g.title.toUpperCase());
+    for (const r of rows) lines.push(`${MARK[r.status]} ${rowName(r)}: ${formatCompact(r.value, r.unit)} (meta ${formatCompact(r.target, r.unit)} · próxima ${formatCompact(r.nextTarget, r.unit)})`);
+    lines.push("");
+  }
+  if (m.notes.trim()) lines.push("Observações e conclusões executivas", m.notes.trim());
+  return lines.join("\n").trim();
+}
+
+/* ---------- avisos de dados ---------- */
+
+function DataNotice({ model }: { model: ReportModel }) {
+  const important = model.alerts.filter((a) => a.tone !== "info");
+  const [open, setOpen] = useState(false);
+  if (!important.length) return null;
+  const hasError = important.some((a) => a.tone === "error");
+  return (
+    <div className={cn("rounded-xl border px-4 py-3 text-sm", hasError ? "border-erro/30 bg-erro/5" : "border-aviso/40 bg-aviso/10")}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <button className="flex items-center gap-2 font-semibold" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+          {hasError ? <XCircle className="size-4 text-erro" /> : <AlertTriangle className="size-4 text-aviso" />}
+          {important.length} {important.length === 1 ? "ponto de atenção" : "pontos de atenção"} nos dados
+          <span className="text-xs font-normal text-fg-mut">{open ? "ocultar" : "ver"}</span>
+        </button>
+        <SyncButton period={model.period} />
+      </div>
+      {open && (
+        <ul className="mt-2 flex flex-col gap-1 pl-6 text-[13px] text-fg-soft">
+          {important.map((a, i) => (
+            <li key={i} className="list-disc">
+              {a.text}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function SyncButton({ period }: { period: string }) {
+  const router = useRouter();
+  const toast = useToast();
+  const [pending, startTransition] = useTransition();
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      disabled={pending}
+      onClick={() =>
+        startTransition(async () => {
+          const r = await syncAction(period);
+          if (!r.ok) return toast("error", r.error);
+          toast("success", "Indicadores atualizados.");
+          router.refresh();
+        })
+      }
+    >
+      {pending ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />} Atualizar indicadores
+    </Button>
+  );
+}
+
+function SyncCard({ model }: { model: ReportModel }) {
+  return (
+    <div className="flex flex-col gap-2 rounded-2xl border border-line bg-bg-elev p-5 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <div className="text-sm font-bold">Indicadores da Luumu</div>
+        <p className="text-xs text-fg-mut">
+          {model.sync.at ? `Última atualização: ${fmtTs(model.sync.at)}` : "Esta quinzena ainda não foi buscada na Luumu."} {model.alerts.find((a) => a.tone === "info")?.text ?? ""}
+        </p>
+      </div>
+      <SyncButton period={model.period} />
+    </div>
+  );
+}
+
+/* ---------- 1. Resumo dos Indicadores ---------- */
+
+function Avatar({ author }: { author: ReportModel["author"] }) {
+  const name = author?.name ?? "Gestão de Produto";
+  if (author?.avatarUrl) return <Image src={author.avatarUrl} alt="" width={40} height={40} className="size-10 shrink-0 rounded-full object-cover" />;
+  return <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-accent font-bold text-white">{name.trim()[0]?.toUpperCase()}</span>;
+}
+
+function ResultIcon({ status }: { status: GoalStatus }) {
+  if (status === "met")
+    return (
+      <svg width="20" height="20" viewBox="0 0 18 18" aria-label="Atingiu" className="mx-auto">
+        <rect width="18" height="18" rx="3" fill="#22C55E" />
+        <path d="M4.5 9.3l3 3 6-6.3" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  if (status === "missed")
+    return (
+      <svg width="16" height="16" viewBox="0 0 16 16" aria-label="Abaixo da meta" className="mx-auto">
+        <path d="M3 3l10 10M13 3L3 13" stroke="#EF4444" strokeWidth="2.4" strokeLinecap="round" />
+      </svg>
+    );
+  return <span className="text-fg-mut" title={status === "no_data" ? "Sem dado" : "Sem meta"}>—</span>;
+}
+
+function SummaryTable({
+  group,
+  code,
+  editing,
+  drafts,
+  onDraft,
+}: {
+  group: ReportModel["groups"][number];
+  code: string;
+  editing: boolean;
+  drafts: Drafts;
+  onDraft: (which: "cur" | "next", key: string, v: string) => void;
+}) {
+  const st = GROUP_STYLE[group.key];
+  // Gestão de Produto mostra só a North Star, como na referência
+  const rows = group.key === "produto" ? group.rows.filter((r) => r.key === "northstar") : group.rows;
+  const goalCell = (r: IndicatorRow, which: "cur" | "next") => {
+    const value = which === "cur" ? r.target : r.nextTarget;
+    const from = which === "cur" ? r.targetFrom : r.nextTargetFrom;
+    if (!editing) return formatCompact(value, r.unit);
+    return (
+      <Input
+        value={drafts[which][r.key]}
+        placeholder={from ? formatCompact(value, r.unit) : ""}
+        title={from ? `Vazio mantém a meta de ${periodCode(from)}` : undefined}
+        inputMode="decimal"
+        onChange={(e) => onDraft(which, r.key, e.target.value)}
+        className="mx-auto w-24 px-2 py-1 text-center"
+      />
+    );
+  };
+  return (
+    <div className="overflow-hidden rounded-xl border-[1.5px] bg-bg-elev" style={{ borderColor: `${st.color}66` }}>
+      <div className="py-1.5 text-center text-xs font-bold tracking-wide text-white" style={{ background: st.color }}>
+        {st.title}
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[640px] table-fixed border-collapse text-[13px]">
+          <colgroup>
+            <col className="w-[22%]" />
+            <col className="w-[19%]" />
+            <col className="w-[19%]" />
+            <col className="w-[25%]" />
+            <col className="w-[15%]" />
+          </colgroup>
+          <thead>
+            <tr className="bg-bg-sunken">
+              {["Indicador", `Meta (${code})`, "Realizado", "Nova Meta (Próxima Quinzena)", "Resultado"].map((h, i) => (
+                <th key={h} className={cn("px-3 py-2 font-bold", i === 0 ? "text-left" : "border-l border-line text-center")}>
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.key} className="border-t border-line">
+                <td className="px-3 py-2">{rowName(r)}</td>
+                <td className="border-l border-line px-3 py-2 text-center">{goalCell(r, "cur")}</td>
+                <td className="border-l border-line px-3 py-2 text-center" title={r.source ? `${r.source}${r.detail ? ` · ${r.detail}` : ""}` : undefined}>
+                  {formatCompact(r.value, r.unit)}
+                </td>
+                <td className="border-l border-line px-3 py-2 text-center">{goalCell(r, "next")}</td>
+                <td className="border-l border-line px-3 py-2 text-center">
+                  <ResultIcon status={r.status} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 }
 
 /* ---------- observações ---------- */
@@ -390,66 +544,72 @@ function Notes({ period, initial }: { period: string; initial: string }) {
   const [pending, startTransition] = useTransition();
   const dirty = text !== initial;
   return (
-    <Card>
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <div>
-          <CardTitle>Observações e conclusões executivas</CardTitle>
-          <CardSubtitle>Entram no relatório como estão escritas aqui.</CardSubtitle>
+    <div className="rounded-2xl border border-line bg-bg-elev p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-2.5">
+          <Info className="mt-0.5 size-[18px] shrink-0" />
+          <div>
+            <div className="text-sm font-bold">Observações e conclusões executivas</div>
+            <p className="text-xs text-fg-mut">Registre aqui os principais resultados, riscos e próximos passos da quinzena.</p>
+          </div>
         </div>
-        <Button
-          size="sm"
-          disabled={!dirty || pending}
-          onClick={() =>
-            startTransition(async () => {
-              const r = await saveNotesAction({ period, notes: text });
-              if (!r.ok) return toast("error", r.error);
-              toast("success", "Observações salvas.");
-              router.refresh();
-            })
-          }
-        >
-          {pending ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />} Salvar
-        </Button>
+        {dirty && (
+          <Button
+            size="sm"
+            disabled={pending}
+            onClick={() =>
+              startTransition(async () => {
+                const r = await saveTextsAction({ period, notes: text });
+                if (!r.ok) return toast("error", r.error);
+                toast("success", "Observações salvas.");
+                router.refresh();
+              })
+            }
+          >
+            {pending ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />} Salvar
+          </Button>
+        )}
       </div>
-      <Textarea rows={7} value={text} onChange={(e) => setText(e.target.value)} placeholder="Principais resultados, riscos e próximos passos da quinzena…" />
-    </Card>
+      <Textarea rows={4} className="mt-3" value={text} onChange={(e) => setText(e.target.value)} placeholder="Principais resultados, riscos e próximos passos…" />
+    </div>
   );
 }
 
 /* ---------- histórico de relatórios ---------- */
 
 function ReportHistory({ reports }: { reports: GeneratedReportItem[] }) {
+  const linkCls = "inline-flex items-center gap-1.5 rounded-full border border-line-strong px-3 py-1.5 text-xs font-semibold hover:border-accent hover:text-accent";
   return (
-    <Card padded={false}>
-      <div className="p-6 pb-3">
-        <CardTitle>Relatórios gerados</CardTitle>
-        <CardSubtitle>Cada relatório guarda os números, metas e observações do momento em que foi gerado.</CardSubtitle>
+    <div className="rounded-2xl border border-line bg-bg-elev">
+      <div className="p-5 pb-3">
+        <div className="text-sm font-bold">Versões finais geradas</div>
+        <p className="text-xs text-fg-mut">Cada versão guarda os números, metas e textos do momento em que foi gerada.</p>
       </div>
       {reports.length === 0 ? (
-        <p className="px-6 pb-6 text-sm text-fg-mut">Nenhum relatório gerado ainda.</p>
+        <p className="px-5 pb-5 text-sm text-fg-mut">Nenhuma versão final ainda. Use Compartilhar → Concluir.</p>
       ) : (
         <ul className="divide-y divide-line">
           {reports.map((r) => (
-            <li key={r.id} className="flex flex-col gap-2 px-6 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <li key={r.id} className="flex flex-col gap-2 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <div className="text-sm font-semibold">{r.label}</div>
                 <div className="text-xs text-fg-mut">
-                  Gerado em {fmtTs(r.createdAt)}
-                  {r.trigger === "cron" ? " · automático" : ""}
+                  Gerada em {fmtTs(r.createdAt)}
+                  {r.trigger === "cron" ? " · automática" : ""}
                 </div>
               </div>
               <div className="flex gap-2">
                 <a className={linkCls} href={`/api/product-report/export?format=html&report=${encodeURIComponent(r.id)}`} target="_blank" rel="noopener">
-                  <FileText className="size-4" /> HTML
+                  <FileText className="size-3.5" /> HTML
                 </a>
                 <a className={linkCls} href={`/api/product-report/export?format=pdf&report=${encodeURIComponent(r.id)}`}>
-                  <FileDown className="size-4" /> PDF
+                  <FileDown className="size-3.5" /> PDF
                 </a>
               </div>
             </li>
           ))}
         </ul>
       )}
-    </Card>
+    </div>
   );
 }

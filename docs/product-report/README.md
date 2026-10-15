@@ -24,17 +24,36 @@ Nenhuma permissão, papel ou módulo existente foi alterado.
 
 ## Como usar
 
-1. **Fontes de dados** (no fim da página): escolha o projeto da Luumu de cada plataforma. A lista
-   mostra só os projetos que a sua conta enxerga.
-2. Escolha a **quinzena** no topo. Por padrão a página abre na última quinzena encerrada.
-3. **Atualizar indicadores**: busca os números da quinzena na Luumu e registra a data e hora.
-4. Revise os **pontos de atenção** (dados ausentes, coleta incompleta, atualização antiga ou com falha).
-5. **Editar metas**: a "Meta" vale para a quinzena aberta e a "Nova meta" para a seguinte. Meta
-   vazia herda a última definida, como na planilha.
-6. Escreva as **observações e conclusões executivas**.
-7. **Revisar HTML** abre o relatório para conferir. **PDF** baixa o arquivo.
-8. **Gerar relatório** congela números, metas e observações no histórico. Os relatórios gerados
-   continuam disponíveis em HTML e PDF mesmo que os dados mudem depois.
+A tela é o próprio report, no layout de referência da área: cabeçalho com período e status,
+mensagem de abertura, **1. Resumo dos Indicadores** (tabelas de Gestão de Produto, GenieX,
+Exploradores e Educadores), **2. Evolução dos Indicadores** (6 gráficos) e **Observações e
+conclusões executivas**. O HTML e o PDF exportados saem com o mesmo layout, e os gráficos são
+literalmente os mesmos (`lib/product-report/charts.ts` gera o SVG da tela e do HTML e as
+primitivas que o PDF desenha).
+
+1. Escolha a **quinzena** no seletor do topo. Por padrão a página abre na última quinzena encerrada.
+2. **Editar** liga o modo de edição:
+   - a "Meta" vale para a quinzena aberta e a "Nova Meta" para a seguinte; meta vazia herda a
+     última definida, como na planilha;
+   - a mensagem de abertura fica editável (sem texto, vale "Fala pessoal, boa tarde. Segue o report
+     referente ao Qx do mês de …");
+   - aparece o painel **Dados, fontes e histórico**: atualizar indicadores, projeto de cada
+     plataforma, pesos, atualização automática, valores informados e versões finais. Nada desse
+     painel entra no report exportado.
+3. Se houver **pontos de atenção** nos dados (ausentes, coleta incompleta, atualização antiga ou
+   com falha), uma faixa aparece acima do report com o botão "Atualizar indicadores".
+4. As **observações** são editadas direto no quadro do fim da página.
+5. **Exportar HTML** e **Exportar PDF** baixam o report como está agora.
+6. **Compartilhar**:
+   - "Concluir e gerar versão final" congela números, metas e textos no histórico e muda o status
+     para **Concluído**;
+   - "Copiar resumo em texto" copia um resumo para colar no e-mail ou no Slack;
+   - "Abrir versão para envio" abre o HTML para imprimir ou anexar.
+
+   Não existe link público: o report continua restrito à conta autorizada.
+
+Status do report: **Concluído** (há versão final da quinzena), **Em revisão** (quinzena encerrada,
+sem versão final) ou **Em andamento** (quinzena aberta).
 
 **Valores informados** cobrem só o que a Luumu não mediu numa quinzena (por exemplo, antes da
 coleta de analytics existir). O dado da Luumu sempre tem prioridade, e o relatório mostra a origem

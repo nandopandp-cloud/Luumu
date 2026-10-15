@@ -18,7 +18,7 @@ const fullSync = (createdAt: string, over: Partial<SyncSnapshot["values"]> = {})
   },
 });
 
-const stored = (period: string, p: Partial<StoredPeriod> = {}): StoredPeriod => ({ period, goals: {}, manual: {}, notes: "", updatedAt: "2026-10-01T00:00:00.000Z", ...p });
+const stored = (period: string, p: Partial<StoredPeriod> = {}): StoredPeriod => ({ period, goals: {}, manual: {}, intro: "", notes: "", updatedAt: "2026-10-01T00:00:00.000Z", ...p });
 
 const GOALS = { "ns.csat": 95, "ns.adherence": 50, "ns.usage": 15 };
 
@@ -115,6 +115,24 @@ test("quinzena histórica toda informada: aviso de origem em vez de pedir atuali
   const m = buildReportModel({ period: "2026-09-2", stored: [stored("2026-09-2", { goals: GOALS, manual })], syncs: {}, weights: DEFAULT_WEIGHTS, now: NOW });
   assert.deepEqual(m.alerts, [{ tone: "info", text: "Todos os números desta quinzena vêm de valores informados (planilha ou manual), não da Luumu." }]);
   assert.ok(Math.abs(m.northStar.value! - 98.83578947) < 1e-6);
+});
+
+test("média anual da North Star usa as quinzenas do ano com valor", () => {
+  const m = buildReportModel({
+    period: "2026-10-1",
+    stored: [stored("2026-01-1", { goals: GOALS })],
+    syncs: { "2026-10-1": fullSync("2026-10-16T10:00:00Z"), "2026-09-2": fullSync("2026-10-01T10:00:00Z", { "geniex.adherence": { value: 55 } }) },
+    weights: DEFAULT_WEIGHTS,
+    now: NOW,
+  });
+  // só out/1 e set/2 têm dados no ano
+  const expected = (m.history.at(-1)!.values.northstar! + m.history.at(-2)!.values.northstar!) / 2;
+  assert.ok(Math.abs(m.yearAverage! - expected) < 1e-9);
+  assert.equal(m.code, "Q1/10");
+  assert.equal(m.title, "Q1 Outubro");
+  assert.equal(m.datesShort, "01/10 a 15/10");
+  assert.equal(m.history.at(-1)!.tick, "01/Out");
+  assert.equal(m.northStar.unit, "%");
 });
 
 test("quinzena em andamento é sinalizada", () => {

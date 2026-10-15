@@ -82,6 +82,42 @@ export function periodDates(id: PeriodId): string {
   return `${fmt(from)} a ${fmt(last)}`;
 }
 
+/** "Q2/09" (notação do report de referência) */
+export function periodCode(id: PeriodId): string {
+  const p = parsePeriod(id);
+  return p ? `Q${p.half}/${pad(p.month)}` : id;
+}
+
+/** "Q2 Setembro" (títulos dos gráficos) */
+export function periodTitle(id: PeriodId): string {
+  const p = parsePeriod(id);
+  if (!p) return id;
+  const m = MONTHS_LONG[p.month - 1];
+  return `Q${p.half} ${m[0].toUpperCase()}${m.slice(1)}`;
+}
+
+/** "16/Jun": início da quinzena, eixo X dos gráficos */
+export function periodTick(id: PeriodId): string {
+  const p = parsePeriod(id);
+  if (!p) return id;
+  const m = MONTHS[p.month - 1];
+  return `${p.half === 1 ? "01" : "16"}/${m[0].toUpperCase()}${m.slice(1)}`;
+}
+
+/** "16/09 a 30/09" */
+export function periodDatesShort(id: PeriodId): string {
+  const { from, to } = periodRange(id);
+  const fmt = (d: Date) => d.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit" });
+  return `${fmt(from)} a ${fmt(new Date(to.getTime() - 1))}`;
+}
+
+/** Quinzenas do ano de `last`, de 1ª de janeiro até `last` (média anual da North Star). */
+export function yearPeriodsUntil(last: PeriodId): PeriodId[] {
+  const p = parsePeriod(last);
+  if (!p) return [];
+  return periodsUntil(last, (p.month - 1) * 2 + p.half);
+}
+
 /** As `count` quinzenas que terminam em `last` (inclusive), da mais antiga para a mais nova. */
 export function periodsUntil(last: PeriodId, count: number): PeriodId[] {
   return Array.from({ length: count }, (_, i) => shiftPeriod(last, i - count + 1));

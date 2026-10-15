@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { productReportApiSession } from "@/lib/product-report/access";
-import { getGeneratedReport } from "@/lib/db/product-report";
+import { getGeneratedReport, listGeneratedReports } from "@/lib/db/product-report";
+import { getUserById } from "@/lib/db/users";
+import { reportStatus, type ReportStatus } from "@/lib/product-report/html";
 import { loadReportModel } from "@/lib/product-report/load";
 import { parsePeriod } from "@/lib/product-report/period";
 import { renderReportHtml } from "@/lib/product-report/render-html";
@@ -28,28 +30,32 @@ export async function GET(req: Request) {
 
   let model: ReportModel;
   let generatedAt: string;
+  let status: ReportStatus;
   if (reportId) {
     // o workspace no filtro impede ler relatório de outro workspace pelo id
     const run = await getGeneratedReport(session.workspaceId, reportId);
     if (!run) return NextResponse.json({ error: "Relatório não encontrado." }, { status: 404 });
     model = (run.data as { model: ReportModel }).model;
     generatedAt = run.createdAt.toISOString();
+    status = "concluido";
   } else {
     if (!parsePeriod(period)) return NextResponse.json({ error: "Quinzena inválida." }, { status: 400 });
-    model = await loadReportModel(session.workspaceId, period!);
+    const [me, reports] = await Promise.all([getUserById(session.userId), listGeneratedReports(session.workspaceId)]);
+    model = await loadReportModel(session.workspaceId, period!, { author: me ? { name: me.name, avatarUrl: me.avatarUrl } : null });
     generatedAt = new Date().toISOString();
+    status = reportStatus(model.closed, reports.some((r) => r.period === period));
   }
 
   const base = `report-quinzenal-produto-${model.period}`;
   const headers = { "Cache-Control": "no-store", "X-Robots-Tag": "noindex" };
 
   if (format === "pdf") {
-    const buf = await renderReportPdf(model, { generatedAt });
+    const buf = await renderReportPdf(model, { generatedAt, status });
     return new NextResponse(new Uint8Array(buf), {
       headers: { ...headers, "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="${base}.pdf"` },
     });
   }
-  const html = renderReportHtml(model, { generatedAt });
+  const html = renderReportHtml(model, { generatedAt, status });
   return new NextResponse(html, {
     headers: {
       ...headers,

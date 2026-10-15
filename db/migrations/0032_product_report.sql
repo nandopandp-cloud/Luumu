@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS "product_report_periods" (
   "period" text NOT NULL,
   "goals" jsonb DEFAULT '{}'::jsonb NOT NULL,
   "manual" jsonb DEFAULT '{}'::jsonb NOT NULL,
+  "intro" text DEFAULT '' NOT NULL,
   "notes" text DEFAULT '' NOT NULL,
   "updated_by" text REFERENCES "users"("id") ON DELETE set null,
   "updated_at" timestamp with time zone DEFAULT now() NOT NULL,

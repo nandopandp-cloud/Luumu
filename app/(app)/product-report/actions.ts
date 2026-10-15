@@ -9,6 +9,7 @@ import { loadReportModel } from "@/lib/product-report/load";
 import { parsePeriod } from "@/lib/product-report/period";
 import { isGoalKey, isPlatformIndicatorKey, METRICS, PLATFORM_KEYS } from "@/lib/product-report/indicators";
 import { insertRun, listStoredPeriods, saveProductReportSettings, saveStoredPeriod } from "@/lib/db/product-report";
+import { getUserById } from "@/lib/db/users";
 
 /*
   Toda action começa pelo guard do módulo: chamar a action direto (sem passar pela página)
@@ -82,13 +83,19 @@ export async function saveManualAction(input: unknown): Promise<Result> {
   return { ok: true };
 }
 
-const notesSchema = z.object({ period, notes: z.string().max(20_000, "Texto longo demais.") });
+const textsSchema = z.object({
+  period,
+  intro: z.string().max(5_000, "Mensagem longa demais.").optional(),
+  notes: z.string().max(20_000, "Texto longo demais.").optional(),
+});
 
-export async function saveNotesAction(input: unknown): Promise<Result> {
+/** Mensagem de abertura e/ou observações executivas da quinzena. */
+export async function saveTextsAction(input: unknown): Promise<Result> {
   const session = await requireProductReportAccess();
-  const parsed = notesSchema.safeParse(input);
+  const parsed = textsSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
-  await saveStoredPeriod(session.workspaceId, session.userId, parsed.data.period, { notes: parsed.data.notes });
+  const { period: p, ...texts } = parsed.data;
+  await saveStoredPeriod(session.workspaceId, session.userId, p, texts);
   revalidatePath(PATH);
   return { ok: true };
 }
@@ -121,7 +128,8 @@ export async function generateReportAction(input: unknown): Promise<Result> {
   const session = await requireProductReportAccess();
   const parsed = period.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Quinzena inválida." };
-  const model = await loadReportModel(session.workspaceId, parsed.data);
+  const me = await getUserById(session.userId);
+  const model = await loadReportModel(session.workspaceId, parsed.data, { author: me ? { name: me.name, avatarUrl: me.avatarUrl } : null });
   const run = await insertRun({
     workspaceId: session.workspaceId,
     period: parsed.data,

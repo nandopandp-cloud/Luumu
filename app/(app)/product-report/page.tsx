@@ -1,10 +1,11 @@
-import { PageHeader } from "@/components/ui/PageHeader";
 import { ProductReportView } from "@/components/product-report/ProductReportView";
 import { requireProductReportAccess } from "@/lib/product-report/access";
 import { getVisibleProjects } from "@/lib/auth/current";
+import { getUserById } from "@/lib/db/users";
 import { getProductReportSettings, listGeneratedReports } from "@/lib/db/product-report";
 import { loadReportModel } from "@/lib/product-report/load";
-import { lastClosedPeriod, parsePeriod, periodLabel, periodOf, periodsUntil } from "@/lib/product-report/period";
+import { reportStatus } from "@/lib/product-report/html";
+import { lastClosedPeriod, parsePeriod, periodCode, periodDatesShort, periodLabel, periodOf, periodsUntil } from "@/lib/product-report/period";
 
 export const dynamic = "force-dynamic";
 
@@ -17,8 +18,10 @@ export default async function ProductReportPage({ searchParams }: { searchParams
   // padrão: a última quinzena encerrada, que é a que o report cobre
   const period = parsePeriod(raw) ? raw! : lastClosedPeriod();
 
+  const me = await getUserById(session.userId);
+  const author = { name: me?.name ?? session.name, avatarUrl: me?.avatarUrl ?? null };
   const [model, settings, projects, reports] = await Promise.all([
-    loadReportModel(session.workspaceId, period),
+    loadReportModel(session.workspaceId, period, { author }),
     getProductReportSettings(session.workspaceId),
     getVisibleProjects(),
     listGeneratedReports(session.workspaceId),
@@ -29,19 +32,13 @@ export default async function ProductReportPage({ searchParams }: { searchParams
   if (!options.includes(period)) options.push(period);
 
   return (
-    <div>
-      <PageHeader
-        eyebrow="Inteligência"
-        title="Report Quinzenal de Produto"
-        description="North Star e indicadores de GenieX, Exploradores e Educadores: metas, resultados e evolução por quinzena."
-      />
-      <ProductReportView
-        model={model}
-        periodOptions={options.map((p) => ({ value: p, label: periodLabel(p) + (p === current ? " (em andamento)" : "") }))}
-        settings={{ platformProjects: settings.platformProjects, weights: settings.weights, autoSync: settings.autoSync }}
-        projects={projects.map((p) => ({ id: p.id, name: p.name }))}
-        reports={reports.map((r) => ({ ...r, label: periodLabel(r.period) }))}
-      />
-    </div>
+    <ProductReportView
+      model={model}
+      status={reportStatus(model.closed, reports.some((r) => r.period === period))}
+      periodOptions={options.map((p) => ({ value: p, label: `${periodCode(p)} · ${periodDatesShort(p).replace(" a ", " - ")}${p === current ? " (em andamento)" : ""}` }))}
+      settings={{ platformProjects: settings.platformProjects, weights: settings.weights, autoSync: settings.autoSync }}
+      projects={projects.map((p) => ({ id: p.id, name: p.name }))}
+      reports={reports.map((r) => ({ ...r, label: periodLabel(r.period) }))}
+    />
   );
 }
