@@ -3,7 +3,7 @@ import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { db } from "./client";
 import { productReportPeriods, productReportRuns, productReportSettings } from "@/db/schema";
 import { newId } from "./ids";
-import { DEFAULT_WEIGHTS, isGoalKey, isPlatformIndicatorKey, METRICS, PLATFORM_KEYS, type PlatformKey, type Weights } from "@/lib/product-report/indicators";
+import { DEFAULT_WEIGHTS, isGoalKey, METRICS, PLATFORM_KEYS, type PlatformKey, type Weights } from "@/lib/product-report/indicators";
 import type { ManualValue, StoredPeriod, SyncSnapshot } from "@/lib/product-report/model";
 import type { PeriodId } from "@/lib/product-report/period";
 
@@ -60,9 +60,9 @@ export async function listAutoSyncWorkspaces(): Promise<(ProductReportSettings &
 function parsePeriodRow(r: typeof productReportPeriods.$inferSelect): StoredPeriod {
   const goals = Object.fromEntries(Object.entries((r.goals ?? {}) as Record<string, unknown>).filter(([k, v]) => isGoalKey(k) && isNum(v)));
   const manual = Object.fromEntries(
-    Object.entries((r.manual ?? {}) as Record<string, ManualValue>).filter(
-      ([k, v]) => isPlatformIndicatorKey(k) && v && isNum(v.value) && (v.source === "manual" || v.source === "planilha")
-    )
+    Object.entries((r.manual ?? {}) as Record<string, ManualValue>)
+      .filter(([k, v]) => isGoalKey(k) && v && isNum(v.value) && (v.source === "manual" || v.source === "planilha"))
+      .map(([k, v]) => [k, { value: v.value, source: v.source, ...(isNum(v.planilha) ? { planilha: v.planilha } : {}) }])
   );
   return { period: r.period, goals, manual, intro: r.intro, notes: r.notes, updatedAt: r.updatedAt.toISOString() };
 }

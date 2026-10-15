@@ -35,16 +35,23 @@ primitivas que o PDF desenha).
 2. **Editar** liga o modo de edição:
    - a "Meta" vale para a quinzena aberta e a "Nova Meta" para a seguinte; meta vazia herda a
      última definida, como na planilha;
+   - o **Realizado** fica editável: o valor digitado vale sobre o que a Luumu puxou (fica marcado
+     com ✎ na tela, com o automático no tooltip); campo vazio volta ao automático;
+   - cada gráfico ganha **Editar valores do gráfico**, com as 8 quinzenas exibidas: preencha para
+     ajustar ou completar um ponto (vale também nas tabelas e na North Star daquela quinzena);
    - a mensagem de abertura fica editável (sem texto, vale "Fala pessoal, boa tarde. Segue o report
      referente ao Qx do mês de …");
    - aparece o painel **Dados, fontes e histórico**: atualizar indicadores, projeto de cada
-     plataforma, pesos, atualização automática, valores informados e versões finais. Nada desse
+     plataforma, pesos, atualização automática e versões finais. Nada desse
      painel entra no report exportado.
 3. Se houver **pontos de atenção** nos dados (ausentes, coleta incompleta, atualização antiga ou
    com falha), uma faixa aparece acima do report com o botão "Atualizar indicadores".
 4. As **observações** são editadas direto no quadro do fim da página.
 5. **Exportar HTML** e **Exportar PDF** baixam o report como está agora.
 6. **Compartilhar**:
+   - "Copiar para o corpo do e-mail" copia o report no mesmo layout (tabelas com ✅/❌ e os
+     gráficos como imagem) para colar direto no Gmail ou Outlook; "Baixar versão para e-mail" salva
+     o mesmo conteúdo num .html;
    - "Concluir e gerar versão final" congela números, metas e textos no histórico e muda o status
      para **Concluído**;
    - "Copiar resumo em texto" copia um resumo para colar no e-mail ou no Slack;
@@ -55,9 +62,10 @@ primitivas que o PDF desenha).
 Status do report: **Concluído** (há versão final da quinzena), **Em revisão** (quinzena encerrada,
 sem versão final) ou **Em andamento** (quinzena aberta).
 
-**Valores informados** cobrem só o que a Luumu não mediu numa quinzena (por exemplo, antes da
-coleta de analytics existir). O dado da Luumu sempre tem prioridade, e o relatório mostra a origem
-de cada número.
+**Origem de cada número**, nesta ordem: o seu ajuste manual → o dado da Luumu → a planilha
+histórica (que só cobre o que a Luumu não mediu). Ajustes valem em qualquer nível: plataforma,
+média consolidada (CSAT/Tempo de uso nos gráficos) ou a própria North Star. Desfazer um ajuste
+feito sobre um valor da planilha volta ao valor da planilha.
 
 ## Indicadores e fórmulas
 

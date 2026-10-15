@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { AlertTriangle, CalendarRange, Check, ChevronRight, ClipboardCopy, FileDown, FileText, Info, Loader2, Pencil, RefreshCw, Share2, X, XCircle } from "lucide-react";
+import { AlertTriangle, CalendarRange, Check, ChevronRight, ClipboardCopy, FileDown, FileText, Info, Loader2, Mail, Pencil, RefreshCw, Share2, SlidersHorizontal, X, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, Textarea } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
@@ -12,10 +12,11 @@ import { cn } from "@/lib/utils";
 import { formatCompact, type GoalKey, type GoalStatus } from "@/lib/product-report/indicators";
 import { shiftPeriod, periodCode } from "@/lib/product-report/period";
 import type { IndicatorRow, ReportModel } from "@/lib/product-report/model";
-import { buildCharts, chartCardHtml } from "@/lib/product-report/charts";
+import { buildCharts, chartCardHtml, type ChartSpec } from "@/lib/product-report/charts";
 import { formatLongTs, introText, REPORT_STATUS, type ReportStatus } from "@/lib/product-report/html";
 import { GROUP_STYLE, rowName } from "@/lib/product-report/render-html";
-import { generateReportAction, saveGoalsAction, saveTextsAction, syncAction } from "@/app/(app)/product-report/actions";
+import { generateReportAction, saveGoalsAction, saveManualAction, saveTextsAction, syncAction } from "@/app/(app)/product-report/actions";
+import { buildEmailHtml, copyRichHtml, emailDocument } from "./email-export";
 import { ProductReportSettings, type SettingsValue } from "./ProductReportSettings";
 
 export interface GeneratedReportItem {
@@ -26,7 +27,8 @@ export interface GeneratedReportItem {
   trigger: string;
 }
 
-type Drafts = { cur: Record<string, string>; next: Record<string, string> };
+/** Rascunhos do modo Editar: meta da quinzena, nova meta e realizado ajustado. */
+type Drafts = { cur: Record<string, string>; next: Record<string, string>; real: Record<string, string> };
 
 const fmtTs = (iso: string) => new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 const toText = (v: number | null) => (v === null ? "" : String(v).replace(".", ","));
@@ -69,6 +71,8 @@ export function ProductReportView({
   const initial = (): Drafts => ({
     cur: Object.fromEntries(rows.map((r) => [r.key, toText(ownGoal(r, "cur"))])),
     next: Object.fromEntries(rows.map((r) => [r.key, toText(ownGoal(r, "next"))])),
+    // só o que você ajustou aparece preenchido; vazio = valor automático (Luumu/planilha)
+    real: Object.fromEntries(rows.map((r) => [r.key, r.overridden ? toText(r.value) : ""])),
   });
   const [editing, setEditing] = useState(false);
   const [drafts, setDrafts] = useState<Drafts>(initial);
@@ -95,13 +99,20 @@ export function ProductReportView({
         return out;
       };
       let cur, next;
+      const real: Partial<Record<GoalKey, number | null>> = {};
       try {
         cur = diff("cur");
         next = diff("next");
+        for (const r of rows) {
+          const v = parseNum(drafts.real[r.key]);
+          if (v === undefined) throw new Error(`Valor inválido em ${r.label}.`);
+          if (v !== (r.overridden ? r.value : null)) real[r.key] = v;
+        }
       } catch (e) {
         return toast("error", (e as Error).message);
       }
       const calls = [];
+      if (Object.keys(real).length) calls.push(saveManualAction({ period: model.period, values: real }));
       if (Object.keys(cur).length) calls.push(saveGoalsAction({ period: model.period, goals: cur }));
       if (Object.keys(next).length) calls.push(saveGoalsAction({ period: shiftPeriod(model.period, 1), goals: next }));
       if (intro !== model.intro) calls.push(saveTextsAction({ period: model.period, intro }));
@@ -165,7 +176,10 @@ export function ProductReportView({
         {/* mesmo cartão do HTML/PDF exportado (lib/product-report/charts.ts): o que se vê aqui é o que sai no arquivo */}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {charts.map((c) => (
-            <div key={c.id} dangerouslySetInnerHTML={{ __html: chartCardHtml(c) }} />
+            <div key={c.id} className="flex flex-col gap-2">
+              <div dangerouslySetInnerHTML={{ __html: chartCardHtml(c) }} />
+              {editing && <ChartEditor key={`${c.id}:${model.builtAt}`} spec={c} model={model} />}
+            </div>
           ))}
         </div>
       </section>
@@ -179,7 +193,7 @@ export function ProductReportView({
             <p className="text-xs text-fg-mut">Visível só no modo de edição. Nada daqui aparece no report exportado.</p>
           </div>
           <SyncCard model={model} />
-          <ProductReportSettings model={model} settings={settings} projects={projects} />
+          <ProductReportSettings settings={settings} projects={projects} />
           <ReportHistory reports={reports} />
         </section>
       )}
@@ -308,6 +322,42 @@ function ShareButton({ model, status }: { model: ReportModel; status: ReportStat
       router.refresh();
     });
 
+  const [emailBusy, setEmailBusy] = useState(false);
+  const copyEmail = async () => {
+    setEmailBusy(true);
+    try {
+      const html = await buildEmailHtml(model, status);
+      if (await copyRichHtml(html, summaryText(model))) {
+        toast("success", "Report copiado. Cole direto no corpo do e-mail (Cmd/Ctrl+V).");
+        setOpen(false);
+      } else {
+        // navegador sem cópia formatada: abre a versão de e-mail para copiar à mão
+        const w = window.open("", "_blank");
+        w?.document.write(emailDocument(html, `Report ${model.code}`));
+        w?.document.close();
+        toast("info", "Selecione tudo (Cmd/Ctrl+A), copie e cole no e-mail.");
+      }
+    } catch {
+      toast("error", "Não foi possível montar o report para e-mail.");
+    }
+    setEmailBusy(false);
+  };
+
+  const downloadEmail = async () => {
+    try {
+      const html = emailDocument(await buildEmailHtml(model, status), `Report ${model.code}`);
+      const href = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+      const a = document.createElement("a");
+      a.href = href;
+      a.download = `report-quinzenal-${model.period}-email.html`;
+      a.click();
+      URL.revokeObjectURL(href);
+      setOpen(false);
+    } catch {
+      toast("error", "Não foi possível montar o report para e-mail.");
+    }
+  };
+
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(summaryText(model));
@@ -325,7 +375,22 @@ function ShareButton({ model, status }: { model: ReportModel; status: ReportStat
         <Share2 className="size-4" /> Compartilhar
       </Button>
       {open && (
-        <div className="absolute right-0 top-full z-30 mt-2 w-72 rounded-xl border border-line bg-bg-elev p-1.5 shadow-[var(--shadow-lg)]">
+        <div className="absolute right-0 top-full z-30 mt-2 w-80 rounded-xl border border-line bg-bg-elev p-1.5 shadow-[var(--shadow-lg)]">
+          <button className={item} onClick={copyEmail} disabled={emailBusy}>
+            {emailBusy ? <Loader2 className="mt-0.5 size-4 animate-spin text-accent" /> : <Mail className="mt-0.5 size-4 text-accent" />}
+            <span>
+              <span className="block font-semibold">Copiar para o corpo do e-mail</span>
+              <span className="block text-xs text-fg-mut">Mesmo layout, com tabelas e gráficos. É só colar no Gmail ou Outlook.</span>
+            </span>
+          </button>
+          <button className={item} onClick={downloadEmail}>
+            <FileDown className="mt-0.5 size-4 text-accent" />
+            <span>
+              <span className="block font-semibold">Baixar versão para e-mail</span>
+              <span className="block text-xs text-fg-mut">Arquivo .html no formato de e-mail.</span>
+            </span>
+          </button>
+          <div className="my-1 h-px bg-line" />
           <button className={item} onClick={finalize} disabled={pending}>
             {pending ? <Loader2 className="mt-0.5 size-4 animate-spin text-accent" /> : <Check className="mt-0.5 size-4 text-accent" />}
             <span>
@@ -471,7 +536,7 @@ function SummaryTable({
   code: string;
   editing: boolean;
   drafts: Drafts;
-  onDraft: (which: "cur" | "next", key: string, v: string) => void;
+  onDraft: (which: keyof Drafts, key: string, v: string) => void;
 }) {
   const st = GROUP_STYLE[group.key];
   // Gestão de Produto mostra só a North Star, como na referência
@@ -520,7 +585,25 @@ function SummaryTable({
                 <td className="px-3 py-2">{rowName(r)}</td>
                 <td className="border-l border-line px-3 py-2 text-center">{goalCell(r, "cur")}</td>
                 <td className="border-l border-line px-3 py-2 text-center" title={r.source ? `${r.source}${r.detail ? ` · ${r.detail}` : ""}` : undefined}>
-                  {formatCompact(r.value, r.unit)}
+                  {editing ? (
+                    <Input
+                      value={drafts.real[r.key]}
+                      placeholder={formatCompact(r.auto, r.unit)}
+                      title={`Vazio usa o valor automático (${formatCompact(r.auto, r.unit)})`}
+                      inputMode="decimal"
+                      onChange={(e) => onDraft("real", r.key, e.target.value)}
+                      className={cn("mx-auto w-24 px-2 py-1 text-center", drafts.real[r.key] && "border-accent")}
+                    />
+                  ) : (
+                    <>
+                      {formatCompact(r.value, r.unit)}
+                      {r.overridden && (
+                        <sup className="ml-0.5 text-[10px] font-bold text-accent" title={`Ajustado manualmente · automático: ${formatCompact(r.auto, r.unit)}`}>
+                          ✎
+                        </sup>
+                      )}
+                    </>
+                  )}
                 </td>
                 <td className="border-l border-line px-3 py-2 text-center">{goalCell(r, "next")}</td>
                 <td className="border-l border-line px-3 py-2 text-center">
@@ -610,6 +693,77 @@ function ReportHistory({ reports }: { reports: GeneratedReportItem[] }) {
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+/* ---------- valores manuais nos gráficos ---------- */
+
+/**
+ * Ajuste dos pontos de um gráfico, quinzena a quinzena. Vazio = valor automático (Luumu ou
+ * planilha); preenchido = ajuste manual, que vale também nas tabelas e na North Star da quinzena.
+ */
+function ChartEditor({ spec, model }: { spec: ChartSpec; model: ReportModel }) {
+  const router = useRouter();
+  const toast = useToast();
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<Record<string, string>>(() =>
+    Object.fromEntries(model.history.map((h) => [h.period, toText(h.overrides[spec.key] ?? null)]))
+  );
+  const [pending, startTransition] = useTransition();
+
+  const save = () =>
+    startTransition(async () => {
+      const changes: { period: string; value: number | null }[] = [];
+      for (const h of model.history) {
+        const v = parseNum(draft[h.period]);
+        if (v === undefined) return toast("error", `Valor inválido em ${h.tick}.`);
+        if (v !== (h.overrides[spec.key] ?? null)) changes.push({ period: h.period, value: v });
+      }
+      if (!changes.length) return toast("info", "Nada mudou.");
+      const res = await Promise.all(changes.map((c) => saveManualAction({ period: c.period, values: { [spec.key]: c.value } })));
+      const err = res.find((r) => !r.ok);
+      if (err && !err.ok) return toast("error", err.error);
+      toast("success", "Valores do gráfico salvos.");
+      setOpen(false);
+      router.refresh();
+    });
+
+  if (!open)
+    return (
+      <button className="flex items-center gap-1.5 self-start rounded-full border border-dashed border-accent/50 px-3 py-1 text-xs font-semibold text-accent hover:bg-surface-brand" onClick={() => setOpen(true)}>
+        <SlidersHorizontal className="size-3.5" /> Editar valores do gráfico
+      </button>
+    );
+
+  return (
+    <div className="rounded-xl border border-dashed border-accent/50 bg-bg-elev p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className="text-xs font-semibold">Valores manuais ({spec.unit === "min" ? "minutos" : "%"}) · vazio usa o automático</span>
+        <div className="flex gap-1.5">
+          <Button variant="ghost" size="sm" onClick={() => setOpen(false)} disabled={pending}>
+            Cancelar
+          </Button>
+          <Button size="sm" onClick={save} disabled={pending}>
+            {pending ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />} Salvar
+          </Button>
+        </div>
+      </div>
+      <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
+        {model.history.map((h) => (
+          <label key={h.period} className="flex flex-col gap-1 text-center">
+            <span className="text-[10px] font-semibold text-fg-mut">{h.tick}</span>
+            <Input
+              value={draft[h.period]}
+              inputMode="decimal"
+              placeholder={formatCompact(h.auto[spec.key] ?? null, spec.unit).replace(/[%]| min/g, "")}
+              title={`Automático: ${formatCompact(h.auto[spec.key] ?? null, spec.unit)}`}
+              onChange={(e) => setDraft((d) => ({ ...d, [h.period]: e.target.value }))}
+              className={cn("px-1.5 py-1 text-center text-xs", draft[h.period] && "border-accent")}
+            />
+          </label>
+        ))}
+      </div>
     </div>
   );
 }

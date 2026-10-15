@@ -93,23 +93,29 @@ export function consolidate(values: PlatformValues, metric: Metric): { value: nu
   return { value, missing, platforms };
 }
 
-export function computeNorthStar(values: PlatformValues, targets: Targets, weights: Weights = DEFAULT_WEIGHTS): NorthStarResult {
+/** Ajustes manuais acima das plataformas: o consolidado de um componente ou a própria North Star. */
+export type NorthStarOverrides = Partial<Record<ComponentKey | typeof NORTH_STAR, number>>;
+
+export function computeNorthStar(values: PlatformValues, targets: Targets, weights: Weights = DEFAULT_WEIGHTS, overrides: NorthStarOverrides = {}): NorthStarResult {
   const components = METRICS.map((metric): NorthStarComponent => {
     const c = consolidate(values, metric);
+    // consolidado ajustado à mão substitui a média (e entra na North Star como tal)
+    const value = num(overrides[`ns.${metric}`]) ? (overrides[`ns.${metric}`] as number) : c.value;
     const target = targets[`ns.${metric}`] ?? null;
-    const normalized = num(c.value) && num(target) && target > 0 ? c.value / target : null;
+    const normalized = num(value) && num(target) && target > 0 ? value / target : null;
     return {
       metric,
       weight: weights[metric],
       target,
-      value: c.value,
+      value,
       normalized,
       result: normalized === null ? null : normalized * weights[metric],
       platforms: c.platforms,
       missing: c.missing,
     };
   });
-  const value = components.every((c) => c.result !== null) ? components.reduce((a, c) => a + (c.result as number), 0) : null;
+  const computed = components.every((c) => c.result !== null) ? components.reduce((a, c) => a + (c.result as number), 0) : null;
+  const value = num(overrides[NORTH_STAR]) ? (overrides[NORTH_STAR] as number) : computed;
   return { value, components };
 }
 

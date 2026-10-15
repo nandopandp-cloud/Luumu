@@ -48,13 +48,20 @@ export type ManualSource = "manual" | "planilha";
 export interface ManualValue {
   value: number;
   source: ManualSource;
+  /** ajuste feito sobre um valor da planilha: o original, para voltar a ele ao desfazer */
+  planilha?: number;
 }
 
 /** Linha de product_report_periods. */
 export interface StoredPeriod {
   period: PeriodId;
   goals: Targets;
-  manual: Partial<Record<PlatformIndicatorKey, ManualValue>>;
+  /**
+   * Valores informados. "manual" = ajuste seu: vale SOBRE o dado da Luumu (plataforma, média
+   * consolidada "ns.*" ou a própria "northstar"). "planilha" = histórico importado: só cobre o
+   * que a Luumu não mediu.
+   */
+  manual: Partial<Record<GoalKey, ManualValue>>;
   /** mensagem de abertura do report (ex.: "Fala pessoal, boa tarde. Segue o report…") */
   intro: string;
   notes: string;
@@ -79,6 +86,9 @@ export interface SyncSnapshot {
 
 export interface ResolvedValue {
   value: number | null;
+  /** o que valeria sem o seu ajuste (Luumu, ou planilha) */
+  auto: number | null;
+  overridden: boolean;
   source: string | null;
   updatedAt: string | null;
   detail?: string;
@@ -90,6 +100,10 @@ export interface IndicatorRow {
   label: string;
   unit: "%" | "min" | "pts";
   value: number | null;
+  /** valor automático (sem ajuste manual) */
+  auto: number | null;
+  /** o realizado foi ajustado à mão */
+  overridden: boolean;
   target: number | null;
   /** quinzena de onde a meta foi herdada (null = definida nesta) */
   targetFrom: PeriodId | null;
@@ -110,6 +124,10 @@ export interface HistoryPoint {
   /** "16/Jun": eixo X dos gráficos */
   tick: string;
   values: Partial<Record<GoalKey, number | null>>;
+  /** valores sem os ajustes manuais (placeholder do editor dos gráficos) */
+  auto: Partial<Record<GoalKey, number | null>>;
+  /** ajustes manuais da quinzena */
+  overrides: Partial<Record<GoalKey, number>>;
   targets: Partial<Record<GoalKey, number | null>>;
 }
 
@@ -149,22 +167,38 @@ export interface ReportModel {
   projects: SyncSnapshot["projects"];
 }
 
-const SOURCE_LABEL: Record<ManualSource, string> = { manual: "Informado manualmente", planilha: "Planilha North Star (histórico)" };
+const SOURCE_LABEL: Record<ManualSource, string> = { manual: "Ajustado manualmente", planilha: "Planilha North Star (histórico)" };
 
-/** Valores das plataformas numa quinzena, com a origem de cada um. */
+/** Ajustes manuais (source "manual") de uma quinzena. */
+export function overridesOf(stored: StoredPeriod | undefined): Partial<Record<GoalKey, number>> {
+  const out: Partial<Record<GoalKey, number>> = {};
+  for (const [k, v] of Object.entries(stored?.manual ?? {})) if (v?.source === "manual") out[k as GoalKey] = v.value;
+  return out;
+}
+
+/**
+ * Valores das plataformas numa quinzena, com a origem de cada um. Precedência:
+ * seu ajuste manual → dado da Luumu → planilha histórica. Sem nenhum, fica vazio.
+ */
 export function resolveValues(sync: SyncSnapshot | undefined, stored: StoredPeriod | undefined): Record<PlatformIndicatorKey, ResolvedValue> {
   const out = {} as Record<PlatformIndicatorKey, ResolvedValue>;
   for (const { key, metric } of PLATFORM_INDICATORS) {
     const c = sync?.status !== "error" ? sync?.values[key] : undefined;
     const m = stored?.manual[key];
+    let auto: ResolvedValue;
     if (c && typeof c.value === "number") {
-      out[key] = { value: c.value, source: METRIC_META[metric].source, updatedAt: sync!.createdAt, detail: c.detail, warnings: c.warnings ?? [] };
-    } else if (m) {
-      // o aviso da coleta explica por que a Luumu não tinha o dado; o valor informado o substitui
-      out[key] = { value: m.value, source: SOURCE_LABEL[m.source], updatedAt: stored!.updatedAt, warnings: [] };
+      auto = { value: c.value, auto: c.value, overridden: false, source: METRIC_META[metric].source, updatedAt: sync!.createdAt, detail: c.detail, warnings: c.warnings ?? [] };
+    } else if (m && (m.source === "planilha" || typeof m.planilha === "number")) {
+      // o aviso da coleta explica por que a Luumu não tinha o dado; o valor da planilha o substitui
+      const v = m.source === "planilha" ? m.value : (m.planilha as number);
+      auto = { value: v, auto: v, overridden: false, source: SOURCE_LABEL.planilha, updatedAt: stored!.updatedAt, warnings: [] };
     } else {
-      out[key] = { value: null, source: null, updatedAt: sync?.createdAt ?? null, warnings: c?.warnings ?? [] };
+      auto = { value: null, auto: null, overridden: false, source: null, updatedAt: sync?.createdAt ?? null, warnings: c?.warnings ?? [] };
     }
+    out[key] =
+      m?.source === "manual"
+        ? { value: m.value, auto: auto.value, overridden: true, source: SOURCE_LABEL.manual, updatedAt: stored!.updatedAt, detail: auto.detail, warnings: [] }
+        : auto;
   }
   return out;
 }
@@ -185,16 +219,24 @@ export function goalFor(key: GoalKey, period: PeriodId, byPeriod: Map<PeriodId, 
 }
 
 function pointFor(period: PeriodId, sync: SyncSnapshot | undefined, byPeriod: Map<PeriodId, StoredPeriod>, weights: Weights) {
-  const resolved = resolveValues(sync, byPeriod.get(period));
-  const platformValues: PlatformValues = Object.fromEntries(Object.entries(resolved).map(([k, v]) => [k, v.value]));
+  const stored = byPeriod.get(period);
+  const resolved = resolveValues(sync, stored);
+  const overrides = overridesOf(stored);
   const targets: Targets = {};
   for (const k of [NORTH_STAR, ...METRICS.map((m) => `ns.${m}` as const), ...PLATFORM_INDICATORS.map((i) => i.key)] as GoalKey[]) {
     targets[k] = goalFor(k, period, byPeriod).value;
   }
-  const ns = computeNorthStar(platformValues, targets, weights);
-  const values: HistoryPoint["values"] = { ...platformValues, [NORTH_STAR]: ns.value };
-  for (const c of ns.components) values[`ns.${c.metric}`] = c.value;
-  return { resolved, ns, values, targets };
+  const flatten = (ns: ReturnType<typeof computeNorthStar>, platform: PlatformValues) => {
+    const v: HistoryPoint["values"] = { ...platform, [NORTH_STAR]: ns.value };
+    for (const c of ns.components) v[`ns.${c.metric}`] = c.value;
+    return v;
+  };
+  const platformValues: PlatformValues = Object.fromEntries(Object.entries(resolved).map(([k, v]) => [k, v.value]));
+  const ns = computeNorthStar(platformValues, targets, weights, overrides);
+  // o mesmo cálculo sem nenhum ajuste manual: é o "automático" mostrado ao editar
+  const autoPlatform: PlatformValues = Object.fromEntries(Object.entries(resolved).map(([k, v]) => [k, v.auto]));
+  const auto = flatten(computeNorthStar(autoPlatform, targets, weights), autoPlatform);
+  return { resolved, ns, values: flatten(ns, platformValues), auto, overrides, targets };
 }
 
 export function buildReportModel(input: {
@@ -228,6 +270,8 @@ export function buildReportModel(input: {
       label: indicatorLabel(key),
       unit: unitOf(key),
       value,
+      auto: cur.auto[key] ?? null,
+      overridden: key in cur.overrides,
       target: t.value,
       targetFrom: t.from,
       nextTarget: n.value,
@@ -244,15 +288,19 @@ export function buildReportModel(input: {
 
   const platformRow = (key: PlatformIndicatorKey) => {
     const r = cur.resolved[key];
-    return row(key, r.value, { source: r.source, updatedAt: r.updatedAt, detail: r.detail, warnings: r.warnings });
+    return row(key, r.value, { source: r.source, updatedAt: r.updatedAt, detail: r.detail, warnings: r.warnings, overridden: r.overridden });
   };
 
   const derivedSource = "Calculado: fórmula da planilha North Star";
   const components = cur.ns.components.map((c) => ({
     ...c,
-    row: row(`ns.${c.metric}`, c.value, { label: `${METRIC_META[c.metric].label} (média das plataformas)`, source: derivedSource, updatedAt: sync?.createdAt ?? null }),
+    row: row(`ns.${c.metric}`, c.value, {
+      label: `${METRIC_META[c.metric].label} (média das plataformas)`,
+      source: `ns.${c.metric}` in cur.overrides ? SOURCE_LABEL.manual : derivedSource,
+      updatedAt: sync?.createdAt ?? null,
+    }),
   }));
-  const northStar = row(NORTH_STAR, cur.ns.value, { source: derivedSource, updatedAt: sync?.createdAt ?? null });
+  const northStar = row(NORTH_STAR, cur.ns.value, { source: NORTH_STAR in cur.overrides ? SOURCE_LABEL.manual : derivedSource, updatedAt: sync?.createdAt ?? null });
 
   const groups: ReportModel["groups"] = [
     { key: "produto", title: "Gestão de Produto", rows: [northStar, ...components.map((c) => c.row)] },
@@ -265,7 +313,7 @@ export function buildReportModel(input: {
 
   const history: HistoryPoint[] = periodsUntil(period, input.historySize ?? 8).map((p) => {
     const pt = p === period ? cur : p === prevPeriod ? prev : pointFor(p, input.syncs[p], byPeriod, weights);
-    return { period: p, label: periodShortLabel(p), tick: periodTick(p), values: pt.values, targets: pt.targets };
+    return { period: p, label: periodShortLabel(p), tick: periodTick(p), values: pt.values, auto: pt.auto, overrides: pt.overrides, targets: pt.targets };
   });
 
   // média anual (aba "Meta Geral" da planilha): quinzenas do ano com North Star calculável

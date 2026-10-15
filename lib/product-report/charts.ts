@@ -27,6 +27,8 @@ export const PLATFORM_COLOR: Record<PlatformKey, string> = {
 
 export interface ChartSpec {
   id: string;
+  /** indicador da série (é o que o editor de valores do gráfico ajusta) */
+  key: GoalKey;
   tag: string;
   tagColor: string;
   title: string;
@@ -78,6 +80,7 @@ export function buildCharts(m: ReportModel): ChartSpec[] {
     const k = `${p}.adherence` as GoalKey;
     return {
       id: `adherence-${p}`,
+      key: k,
       tag: `${label} - Aderência`,
       tagColor: PLATFORM_COLOR[p],
       title: `Aderência (Stickiness) - ${label}`,
@@ -108,6 +111,7 @@ export function buildCharts(m: ReportModel): ChartSpec[] {
     ...adherence,
     {
       id: "csat",
+      key: "ns.csat",
       tag: "CSAT Médio das Plataformas",
       tagColor: "#7C3AED",
       title: `CSAT Médio das Plataformas - ${m.title}`,
@@ -122,6 +126,7 @@ export function buildCharts(m: ReportModel): ChartSpec[] {
     },
     {
       id: "usage",
+      key: "ns.usage",
       tag: "Tempo de uso",
       tagColor: "#8B5CF6",
       title: `Tempo Médio de Uso - ${m.title}`,
@@ -137,6 +142,7 @@ export function buildCharts(m: ReportModel): ChartSpec[] {
     },
     {
       id: "northstar",
+      key: "northstar",
       tag: "NorthStar - Média Anual",
       tagColor: "#1E3A5F",
       title: `NorthStar - Evolução Quinzenal + Média Anual - ${m.title}`,
@@ -235,12 +241,14 @@ export function layoutChart(spec: ChartSpec, W = PLOT.W, H = PLOT.H, font = 8.5)
 const themed = (c: string) => (c === MUT ? `var(--text-mut,${MUT})` : c === GRID ? `var(--border,${GRID})` : c);
 const f = (n: number) => n.toFixed(1);
 
-export function chartSvg(spec: ChartSpec, W = PLOT.W, H = PLOT.H): string {
-  const body = layoutChart(spec, W, H)
+/** Primitivas → elementos SVG. `themed`: cores de texto/grade seguem o tema da tela. */
+function primsToSvg(prims: Prim[], themed_ = true): string {
+  const color = (c: string) => (themed_ ? themed(c) : c);
+  return prims
     .map((p) => {
       switch (p.t) {
         case "line":
-          return `<line x1="${f(p.x1)}" y1="${f(p.y1)}" x2="${f(p.x2)}" y2="${f(p.y2)}" style="stroke:${themed(p.color)};stroke-width:${p.width}${p.dash ? `;stroke-dasharray:${p.dash.join(" ")}` : ""}"/>`;
+          return `<line x1="${f(p.x1)}" y1="${f(p.y1)}" x2="${f(p.x2)}" y2="${f(p.y2)}" style="stroke:${color(p.color)};stroke-width:${p.width}${p.dash ? `;stroke-dasharray:${p.dash.join(" ")}` : ""}"/>`;
         case "path":
           return `<polyline points="${p.pts.map(([a, b]) => `${f(a)},${f(b)}`).join(" ")}" style="fill:none;stroke:${p.color};stroke-width:${p.width};stroke-linejoin:round${p.dash ? `;stroke-dasharray:${p.dash.join(" ")}` : ""}"/>`;
         case "circle":
@@ -248,10 +256,14 @@ export function chartSvg(spec: ChartSpec, W = PLOT.W, H = PLOT.H): string {
         case "rect":
           return `<rect x="${f(p.x)}" y="${f(p.y)}" width="${f(p.w)}" height="${f(p.h)}" rx="${p.r}" style="fill:${p.fill}"/>`;
         case "text":
-          return `<text x="${f(p.x)}" y="${f(p.y)}" text-anchor="${p.anchor}" style="font-size:${p.size}px;fill:${themed(p.color)}${p.bold ? ";font-weight:700" : ""}">${escapeHtml(p.text)}</text>`;
+          return `<text x="${f(p.x)}" y="${f(p.y)}" text-anchor="${p.anchor}" style="font-size:${p.size}px;fill:${color(p.color)}${p.bold ? ";font-weight:700" : ""}">${escapeHtml(p.text)}</text>`;
       }
     })
     .join("");
+}
+
+export function chartSvg(spec: ChartSpec, W = PLOT.W, H = PLOT.H): string {
+  const body = primsToSvg(layoutChart(spec, W, H));
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${escapeHtml(spec.title)}" style="display:block;font-family:inherit">${body}</svg>`;
 }
 
@@ -289,4 +301,69 @@ ${spec.subtitle ? `<div style="text-align:center;font-size:10px;color:var(--text
 <div style="margin-top:6px">${chartSvg(spec)}</div>
 <div style="display:flex;justify-content:center;flex-wrap:wrap;gap:6px 18px;font-size:10px;color:var(--text-mut,${MUT});margin-top:4px">${legend}</div>
 </div>`;
+}
+
+/* ---------- cartão inteiro em SVG (vira PNG para o corpo do e-mail) ---------- */
+
+export const CARD = { W: 560, H: 340 };
+
+/**
+ * O cartão completo (etiqueta, título, médias, gráfico e legenda) num SVG só, com cores fixas e
+ * fonte do sistema: o navegador o converte em PNG para colar no e-mail (Gmail/Outlook não
+ * mostram SVG nem os estilos do cartão em HTML).
+ */
+export function chartCardSvg(spec: ChartSpec): string {
+  const { W, H } = CARD;
+  const parts: string[] = [];
+  const t = (x: number, y: number, text: string, size: number, color: string, o: { bold?: boolean; anchor?: string; weight?: number } = {}) =>
+    `<text x="${f(x)}" y="${f(y)}" text-anchor="${o.anchor ?? "start"}" style="font-size:${size}px;fill:${color};font-weight:${o.weight ?? (o.bold ? 700 : 400)}">${escapeHtml(text)}</text>`;
+
+  parts.push(`<rect x="0.75" y="0.75" width="${W - 1.5}" height="${H - 1.5}" rx="12" style="fill:#fff;stroke:#E7E5F0;stroke-width:1.5"/>`);
+  // etiqueta
+  const tagW = textW(spec.tag, 12, true) + 18;
+  parts.push(`<rect x="16" y="14" width="${f(tagW)}" height="22" rx="4" style="fill:${spec.tagColor}"/>`);
+  parts.push(t(25, 29.5, spec.tag, 12, "#fff", { bold: true }));
+  // título + (i)
+  parts.push(t(16, 58, spec.title, 13, "#1a1a2e", { bold: true }));
+  // Helvetica bold tem ~0,56 em por caractere em média (textW superestima de propósito para as caixas)
+  const ix = 16 + spec.title.length * 13 * 0.565 + 9;
+  parts.push(`<circle cx="${f(ix)}" cy="53.5" r="5.5" style="fill:none;stroke:${MUT};stroke-width:1.2"/>`, t(ix, 56.5, "i", 8, MUT, { bold: true, anchor: "middle" }));
+  // médias no canto direito
+  let right = W - 16;
+  for (const s of [...spec.stats].reverse()) {
+    const vw = Math.max(textW(s.value, 15, true), textW(s.label, 9));
+    right -= vw;
+    parts.push(t(right, 22, s.label, 9, MUT));
+    parts.push(t(right, 39, s.value, s.kind === "value" ? 15 : 13, s.kind === "value" ? SERIES_COLOR : "#374151", { weight: 800 }));
+    const cx = right - 15;
+    if (s.kind === "value") {
+      parts.push(`<circle cx="${f(cx)}" cy="28" r="11" style="fill:${SERIES_COLOR}"/>`);
+      parts.push(`<path d="M${f(cx)} 21.5c-.3 0-.5.1-.6.3-1.7 2.3-4.4 5.8-4.4 8.6a5 5 0 0 0 10 0c0-2.8-2.7-6.3-4.4-8.6-.1-.2-.3-.3-.6-.3z" style="fill:#fff"/>`);
+    } else {
+      parts.push(`<g transform="translate(${f(cx - 9)} 19)" style="fill:none;stroke:${MUT};stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round"><circle cx="9" cy="7" r="5.5"/><circle cx="9" cy="7" r="2.2"/><path d="M5.8 11.6 4.5 18l4.5-2.6 4.5 2.6-1.3-6.4"/></g>`);
+    }
+    right -= 38;
+  }
+  let top = 70;
+  if (spec.subtitle) {
+    parts.push(t(W / 2, 74, spec.subtitle, 10, MUT, { anchor: "middle" }));
+    top = 80;
+  }
+  const plotH = H - top - 34;
+  // letra maior que na tela: no e-mail o cartão aparece em ~60% do tamanho
+  parts.push(`<g transform="translate(10 ${top})">${primsToSvg(layoutChart(spec, W - 20, plotH, 10.5), false)}</g>`);
+  // legenda centralizada
+  const items = [{ label: spec.seriesLabel, dash: undefined as [number, number] | undefined }, ...spec.refs.map((r) => ({ label: r.label, dash: r.dash }))];
+  const widths = items.map((it) => 30 + it.label.length * 11 * 0.5);
+  let lx = (W - widths.reduce((a, b) => a + b + 16, -16)) / 2;
+  const ly = H - 16;
+  items.forEach((it, i) => {
+    parts.push(
+      `<line x1="${f(lx)}" y1="${ly}" x2="${f(lx + 24)}" y2="${ly}" style="stroke:${it.dash ? REF_COLOR : SERIES_COLOR};stroke-width:${it.dash ? 1.3 : 2}${it.dash ? `;stroke-dasharray:${it.dash.join(" ")}` : ""}"/>`
+    );
+    if (!it.dash) parts.push(`<rect x="${f(lx + 8.5)}" y="${ly - 3.5}" width="7" height="7" rx="1" style="fill:${SERIES_COLOR}"/>`);
+    parts.push(t(lx + 30, ly + 4, it.label, 11, MUT));
+    lx += widths[i] + 16;
+  });
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="font-family:Helvetica,Arial,sans-serif">${parts.join("")}</svg>`;
 }

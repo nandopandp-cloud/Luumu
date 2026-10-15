@@ -121,3 +121,25 @@ test("PDF: texto só com caracteres que a fonte padrão tem (senão a linha emba
   assert.equal(pdfText("Aderência · 2ª quinzena — “ok” ✅🚀 Σ"), "Aderência · 2ª quinzena — “ok”  ");
   assert.equal(pdfText("ÁÉÍÓÚ àç ÿ €"), "ÁÉÍÓÚ àç ÿ €");
 });
+
+test("e-mail: layout da referência só com tabelas, estilos inline e gráficos como imagem", async () => {
+  const { renderEmailHtml } = await import("../../lib/product-report/render-email");
+  const { chartCardSvg } = await import("../../lib/product-report/charts");
+  const m = model();
+  const images = Object.fromEntries(buildCharts(m).map((c) => [c.id, `data:image/png;base64,${c.id}`]));
+  const html = renderEmailHtml(m, { status: "concluido", generatedAt: "2026-10-20T12:00:00.000Z", chartImages: images });
+  for (const s of ["Report da Área - Gestão de Produto", "Concluído", "1. Resumo dos Indicadores", "GESTÃO DE PRODUTO", "GENIEX", "EXPLORADORES", "EDUCADORES", "2. Evolução dos Indicadores", "Observações e conclusões executivas"]) {
+    assert.ok(html.includes(s), s);
+  }
+  assert.equal((html.match(/<img src="data:image\/png/g) ?? []).length, 6);
+  // nada que cliente de e-mail descarte
+  for (const bad of ["<svg", "<style", "display:flex", "display:grid", "var(--", "<script"]) assert.ok(!html.includes(bad), bad);
+  assert.match(html, /✅/);
+  assert.match(html, /❌/);
+  assert.match(html, /Fernando &lt;Rodrigues&gt;/);
+  assert.ok(!html.includes("<script>alert(1)</script>"));
+  // o cartão em SVG que vira PNG não depende do tema da tela
+  const svg = chartCardSvg(buildCharts(m)[0]);
+  assert.ok(svg.startsWith("<svg") && !svg.includes("var(--"));
+  assert.match(svg, /Educadores - Aderência/);
+});

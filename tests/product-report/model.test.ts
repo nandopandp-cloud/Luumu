@@ -32,15 +32,24 @@ test("metas são herdadas da última quinzena que as definiu", () => {
   assert.deepEqual(goalFor("ns.csat", "2026-08-2", byPeriod), { value: null, from: null });
 });
 
-test("dado da Luumu tem prioridade; valor informado só cobre o que falta", () => {
+test("precedência: ajuste manual → Luumu → planilha", () => {
   const sync = fullSync("2026-10-16T10:00:00Z", { "geniex.usage": { value: null, warnings: ["sem sessões"] } });
-  const st = stored("2026-10-1", { manual: { "geniex.usage": { value: 20, source: "manual" }, "geniex.adherence": { value: 1, source: "manual" } } });
+  const st = stored("2026-10-1", {
+    manual: {
+      "geniex.adherence": { value: 1, source: "manual" }, // ajuste vence a Luumu
+      "geniex.usage": { value: 20, source: "planilha" }, // planilha só cobre o que falta
+      "educadores.adherence": { value: 10, source: "planilha" }, // Luumu vence a planilha
+    },
+  });
   const r = resolveValues(sync, st);
-  assert.equal(r["geniex.adherence"].value, 65); // Luumu vence o manual
-  assert.match(r["geniex.adherence"].source!, /Analytics/);
+  assert.equal(r["geniex.adherence"].value, 1);
+  assert.equal(r["geniex.adherence"].auto, 65);
+  assert.equal(r["geniex.adherence"].source, "Ajustado manualmente");
   assert.equal(r["geniex.usage"].value, 20);
-  assert.equal(r["geniex.usage"].source, "Informado manualmente");
+  assert.equal(r["geniex.usage"].source, "Planilha North Star (histórico)");
   assert.deepEqual(r["geniex.usage"].warnings, []);
+  assert.equal(r["educadores.adherence"].value, 64);
+  assert.match(r["educadores.adherence"].source!, /Analytics/);
 });
 
 test("sincronização com erro não fornece valores", () => {
@@ -139,4 +148,54 @@ test("quinzena em andamento é sinalizada", () => {
   const m = buildReportModel({ period: "2026-10-2", stored: [], syncs: {}, weights: DEFAULT_WEIGHTS, now: NOW });
   assert.equal(m.closed, false);
   assert.ok(m.alerts.some((a) => a.tone === "info" && /em andamento/.test(a.text)));
+});
+
+test("ajuste manual vale sobre a Luumu; o automático fica guardado", () => {
+  const st = stored("2026-10-1", { goals: GOALS, manual: { "geniex.adherence": { value: 70, source: "manual" } } });
+  const m = buildReportModel({ period: "2026-10-1", stored: [st], syncs: { "2026-10-1": fullSync("2026-10-16T10:00:00Z") }, weights: DEFAULT_WEIGHTS, now: NOW });
+  const row = m.groups.find((g) => g.key === "geniex")!.rows.find((r) => r.key === "geniex.adherence")!;
+  assert.equal(row.value, 70);
+  assert.equal(row.auto, 65);
+  assert.equal(row.overridden, true);
+  assert.equal(row.source, "Ajustado manualmente");
+  // a média e a North Star usam o valor ajustado
+  const adh = m.components.find((c) => c.metric === "adherence")!;
+  assert.ok(Math.abs(adh.value! - (64 + 43.7 + 70) / 3) < 1e-9);
+  assert.ok(m.northStar.value! > m.northStar.auto!);
+});
+
+test("ajuste da média consolidada e da North Star (editor dos gráficos)", () => {
+  const sync = fullSync("2026-10-16T10:00:00Z");
+  const base = buildReportModel({ period: "2026-10-1", stored: [stored("2026-10-1", { goals: GOALS })], syncs: { "2026-10-1": sync }, weights: DEFAULT_WEIGHTS, now: NOW });
+  const csat = buildReportModel({
+    period: "2026-10-1",
+    stored: [stored("2026-10-1", { goals: GOALS, manual: { "ns.csat": { value: 95, source: "manual" } } })],
+    syncs: { "2026-10-1": sync },
+    weights: DEFAULT_WEIGHTS,
+    now: NOW,
+  });
+  // CSAT 95 com meta 95 = 30 pontos cheios
+  assert.ok(Math.abs(csat.northStar.value! - (base.northStar.value! - base.components[0].result! + 30)) < 1e-9);
+  assert.equal(csat.history.at(-1)!.values["ns.csat"], 95);
+  assert.ok(Math.abs(csat.history.at(-1)!.auto["ns.csat"]! - 82.7) < 1e-9);
+  assert.deepEqual(csat.history.at(-1)!.overrides, { "ns.csat": 95 });
+
+  const ns2 = buildReportModel({
+    period: "2026-10-1",
+    stored: [stored("2026-10-1", { goals: GOALS, manual: { northstar: { value: 91.5, source: "manual" } } })],
+    syncs: {},
+    weights: DEFAULT_WEIGHTS,
+    now: NOW,
+  });
+  assert.equal(ns2.northStar.value, 91.5); // sem nenhum dado das plataformas
+  assert.equal(ns2.northStar.overridden, true);
+  assert.equal(ns2.history.at(-1)!.values.northstar, 91.5);
+});
+
+test("ajuste sobre valor da planilha: o original continua como automático", () => {
+  const st = stored("2026-09-2", { goals: GOALS, manual: { "geniex.usage": { value: 25, source: "manual", planilha: 22 } } });
+  const m = buildReportModel({ period: "2026-09-2", stored: [st], syncs: {}, weights: DEFAULT_WEIGHTS, now: NOW });
+  const row = m.groups.find((g) => g.key === "geniex")!.rows.find((r) => r.key === "geniex.usage")!;
+  assert.equal(row.value, 25);
+  assert.equal(row.auto, 22);
 });

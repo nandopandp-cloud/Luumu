@@ -7,7 +7,8 @@ import { getVisibleProjects } from "@/lib/auth/current";
 import { syncPeriod } from "@/lib/product-report/collect";
 import { loadReportModel } from "@/lib/product-report/load";
 import { parsePeriod } from "@/lib/product-report/period";
-import { isGoalKey, isPlatformIndicatorKey, METRICS, PLATFORM_KEYS } from "@/lib/product-report/indicators";
+import { isGoalKey, METRICS, PLATFORM_KEYS } from "@/lib/product-report/indicators";
+import type { ManualValue } from "@/lib/product-report/model";
 import { insertRun, listStoredPeriods, saveProductReportSettings, saveStoredPeriod } from "@/lib/db/product-report";
 import { getUserById } from "@/lib/db/users";
 
@@ -63,20 +64,30 @@ export async function saveGoalsAction(input: unknown): Promise<Result> {
 
 const manualSchema = z.object({
   period,
-  values: z.record(z.string(), value).refine((v) => Object.keys(v).every(isPlatformIndicatorKey), "Indicador desconhecido."),
+  values: z.record(z.string(), value).refine((v) => Object.keys(v).every(isGoalKey), "Indicador desconhecido."),
 });
 
-/** Valores informados à mão para indicadores sem dado na Luumu. null apaga. */
+/**
+ * Ajustes manuais do realizado (plataforma, média consolidada "ns.*" ou "northstar"): valem
+ * sobre o dado da Luumu. null desfaz o ajuste (volta ao automático; se havia valor da planilha,
+ * ele é restaurado).
+ */
 export async function saveManualAction(input: unknown): Promise<Result> {
   const session = await requireProductReportAccess();
   const parsed = manualSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
   const current = (await listStoredPeriods(session.workspaceId)).find((p) => p.period === parsed.data.period);
-  const manual = { ...(current?.manual ?? {}) } as Record<string, { value: number; source: "manual" | "planilha" }>;
+  const manual = { ...(current?.manual ?? {}) } as Record<string, ManualValue>;
   for (const [k, v] of Object.entries(parsed.data.values)) {
-    if (v === null) delete manual[k];
-    // valor igual ao importado da planilha mantém a origem; qualquer mudança vira "manual"
-    else if (manual[k]?.value !== v) manual[k] = { value: v, source: "manual" };
+    const prev = manual[k];
+    // o valor original da planilha sobrevive ao ajuste, para poder voltar a ele
+    const planilha = prev?.source === "planilha" ? prev.value : prev?.planilha;
+    if (v === null) {
+      if (typeof planilha === "number") manual[k] = { value: planilha, source: "planilha" };
+      else delete manual[k];
+    } else if (!(prev?.source === "planilha" && prev.value === v)) {
+      manual[k] = { value: v, source: "manual", ...(typeof planilha === "number" ? { planilha } : {}) };
+    }
   }
   await saveStoredPeriod(session.workspaceId, session.userId, parsed.data.period, { manual });
   revalidatePath(PATH);
