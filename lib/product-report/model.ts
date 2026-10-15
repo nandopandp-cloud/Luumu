@@ -52,6 +52,14 @@ export interface ManualValue {
   planilha?: number;
 }
 
+/** Seção "2. Highlights": entregas/acontecimentos e focos/próximos passos da quinzena. */
+export interface Highlights {
+  done: string[];
+  next: string[];
+}
+
+export const EMPTY_HIGHLIGHTS: Highlights = { done: [], next: [] };
+
 /** Linha de product_report_periods. */
 export interface StoredPeriod {
   period: PeriodId;
@@ -64,6 +72,7 @@ export interface StoredPeriod {
   manual: Partial<Record<GoalKey, ManualValue>>;
   /** mensagem de abertura do report (ex.: "Fala pessoal, boa tarde. Segue o report…") */
   intro: string;
+  highlights: Highlights;
   notes: string;
   updatedAt: string | null;
 }
@@ -158,6 +167,7 @@ export interface ReportModel {
   yearAverage: number | null;
   alerts: Alert[];
   intro: string;
+  highlights: Highlights;
   notes: string;
   /** última edição de metas/textos da quinzena */
   editedAt: string | null;
@@ -340,6 +350,7 @@ export function buildReportModel(input: {
     yearAverage,
     alerts: buildAlerts({ period, now, sync, lastAttempt: input.lastAttempt, resolved: cur.resolved, components }),
     intro: byPeriod.get(period)?.intro ?? "",
+    highlights: byPeriod.get(period)?.highlights ?? EMPTY_HIGHLIGHTS,
     notes: byPeriod.get(period)?.notes ?? "",
     editedAt: byPeriod.get(period)?.updatedAt ?? null,
     author: input.author ?? null,

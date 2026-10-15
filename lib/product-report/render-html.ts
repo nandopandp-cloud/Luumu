@@ -1,13 +1,13 @@
 /**
  * Relatório exportado em HTML, no layout do report de referência: cabeçalho com período e
- * status, mensagem de abertura, "1. Resumo dos Indicadores" (tabelas coloridas por área),
- * "2. Evolução dos Indicadores" (6 gráficos) e "Observações e conclusões executivas".
+ * status, texto de abertura, "1. Resumo dos Indicadores" (tabelas coloridas por área),
+ * "2. Highlights", "3. Evolução dos Indicadores" (6 gráficos) e "Observações e conclusões executivas".
  * Um arquivo só, estilos inline e gráficos em SVG: abre offline e imprime em PDF pelo navegador.
  */
 import { formatCompact, type GoalStatus } from "./indicators";
 import type { IndicatorRow, ReportModel } from "./model";
 import { buildCharts, chartCardHtml, PLATFORM_COLOR } from "./charts";
-import { escapeHtml, formatLongTs, ICON_MET, ICON_MISSED, introText, REPORT_STATUS, type ReportStatus } from "./html";
+import { escapeHtml, formatLongTs, highlightsHtml, ICON_MET, ICON_MISSED, introText, REPORT_STATUS, type ReportStatus } from "./html";
 
 export { escapeHtml } from "./html";
 
@@ -62,13 +62,6 @@ function summaryTable(group: ReportModel["groups"][number], code: string) {
 <tbody>${body}</tbody></table></div>`;
 }
 
-const avatar = (author: ReportModel["author"]) => {
-  const name = author?.name ?? "Gestão de Produto";
-  return author?.avatarUrl
-    ? `<img src="${escapeHtml(author.avatarUrl)}" alt="" width="36" height="36" style="width:36px;height:36px;border-radius:999px;object-fit:cover;flex:none">`
-    : `<span style="width:36px;height:36px;border-radius:999px;background:#6B2BD9;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:700;flex:none">${escapeHtml(name.trim()[0]?.toUpperCase() ?? "G")}</span>`;
-};
-
 export function renderReportHtml(m: ReportModel, opts: { generatedAt: string; status: ReportStatus }): string {
   const status = REPORT_STATUS[opts.status];
   const charts = buildCharts(m).map(chartCardHtml).join("");
@@ -89,19 +82,15 @@ export function renderReportHtml(m: ReportModel, opts: { generatedAt: string; st
     <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px;background:${status.bg};color:${status.fg}">${status.label}</span></div>
 </header>
 
-<div style="display:flex;gap:12px;align-items:flex-start;border:1px solid #ECECF2;border-radius:12px;padding:14px 16px;margin:18px 0 22px">
-  ${avatar(m.author)}
-  <div style="flex:1;min-width:0">
-    <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap"><strong style="font-size:13px">${escapeHtml(m.author?.name ?? "Gestão de Produto")}</strong>
-    <span style="font-size:11px;color:${MUT}">${escapeHtml(formatLongTs(m.editedAt ?? opts.generatedAt))}</span></div>
-    <div style="white-space:pre-wrap;font-size:12.5px;color:#4B5563;margin-top:4px;line-height:1.55">${escapeHtml(introText(m))}</div>
-  </div>
-</div>
+<div style="white-space:pre-wrap;font-size:14px;color:#374151;line-height:1.6;margin:18px 0 22px">${escapeHtml(introText(m))}</div>
 
 <h2 style="font-size:16px;margin:0 0 10px">1. Resumo dos Indicadores</h2>
 ${m.groups.map((g) => summaryTable(g, m.code)).join("\n")}
 
-<h2 style="font-size:16px;margin:22px 0 10px">2. Evolução dos Indicadores</h2>
+<h2 style="font-size:16px;margin:22px 0 12px">2. Highlights</h2>
+${highlightsHtml(m.highlights, { font: "inherit", color: TXT, muted: MUT })}
+
+<h2 style="font-size:16px;margin:22px 0 10px">3. Evolução dos Indicadores</h2>
 <div class="pr-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:14px">${charts}</div>
 
 <div style="border:1px solid #ECECF2;border-radius:12px;padding:14px 16px;margin-top:22px;break-inside:avoid">

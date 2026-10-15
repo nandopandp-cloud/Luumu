@@ -2,8 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
-import { AlertTriangle, CalendarRange, Check, ChevronRight, ClipboardCopy, FileDown, FileText, Info, Loader2, Mail, Pencil, RefreshCw, Share2, SlidersHorizontal, X, XCircle } from "lucide-react";
+import { AlertTriangle, CalendarRange, Check, Plus, Trash2, ChevronRight, ClipboardCopy, FileDown, FileText, Info, Loader2, Mail, Pencil, RefreshCw, Share2, SlidersHorizontal, X, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, Textarea } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
@@ -11,9 +10,9 @@ import { downloadExport } from "@/components/ui/ShareMenu";
 import { cn } from "@/lib/utils";
 import { formatCompact, type GoalKey, type GoalStatus } from "@/lib/product-report/indicators";
 import { shiftPeriod, periodCode } from "@/lib/product-report/period";
-import type { IndicatorRow, ReportModel } from "@/lib/product-report/model";
+import type { Highlights, IndicatorRow, ReportModel } from "@/lib/product-report/model";
 import { buildCharts, chartCardHtml, type ChartSpec } from "@/lib/product-report/charts";
-import { formatLongTs, introText, REPORT_STATUS, type ReportStatus } from "@/lib/product-report/html";
+import { HIGHLIGHT_BLOCKS, introText, REPORT_STATUS, type ReportStatus } from "@/lib/product-report/html";
 import { GROUP_STYLE, rowName } from "@/lib/product-report/render-html";
 import { generateReportAction, saveGoalsAction, saveManualAction, saveTextsAction, syncAction } from "@/app/(app)/product-report/actions";
 import { buildEmailHtml, copyRichHtml, emailDocument } from "./email-export";
@@ -77,6 +76,7 @@ export function ProductReportView({
   const [editing, setEditing] = useState(false);
   const [drafts, setDrafts] = useState<Drafts>(initial);
   const [intro, setIntro] = useState(model.intro);
+  const [highlights, setHighlights] = useState<Highlights>(model.highlights);
   const [saving, startSaving] = useTransition();
   const charts = useMemo(() => buildCharts(model), [model]);
 
@@ -84,6 +84,7 @@ export function ProductReportView({
     // parte do que está salvo agora (a página pode ter trocado de quinzena ou recarregado)
     setDrafts(initial());
     setIntro(model.intro);
+    setHighlights(model.highlights);
     setEditing(true);
   };
 
@@ -115,7 +116,10 @@ export function ProductReportView({
       if (Object.keys(real).length) calls.push(saveManualAction({ period: model.period, values: real }));
       if (Object.keys(cur).length) calls.push(saveGoalsAction({ period: model.period, goals: cur }));
       if (Object.keys(next).length) calls.push(saveGoalsAction({ period: shiftPeriod(model.period, 1), goals: next }));
-      if (intro !== model.intro) calls.push(saveTextsAction({ period: model.period, intro }));
+      const hlChanged = JSON.stringify(cleanHighlights(highlights)) !== JSON.stringify(model.highlights);
+      if (intro !== model.intro || hlChanged) {
+        calls.push(saveTextsAction({ period: model.period, ...(intro !== model.intro ? { intro } : {}), ...(hlChanged ? { highlights: cleanHighlights(highlights) } : {}) }));
+      }
       const res = await Promise.all(calls);
       const err = res.find((r) => !r.ok);
       if (err && !err.ok) return toast("error", err.error);
@@ -139,21 +143,12 @@ export function ProductReportView({
 
       <DataNotice model={model} />
 
-      {/* mensagem de abertura */}
-      <div className="flex items-start gap-3 rounded-2xl border border-line bg-bg-elev p-4">
-        <Avatar author={model.author} />
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <span className="text-sm font-semibold">{model.author?.name ?? "Gestão de Produto"}</span>
-            <span className="text-xs text-fg-mut">{formatLongTs(model.editedAt ?? model.builtAt)}</span>
-          </div>
-          {editing ? (
-            <Textarea rows={3} className="mt-2" value={intro} placeholder={introText({ intro: "", period: model.period })} onChange={(e) => setIntro(e.target.value)} />
-          ) : (
-            <p className="mt-1 whitespace-pre-wrap text-[13px] leading-relaxed text-fg-soft">{introText(model)}</p>
-          )}
-        </div>
-      </div>
+      {/* texto de abertura: corrido, sem autor nem data */}
+      {editing ? (
+        <Textarea rows={3} value={intro} placeholder={introText({ intro: "", period: model.period })} onChange={(e) => setIntro(e.target.value)} />
+      ) : (
+        <p className="whitespace-pre-wrap text-[15px] leading-relaxed text-fg-soft">{introText(model)}</p>
+      )}
 
       <section>
         <h2 className="mb-3 text-[17px] font-bold">1. Resumo dos Indicadores</h2>
@@ -172,7 +167,12 @@ export function ProductReportView({
       </section>
 
       <section>
-        <h2 className="mb-3 text-[17px] font-bold">2. Evolução dos Indicadores</h2>
+        <h2 className="mb-3 text-[17px] font-bold">2. Highlights</h2>
+        <HighlightsSection value={editing ? highlights : model.highlights} editing={editing} onChange={setHighlights} />
+      </section>
+
+      <section>
+        <h2 className="mb-3 text-[17px] font-bold">3. Evolução dos Indicadores</h2>
         {/* mesmo cartão do HTML/PDF exportado (lib/product-report/charts.ts): o que se vê aqui é o que sai no arquivo */}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {charts.map((c) => (
@@ -502,11 +502,6 @@ function SyncCard({ model }: { model: ReportModel }) {
 
 /* ---------- 1. Resumo dos Indicadores ---------- */
 
-function Avatar({ author }: { author: ReportModel["author"] }) {
-  const name = author?.name ?? "Gestão de Produto";
-  if (author?.avatarUrl) return <Image src={author.avatarUrl} alt="" width={40} height={40} className="size-10 shrink-0 rounded-full object-cover" />;
-  return <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-accent font-bold text-white">{name.trim()[0]?.toUpperCase()}</span>;
-}
 
 function ResultIcon({ status }: { status: GoalStatus }) {
   if (status === "met")
@@ -764,6 +759,63 @@ function ChartEditor({ spec, model }: { spec: ChartSpec; model: ReportModel }) {
           </label>
         ))}
       </div>
+    </div>
+  );
+}
+
+/* ---------- 2. Highlights ---------- */
+
+const cleanHighlights = (h: Highlights): Highlights => ({ done: h.done.map((x) => x.trim()).filter(Boolean), next: h.next.map((x) => x.trim()).filter(Boolean) });
+
+/** Ao editar, cada bloco mostra pelo menos 3 linhas (o report pede "3 principais"). */
+const withSlots = (xs: string[]) => (xs.length >= 3 ? xs : [...xs, ...Array.from({ length: 3 - xs.length }, () => "")]);
+
+function HighlightsSection({ value, editing, onChange }: { value: Highlights; editing: boolean; onChange: (h: Highlights) => void }) {
+  return (
+    <div className="flex flex-col gap-5">
+      {HIGHLIGHT_BLOCKS.map((b) => {
+        const items = editing ? withSlots(value[b.key]) : value[b.key];
+        const set = (next: string[]) => onChange({ ...value, [b.key]: next });
+        return (
+          <div key={b.key}>
+            <p className="text-[16px] leading-6">
+              <span className="mr-2">{b.icon}</span>
+              {b.title}
+            </p>
+            {editing ? (
+              <div className="mt-2 flex flex-col gap-2 pl-8">
+                {items.map((it, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <span className="text-fg-mut">•</span>
+                    <Input value={it} placeholder={`Item ${i + 1}`} onChange={(e) => set(items.map((x, j) => (j === i ? e.target.value : x)))} />
+                    <button
+                      type="button"
+                      className="rounded-lg p-1.5 text-fg-mut hover:bg-erro/10 hover:text-erro"
+                      aria-label="Remover item"
+                      onClick={() => set(items.filter((_, j) => j !== i))}
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
+                  </div>
+                ))}
+                {items.length < 10 && (
+                  <button type="button" className="flex items-center gap-1.5 self-start text-xs font-semibold text-accent" onClick={() => set([...items, ""])}>
+                    <Plus className="size-3.5" /> Adicionar item
+                  </button>
+                )}
+              </div>
+            ) : items.length ? (
+              <ul className="mt-1.5 list-disc pl-14 text-[15px] leading-7">
+                {items.map((it, i) => (
+                  <li key={i}>{it}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-1 pl-8 text-sm text-fg-mut">Nenhum item registrado. Use Editar para preencher.</p>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

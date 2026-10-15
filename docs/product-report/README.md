@@ -25,9 +25,10 @@ Nenhuma permissão, papel ou módulo existente foi alterado.
 ## Como usar
 
 A tela é o próprio report, no layout de referência da área: cabeçalho com período e status,
-mensagem de abertura, **1. Resumo dos Indicadores** (tabelas de Gestão de Produto, GenieX,
-Exploradores e Educadores), **2. Evolução dos Indicadores** (6 gráficos) e **Observações e
-conclusões executivas**. O HTML e o PDF exportados saem com o mesmo layout, e os gráficos são
+texto de abertura (corrido, sem autor nem data), **1. Resumo dos Indicadores** (tabelas de Gestão
+de Produto, GenieX, Exploradores e Educadores), **2. Highlights** (✔️ principais
+entregas/acontecimentos e ⚠️ principais focos/próximos passos da quinzena), **3. Evolução dos
+Indicadores** (6 gráficos) e **Observações e conclusões executivas**. O HTML e o PDF exportados saem com o mesmo layout, e os gráficos são
 literalmente os mesmos (`lib/product-report/charts.ts` gera o SVG da tela e do HTML e as
 primitivas que o PDF desenha).
 
@@ -39,6 +40,8 @@ primitivas que o PDF desenha).
      com ✎ na tela, com o automático no tooltip); campo vazio volta ao automático;
    - cada gráfico ganha **Editar valores do gráfico**, com as 8 quinzenas exibidas: preencha para
      ajustar ou completar um ponto (vale também nas tabelas e na North Star daquela quinzena);
+   - os **Highlights** viram listas editáveis (3 linhas por bloco, com "Adicionar item" até 10;
+     linhas vazias são descartadas);
    - a mensagem de abertura fica editável (sem texto, vale "Fala pessoal, boa tarde. Segue o report
      referente ao Qx do mês de …");
    - aparece o painel **Dados, fontes e histórico**: atualizar indicadores, projeto de cada
@@ -108,6 +111,8 @@ execução cobre uma única quinzena.
 
 1. Aplique as migrações em `db/migrations/`:
    - `0032_product_report.sql`: três tabelas novas, sem mexer nas existentes.
+   - `0034_product_report_intro.sql` e `0035_product_report_highlights.sql`: colunas da mensagem de
+     abertura e dos highlights (idempotentes; necessárias mesmo se a 0032 já foi aplicada antes).
    - `0033_product_report_history.sql`: importa o histórico da planilha (Q2 abr a Q2 set/2026)
      para o workspace da conta autorizada. Rode depois que a conta existir. Pode reexecutar: não
      sobrescreve nada.

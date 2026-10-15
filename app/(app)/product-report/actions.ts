@@ -10,7 +10,6 @@ import { parsePeriod } from "@/lib/product-report/period";
 import { isGoalKey, METRICS, PLATFORM_KEYS } from "@/lib/product-report/indicators";
 import type { ManualValue } from "@/lib/product-report/model";
 import { insertRun, listStoredPeriods, saveProductReportSettings, saveStoredPeriod } from "@/lib/db/product-report";
-import { getUserById } from "@/lib/db/users";
 
 /*
   Toda action começa pelo guard do módulo: chamar a action direto (sem passar pela página)
@@ -97,16 +96,27 @@ export async function saveManualAction(input: unknown): Promise<Result> {
 const textsSchema = z.object({
   period,
   intro: z.string().max(5_000, "Mensagem longa demais.").optional(),
+  highlights: z
+    .object({
+      done: z.array(z.string().max(500, "Item longo demais.")).max(10, "No máximo 10 itens."),
+      next: z.array(z.string().max(500, "Item longo demais.")).max(10, "No máximo 10 itens."),
+    })
+    .optional(),
   notes: z.string().max(20_000, "Texto longo demais.").optional(),
 });
 
-/** Mensagem de abertura e/ou observações executivas da quinzena. */
+/** Mensagem de abertura, highlights e/ou observações executivas da quinzena. */
 export async function saveTextsAction(input: unknown): Promise<Result> {
   const session = await requireProductReportAccess();
   const parsed = textsSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
-  const { period: p, ...texts } = parsed.data;
-  await saveStoredPeriod(session.workspaceId, session.userId, p, texts);
+  const { period: p, highlights, ...texts } = parsed.data;
+  // itens vazios não são guardados
+  const clean = (xs: string[]) => xs.map((x) => x.trim()).filter(Boolean);
+  await saveStoredPeriod(session.workspaceId, session.userId, p, {
+    ...texts,
+    ...(highlights ? { highlights: { done: clean(highlights.done), next: clean(highlights.next) } } : {}),
+  });
   revalidatePath(PATH);
   return { ok: true };
 }
@@ -139,8 +149,7 @@ export async function generateReportAction(input: unknown): Promise<Result> {
   const session = await requireProductReportAccess();
   const parsed = period.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Quinzena inválida." };
-  const me = await getUserById(session.userId);
-  const model = await loadReportModel(session.workspaceId, parsed.data, { author: me ? { name: me.name, avatarUrl: me.avatarUrl } : null });
+  const model = await loadReportModel(session.workspaceId, parsed.data);
   const run = await insertRun({
     workspaceId: session.workspaceId,
     period: parsed.data,

@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { productReportApiSession } from "@/lib/product-report/access";
 import { getGeneratedReport, listGeneratedReports } from "@/lib/db/product-report";
-import { getUserById } from "@/lib/db/users";
 import { reportStatus, type ReportStatus } from "@/lib/product-report/html";
 import { loadReportModel } from "@/lib/product-report/load";
 import { parsePeriod } from "@/lib/product-report/period";
@@ -40,8 +39,8 @@ export async function GET(req: Request) {
     status = "concluido";
   } else {
     if (!parsePeriod(period)) return NextResponse.json({ error: "Quinzena inválida." }, { status: 400 });
-    const [me, reports] = await Promise.all([getUserById(session.userId), listGeneratedReports(session.workspaceId)]);
-    model = await loadReportModel(session.workspaceId, period!, { author: me ? { name: me.name, avatarUrl: me.avatarUrl } : null });
+    const reports = await listGeneratedReports(session.workspaceId);
+    model = await loadReportModel(session.workspaceId, period!);
     generatedAt = new Date().toISOString();
     status = reportStatus(model.closed, reports.some((r) => r.period === period));
   }

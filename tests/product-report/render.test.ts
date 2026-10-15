@@ -23,8 +23,8 @@ const model = (notes = "Aderência subiu.\n<script>alert(1)</script>", intro = "
   buildReportModel({
     period: "2026-10-1",
     stored: [
-      { period: "2026-09-2", goals: { "ns.csat": 95, "ns.adherence": 50, "ns.usage": 15, northstar: 90, "exploradores.csat": 90, "geniex.usage": 20 }, manual: { "geniex.usage": { value: 20, source: "planilha" } }, intro: "", notes: "", updatedAt: null },
-      { period: "2026-10-1", goals: {}, manual: {}, intro, notes, updatedAt: "2026-10-02T20:16:00.000Z" },
+      { period: "2026-09-2", goals: { "ns.csat": 95, "ns.adherence": 50, "ns.usage": 15, northstar: 90, "exploradores.csat": 90, "geniex.usage": 20 }, manual: { "geniex.usage": { value: 20, source: "planilha" } }, intro: "", highlights: { done: [], next: [] }, notes: "", updatedAt: null },
+      { period: "2026-10-1", goals: {}, manual: {}, intro, highlights: { done: ["Lançamento das trilhas de aprendizagem", "Vídeos <das> trilhas"], next: ["Relatório de trilhas"] }, notes, updatedAt: "2026-10-02T20:16:00.000Z" },
     ],
     syncs: { "2026-10-1": sync },
     weights: DEFAULT_WEIGHTS,
@@ -36,7 +36,7 @@ const opts = { generatedAt: "2026-10-20T12:00:00.000Z", status: "concluido" as c
 
 test("HTML: blocos do report de referência, na ordem", () => {
   const html = renderReportHtml(model(), opts);
-  const order = ["Report da Área - Gestão de Produto", "Período: 01/10 a 15/10 (Q1/10)", "Concluído", "Fala pessoal, boa tarde.", "1. Resumo dos Indicadores", "GESTÃO DE PRODUTO", "GENIEX", "EXPLORADORES", "EDUCADORES", "2. Evolução dos Indicadores", "Educadores - Aderência", "Exploradores - Aderência", "GenieX - Aderência", "CSAT Médio das Plataformas", "Tempo de uso", "NorthStar - Média Anual", "Observações e conclusões executivas"];
+  const order = ["Report da Área - Gestão de Produto", "Período: 01/10 a 15/10 (Q1/10)", "Concluído", "Fala pessoal, boa tarde.", "1. Resumo dos Indicadores", "GESTÃO DE PRODUTO", "GENIEX", "EXPLORADORES", "EDUCADORES", "2. Highlights", "3 principais entregas/acontecimentos da quinzena", "Lançamento das trilhas de aprendizagem", "3 principais focos/próximos passos", "Relatório de trilhas", "3. Evolução dos Indicadores", "Educadores - Aderência", "Exploradores - Aderência", "GenieX - Aderência", "CSAT Médio das Plataformas", "Tempo de uso", "NorthStar - Média Anual", "Observações e conclusões executivas"];
   let last = -1;
   for (const s of order) {
     const i = html.indexOf(s, last + 1);
@@ -49,14 +49,16 @@ test("HTML: blocos do report de referência, na ordem", () => {
   assert.match(html, /aria-label="Atingiu"/);
   assert.match(html, /aria-label="Abaixo da meta"/); // CSAT Exploradores 78,9 < 90
   assert.equal((html.match(/<svg xmlns/g) ?? []).length, 6);
-  assert.match(html, /02 de outubro de 2026, 17:16/);
+  // abertura só com o texto: sem autor, avatar nem data
+  assert.ok(!html.includes("Fernando"));
+  assert.ok(!html.includes("02 de outubro de 2026"));
 });
 
 test("HTML: texto livre e dados vindos do banco são escapados", () => {
   const html = renderReportHtml(model(), opts);
   assert.ok(!html.includes("<script>alert(1)</script>"));
   assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
-  assert.match(html, /Fernando &lt;Rodrigues&gt;/);
+  assert.match(html, /Vídeos &lt;das&gt; trilhas/);
 });
 
 test("mensagem de abertura: a escrita vence a padrão", () => {
@@ -128,7 +130,7 @@ test("e-mail: layout da referência só com tabelas, estilos inline e gráficos 
   const m = model();
   const images = Object.fromEntries(buildCharts(m).map((c) => [c.id, `data:image/png;base64,${c.id}`]));
   const html = renderEmailHtml(m, { status: "concluido", generatedAt: "2026-10-20T12:00:00.000Z", chartImages: images });
-  for (const s of ["Report da Área - Gestão de Produto", "Concluído", "1. Resumo dos Indicadores", "GESTÃO DE PRODUTO", "GENIEX", "EXPLORADORES", "EDUCADORES", "2. Evolução dos Indicadores", "Observações e conclusões executivas"]) {
+  for (const s of ["Report da Área - Gestão de Produto", "Concluído", "1. Resumo dos Indicadores", "GESTÃO DE PRODUTO", "GENIEX", "EXPLORADORES", "EDUCADORES", "2. Highlights", "✔️", "⚠️", "Relatório de trilhas", "3. Evolução dos Indicadores", "Observações e conclusões executivas"]) {
     assert.ok(html.includes(s), s);
   }
   assert.equal((html.match(/<img src="data:image\/png/g) ?? []).length, 6);
@@ -136,8 +138,11 @@ test("e-mail: layout da referência só com tabelas, estilos inline e gráficos 
   for (const bad of ["<svg", "<style", "display:flex", "display:grid", "var(--", "<script"]) assert.ok(!html.includes(bad), bad);
   assert.match(html, /✅/);
   assert.match(html, /❌/);
-  assert.match(html, /Fernando &lt;Rodrigues&gt;/);
+  assert.ok(!html.includes("Fernando"));
+  assert.match(html, /Vídeos &lt;das&gt; trilhas/);
   assert.ok(!html.includes("<script>alert(1)</script>"));
+  // gráficos lado a lado alinhados pelo topo mesmo quando o Gmail ignora o valign
+  assert.equal((html.match(/vertical-align:top;font-size:0;line-height:0;padding:0 0 12px/g) ?? []).length, 6);
   // o cartão em SVG que vira PNG não depende do tema da tela
   const svg = chartCardSvg(buildCharts(m)[0]);
   assert.ok(svg.startsWith("<svg") && !svg.includes("var(--"));

@@ -18,7 +18,7 @@ const fullSync = (createdAt: string, over: Partial<SyncSnapshot["values"]> = {})
   },
 });
 
-const stored = (period: string, p: Partial<StoredPeriod> = {}): StoredPeriod => ({ period, goals: {}, manual: {}, intro: "", notes: "", updatedAt: "2026-10-01T00:00:00.000Z", ...p });
+const stored = (period: string, p: Partial<StoredPeriod> = {}): StoredPeriod => ({ period, goals: {}, manual: {}, intro: "", highlights: { done: [], next: [] }, notes: "", updatedAt: "2026-10-01T00:00:00.000Z", ...p });
 
 const GOALS = { "ns.csat": 95, "ns.adherence": 50, "ns.usage": 15 };
 

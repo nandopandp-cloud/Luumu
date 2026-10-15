@@ -6,7 +6,7 @@ import { periodsUntil, yearPeriodsUntil, type PeriodId } from "./period";
 export const HISTORY_SIZE = 8;
 
 /**
- * Erro de banco sem as tabelas/colunas do módulo (migrações 0032–0034 não aplicadas):
+ * Erro de banco sem as tabelas/colunas do módulo (migrações 0032–0035 não aplicadas):
  * relação inexistente (42P01) ou coluna inexistente (42703). Percorre a cadeia de `cause`
  * porque o Drizzle embrulha o erro original do driver.
  */
@@ -15,7 +15,7 @@ export function isProductReportSchemaMissing(err: unknown): boolean {
     const code = (e as { code?: unknown }).code;
     const msg = e instanceof Error ? e.message : String(e);
     if (code === "42P01" || code === "42703") return true;
-    if (/(relation|column) "?(product_report_\w+|intro)"? .*does not exist|product_report_\w+" does not exist/i.test(msg)) return true;
+    if (/(relation|column) "?(product_report_\w+|intro|highlights)"? .*does not exist|product_report_\w+" does not exist/i.test(msg)) return true;
     e = e instanceof Error ? (e as { cause?: unknown }).cause : undefined;
   }
   return false;

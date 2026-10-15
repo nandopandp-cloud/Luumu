@@ -64,7 +64,10 @@ function parsePeriodRow(r: typeof productReportPeriods.$inferSelect): StoredPeri
       .filter(([k, v]) => isGoalKey(k) && v && isNum(v.value) && (v.source === "manual" || v.source === "planilha"))
       .map(([k, v]) => [k, { value: v.value, source: v.source, ...(isNum(v.planilha) ? { planilha: v.planilha } : {}) }])
   );
-  return { period: r.period, goals, manual, intro: r.intro, notes: r.notes, updatedAt: r.updatedAt.toISOString() };
+  const h = (r.highlights ?? {}) as Partial<Record<"done" | "next", unknown>>;
+  const list = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && x.trim() !== "") : []);
+  const highlights = { done: list(h.done), next: list(h.next) };
+  return { period: r.period, goals, manual, intro: r.intro, highlights, notes: r.notes, updatedAt: r.updatedAt.toISOString() };
 }
 
 /** Todas as quinzenas salvas (poucas: 24 por ano). As metas herdadas precisam do passado inteiro. */
@@ -77,18 +80,19 @@ export async function saveStoredPeriod(
   workspaceId: string,
   userId: string,
   period: PeriodId,
-  patch: Partial<Pick<StoredPeriod, "goals" | "manual" | "intro" | "notes">>
+  patch: Partial<Pick<StoredPeriod, "goals" | "manual" | "intro" | "highlights" | "notes">>
 ) {
   const [current] = await db
     .select()
     .from(productReportPeriods)
     .where(and(eq(productReportPeriods.workspaceId, workspaceId), eq(productReportPeriods.period, period)))
     .limit(1);
-  const base = current ? parsePeriodRow(current) : { goals: {}, manual: {}, intro: "", notes: "" };
+  const base = current ? parsePeriodRow(current) : { goals: {}, manual: {}, intro: "", highlights: { done: [], next: [] }, notes: "" };
   const values = {
     goals: patch.goals ?? base.goals,
     manual: patch.manual ?? base.manual,
     intro: patch.intro ?? base.intro,
+    highlights: patch.highlights ?? base.highlights,
     notes: patch.notes ?? base.notes,
     updatedBy: userId,
     updatedAt: new Date(),

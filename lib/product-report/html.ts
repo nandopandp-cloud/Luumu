@@ -42,3 +42,23 @@ export function reportStatus(closed: boolean, generated: boolean): ReportStatus 
 /** Ícones da coluna "Resultado": quadrado verde com check / X vermelho. */
 export const ICON_MET = `<svg width="18" height="18" viewBox="0 0 18 18" aria-label="Atingiu"><rect width="18" height="18" rx="3" fill="#22C55E"/><path d="M4.5 9.3l3 3 6-6.3" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 export const ICON_MISSED = `<svg width="16" height="16" viewBox="0 0 16 16" aria-label="Abaixo da meta"><path d="M3 3l10 10M13 3L3 13" stroke="#EF4444" stroke-width="2.4" stroke-linecap="round"/></svg>`;
+
+/** Os dois blocos da seção "2. Highlights", na ordem da referência. */
+export const HIGHLIGHT_BLOCKS = [
+  { key: "done", icon: "✔️", title: "3 principais entregas/acontecimentos da quinzena" },
+  { key: "next", icon: "⚠️", title: "3 principais focos/próximos passos" },
+] as const;
+
+/**
+ * Seção de highlights em HTML só com <p>/<ul> e estilos inline: serve ao arquivo exportado e ao
+ * corpo do e-mail (Gmail/Outlook) sem diferença.
+ */
+export function highlightsHtml(h: Pick<ReportModel, "highlights">["highlights"], o: { font: string; color: string; muted: string }): string {
+  return HIGHLIGHT_BLOCKS.map((b) => {
+    const items = h[b.key];
+    const list = items.length
+      ? `<ul style="margin:6px 0 0;padding-left:52px">${items.map((it) => `<li style="font-family:${o.font};font-size:15px;line-height:24px;color:${o.color};margin:2px 0">${escapeHtml(it)}</li>`).join("")}</ul>`
+      : `<p style="margin:6px 0 0 52px;font-family:${o.font};font-size:13px;color:${o.muted}">Nenhum item registrado.</p>`;
+    return `<div style="margin:0 0 18px"><p style="margin:0;font-family:${o.font};font-size:16px;line-height:24px;color:${o.color}">${b.icon}&nbsp; ${escapeHtml(b.title)}</p>${list}</div>`;
+  }).join("");
+}

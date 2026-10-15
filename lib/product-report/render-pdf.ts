@@ -5,7 +5,7 @@ import { drawFooters } from "@/lib/export/pdf";
 import { formatCompact, type GoalStatus } from "./indicators";
 import type { ReportModel } from "./model";
 import { buildCharts, layoutChart, REF_COLOR, SERIES_COLOR, type ChartSpec, type Prim } from "./charts";
-import { formatLongTs, introText, REPORT_STATUS, type ReportStatus } from "./html";
+import { formatLongTs, HIGHLIGHT_BLOCKS, introText, REPORT_STATUS, type ReportStatus } from "./html";
 import { GROUP_STYLE, rowName } from "./render-html";
 
 /*
@@ -95,7 +95,50 @@ function summaryTable(doc: Doc, g: ReportModel["groups"][number], code: string) 
   doc.y = y0 + h + 10;
 }
 
-/* ---------- 2. Evolução dos Indicadores ---------- */
+/* ---------- 2. Highlights ---------- */
+
+/** ✔ e ⚠ desenhados: a fonte padrão do PDF não tem emoji. */
+function highlightIcon(doc: Doc, kind: "done" | "next", x: number, y: number) {
+  if (kind === "done") {
+    doc.moveTo(x, y + 5.5).lineTo(x + 3.5, y + 9).lineTo(x + 10, y + 1).lineWidth(2.2).lineCap("round").lineJoin("round").strokeColor("#64748B").stroke();
+  } else {
+    doc.moveTo(x + 5.5, y).lineTo(x + 11, y + 10).lineTo(x, y + 10).closePath().fill("#FACC15");
+    doc.moveTo(x + 5.5, y + 3.2).lineTo(x + 5.5, y + 6.6).lineWidth(1.2).lineCap("round").strokeColor(TXT).stroke();
+    doc.circle(x + 5.5, y + 8.4, 0.6).fill(TXT);
+  }
+}
+
+function highlights(doc: Doc, h: ReportModel["highlights"]) {
+  const w = contentW(doc);
+  ensureSpace(doc, 90);
+  doc.y += 6;
+  text(doc, "2. Highlights", MARGIN, doc.y, { size: 11.5, bold: true });
+  doc.y += 20;
+  for (const b of HIGHLIGHT_BLOCKS) {
+    ensureSpace(doc, 40);
+    highlightIcon(doc, b.key, MARGIN, doc.y);
+    text(doc, b.title, MARGIN + 17, doc.y, { size: 10.5 });
+    doc.y += 16;
+    const items = h[b.key];
+    if (!items.length) {
+      text(doc, "Nenhum item registrado.", MARGIN + 30, doc.y, { size: 9, color: MUT });
+      doc.y += 14;
+    }
+    for (const it of items) {
+      doc.font("Helvetica").fontSize(10);
+      const ih = doc.heightOfString(pdfText(it), { width: w - 44 });
+      ensureSpace(doc, ih + 4);
+      // o pdfkit move doc.y ao escrever: a posição seguinte parte do topo do item
+      const y0 = doc.y;
+      doc.circle(MARGIN + 33, y0 + 4.5, 1.6).fill(TXT);
+      text(doc, it, MARGIN + 42, y0, { size: 10, width: w - 44, lineBreak: true });
+      doc.y = y0 + ih + 4;
+    }
+    doc.y += 10;
+  }
+}
+
+/* ---------- 3. Evolução dos Indicadores ---------- */
 
 function drawPrims(doc: Doc, prims: Prim[], ox: number, oy: number) {
   for (const p of prims) {
@@ -199,30 +242,25 @@ export function renderReportPdf(m: ReportModel, opts: { generatedAt: string; sta
     doc.roundedRect(px, MARGIN + 35, sw, 14, 7).fill(st.bg);
     text(doc, st.label, px, MARGIN + 38.5, { size: 7.5, bold: true, color: st.fg, width: sw, align: "center" });
 
-    // mensagem de abertura
+    // texto de abertura (corrido, sem cartão)
     const intro = introText(m);
-    doc.font("Helvetica").fontSize(8.5);
-    const introH = doc.heightOfString(pdfText(intro), { width: w - 70 });
-    const cardY = MARGIN + 62;
-    const cardH = Math.max(46, introH + 30);
-    doc.roundedRect(MARGIN, cardY, w, cardH, 7).lineWidth(0.8).strokeColor(BORDER).stroke();
-    const name = m.author?.name ?? "Gestão de Produto";
-    doc.circle(MARGIN + 24, cardY + 22, 12).fill("#6B2BD9");
-    text(doc, name.trim()[0]?.toUpperCase() ?? "G", MARGIN + 12, cardY + 17, { size: 10, bold: true, color: "#fff", width: 24, align: "center" });
-    text(doc, name, MARGIN + 44, cardY + 11, { size: 9, bold: true });
-    text(doc, formatLongTs(m.editedAt ?? opts.generatedAt), MARGIN, cardY + 11, { size: 7, color: MUT, width: w - 12, align: "right" });
-    text(doc, intro, MARGIN + 44, cardY + 24, { size: 8.5, color: "#4B5563", width: w - 70, lineBreak: true });
-    doc.y = cardY + cardH + 16;
+    doc.font("Helvetica").fontSize(9.5);
+    const introH = doc.heightOfString(pdfText(intro), { width: w });
+    text(doc, intro, MARGIN, MARGIN + 64, { size: 9.5, color: "#374151", width: w, lineBreak: true });
+    doc.y = MARGIN + 64 + introH + 16;
 
     // 1. Resumo
     text(doc, "1. Resumo dos Indicadores", MARGIN, doc.y, { size: 11.5, bold: true });
     doc.y += 18;
     for (const g of m.groups) summaryTable(doc, g, m.code);
 
-    // 2. Evolução: 2 gráficos por linha
+    // 2. Highlights
+    highlights(doc, m.highlights);
+
+    // 3. Evolução: 2 gráficos por linha
     ensureSpace(doc, 230);
     doc.y += 6;
-    text(doc, "2. Evolução dos Indicadores", MARGIN, doc.y, { size: 11.5, bold: true });
+    text(doc, "3. Evolução dos Indicadores", MARGIN, doc.y, { size: 11.5, bold: true });
     doc.y += 18;
     const gap = 10;
     const cw = (w - gap) / 2;

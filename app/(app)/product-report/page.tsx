@@ -1,7 +1,6 @@
 import { ProductReportView } from "@/components/product-report/ProductReportView";
 import { requireProductReportAccess } from "@/lib/product-report/access";
 import { getVisibleProjects } from "@/lib/auth/current";
-import { getUserById } from "@/lib/db/users";
 import { getProductReportSettings, listGeneratedReports } from "@/lib/db/product-report";
 import { isProductReportSchemaMissing, loadReportModel } from "@/lib/product-report/load";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -20,12 +19,10 @@ export default async function ProductReportPage({ searchParams }: { searchParams
   // padrão: a última quinzena encerrada, que é a que o report cobre
   const period = parsePeriod(raw) ? raw! : lastClosedPeriod();
 
-  const me = await getUserById(session.userId);
-  const author = { name: me?.name ?? session.name, avatarUrl: me?.avatarUrl ?? null };
   let data;
   try {
     data = await Promise.all([
-      loadReportModel(session.workspaceId, period, { author }),
+      loadReportModel(session.workspaceId, period),
       getProductReportSettings(session.workspaceId),
       getVisibleProjects(),
       listGeneratedReports(session.workspaceId),
@@ -39,7 +36,7 @@ export default async function ProductReportPage({ searchParams }: { searchParams
         <PageHeader eyebrow="Inteligência" title="Report Quinzenal de Produto" />
         <EmptyState
           title="Falta atualizar o banco de dados"
-          description="As tabelas do Report Quinzenal ainda não existem (ou estão incompletas) no banco. Aplique as migrações db/migrations/0032_product_report.sql, 0033_product_report_history.sql e 0034_product_report_intro.sql e recarregue a página."
+          description="As tabelas do Report Quinzenal ainda não existem (ou estão incompletas) no banco. Aplique as migrações db/migrations/0032_product_report.sql, 0033_product_report_history.sql, 0034_product_report_intro.sql e 0035_product_report_highlights.sql e recarregue a página."
         />
       </div>
     );

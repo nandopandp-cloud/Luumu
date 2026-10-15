@@ -776,6 +776,8 @@ export const productReportPeriods = pgTable(
     manual: jsonb("manual").notNull().default({}),
     // mensagem de abertura do report ("Fala pessoal, boa tarde…")
     intro: text("intro").notNull().default(""),
+    // seção "Highlights": { done: string[], next: string[] } (migração 0035)
+    highlights: jsonb("highlights").notNull().default({}),
     notes: text("notes").notNull().default(""),
     updatedBy: text("updated_by").references(() => users.id, { onDelete: "set null" }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
