@@ -22,12 +22,14 @@ export interface Scope {
   dateFrom?: Date; // opcional: só respostas a partir desta data (inclusive)
   dateTo?: Date; // opcional: só respostas até esta data (inclusive)
   host?: string; // opcional: só respostas de uma plataforma (hostname)
+  surveyType?: string; // opcional: só pesquisas deste tipo (ex.: "CSAT")
 }
 
 /** Filtro combinado: sempre por projeto (via join com surveys), opcionalmente por pesquisa e período. */
 export function scopeWhere(scope: Scope): SQL | undefined {
   const parts = [eq(surveys.projectId, scope.projectId)];
   if (scope.surveyId) parts.push(eq(responses.surveyId, scope.surveyId));
+  if (scope.surveyType) parts.push(eq(surveys.type, scope.surveyType));
   if (scope.dateFrom) parts.push(gte(responses.createdAt, scope.dateFrom));
   if (scope.dateTo) parts.push(lte(responses.createdAt, scope.dateTo));
   /*
@@ -125,9 +127,12 @@ export async function getMainScore(scope: Scope): Promise<(ScoreResult & { surve
   // pergunta de score de cada survey do escopo (a primeira, na ordem do builder)
   const surveyIds = scope.surveyId
     ? [scope.surveyId]
-    : (await db.select({ id: surveys.id }).from(surveys).where(eq(surveys.projectId, scope.projectId))).map(
-        (s) => s.id
-      );
+    : (
+        await db
+          .select({ id: surveys.id })
+          .from(surveys)
+          .where(and(eq(surveys.projectId, scope.projectId), scope.surveyType ? eq(surveys.type, scope.surveyType) : undefined))
+      ).map((s) => s.id);
   if (surveyIds.length === 0) return null;
 
   const [scoreQuestions, rows] = await Promise.all([

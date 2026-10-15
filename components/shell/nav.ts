@@ -11,6 +11,7 @@ import {
   Route,
   Crown,
   CircleHelp,
+  CalendarRange,
   type LucideIcon,
 } from "lucide-react";
 import { LOCKED_ROUTES } from "@/lib/locked-routes";
@@ -31,6 +32,17 @@ export interface NavGroup {
   title: string;
   items: NavItem[];
 }
+
+/**
+ * Report Quinzenal de Produto: fora do NAV porque só a conta autorizada o vê. A sidebar o
+ * acrescenta ao grupo "Inteligência" quando o layout confirma o acesso no servidor; esconder o
+ * item é só UI, a proteção real é o guard em lib/product-report/access.ts.
+ */
+export const PRODUCT_REPORT_NAV_ITEM: NavItem = {
+  href: "/product-report",
+  label: "Report Quinzenal",
+  icon: CalendarRange,
+};
 
 export const NAV: NavGroup[] = [
   {

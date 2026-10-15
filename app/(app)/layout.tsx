@@ -12,6 +12,7 @@ import { listHosts } from "@/lib/db/hosts";
 import { savedPlatform } from "@/lib/platform";
 import { INTRO_COOKIE } from "@/components/intro/cookie";
 import { LuumuIntro } from "@/components/intro/LuumuIntro";
+import { isProductReportUser } from "@/lib/product-report/authorize";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await requireUser();
@@ -26,6 +27,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     // a foto vem do banco: o JWT da sessão é emitido no login e não acompanha trocas
     getUserById(session.userId),
   ]);
+  // item do menu do Report Quinzenal: mesma regra do guard, com o usuário já carregado acima
+  // (só decide a UI; a rota tem guard próprio)
+  const productReport = await isProductReportUser(session, async () => me);
   const ws = wsRows[0];
   // plataformas do projeto para o seletor do header
   const [hosts, platform] = activeProject ? await Promise.all([listHosts(activeProject.id).catch(() => []), savedPlatform(activeProject.id)]) : [[], ""];
@@ -48,6 +52,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         platform={platform}
         initialCollapsed={sidebarCollapsed}
         usage={usage}
+        productReport={productReport}
       >
         {/*
           Membro cujo escopo não inclui nenhum projeto: as páginas do app resolvem dados a

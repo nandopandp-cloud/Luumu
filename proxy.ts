@@ -14,6 +14,8 @@ const secret = new TextEncoder().encode(secretStr);
 const PROTECTED = [
   "/dashboard", "/surveys", "/responses", "/heatmaps", "/replay",
   "/analytics", "/insights", "/reports", "/sdk", "/settings", "/tours", "/billing", "/help",
+  // só exige sessão; a restrição à conta autorizada fica no guard do módulo (lib/product-report/access.ts)
+  "/product-report",
 ];
 
 // páginas de credencial: quem já tem sessão não deve vê-las

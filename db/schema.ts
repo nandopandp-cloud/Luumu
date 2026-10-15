@@ -745,6 +745,63 @@ export const analyticsViews = pgTable(
   },
   (t) => [index("analytics_views_project_idx").on(t.projectId)]
 );
+/* =====================================================================
+   REPORT QUINZENAL DE PRODUTO — ver lib/product-report/ e docs/product-report/
+   Módulo restrito a uma conta (lib/product-report/authorize.ts). Só lê os dados de
+   analytics e pesquisas dos projetos; nada aqui altera a origem.
+   ===================================================================== */
+
+/** Configuração do módulo: qual projeto é cada plataforma, pesos da North Star e automação. */
+export const productReportSettings = pgTable("product_report_settings", {
+  workspaceId: text("workspace_id").primaryKey().references(() => workspaces.id, { onDelete: "cascade" }),
+  // { geniex: "prj_...", exploradores: "prj_...", educadores: "prj_..." }
+  platformProjects: jsonb("platform_projects").notNull().default({}),
+  // { csat: 30, adherence: 40, usage: 30 }
+  weights: jsonb("weights").notNull().default({}),
+  // atualização automática da quinzena encerrada pelo cron diário (desligada até alguém ligar)
+  autoSync: boolean("auto_sync").notNull().default(false),
+  updatedBy: text("updated_by").references(() => users.id, { onDelete: "set null" }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Estado editável de cada quinzena ("AAAA-MM-1" | "AAAA-MM-2"): metas, valores informados e observações. */
+export const productReportPeriods = pgTable(
+  "product_report_periods",
+  {
+    workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+    period: text("period").notNull(),
+    // { "northstar": 95, "ns.csat": 95, "geniex.adherence": 60, ... } — sem chave = herda a anterior
+    goals: jsonb("goals").notNull().default({}),
+    // valores sem dado na Luumu: { "geniex.usage": { value: 22, source: "manual" | "planilha" } }
+    manual: jsonb("manual").notNull().default({}),
+    notes: text("notes").notNull().default(""),
+    updatedBy: text("updated_by").references(() => users.id, { onDelete: "set null" }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.workspaceId, t.period] })]
+);
+
+/**
+ * Execuções: "sync" = busca dos indicadores de uma quinzena na Luumu (com status e erro, para
+ * nova tentativa); "report" = relatório gerado, com tudo congelado (valores, metas, observações).
+ */
+export const productReportRuns = pgTable(
+  "product_report_runs",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+    period: text("period").notNull(),
+    kind: text("kind").notNull(), // sync | report
+    status: text("status").notNull(), // ok | partial | error
+    trigger: text("trigger").notNull().default("manual"), // manual | cron
+    data: jsonb("data").notNull().default({}),
+    error: text("error"),
+    createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("product_report_runs_period_idx").on(t.workspaceId, t.period, t.createdAt)]
+);
+
 export type Workspace = typeof workspaces.$inferSelect;
 export type Survey = typeof surveys.$inferSelect;
 export type ScheduledReport = typeof scheduledReports.$inferSelect;

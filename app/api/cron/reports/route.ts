@@ -16,6 +16,7 @@ import { sendEmail } from "@/lib/email";
 import { reportEmailHtml } from "@/lib/email-templates";
 import { getAppOrigin } from "@/lib/env";
 import { pruneBehaviorData } from "@/lib/db/retention";
+import { runProductReportCron } from "@/lib/product-report/cron";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -166,5 +167,8 @@ export async function GET(req: Request) {
   // (aproveita o cron que já existe; best-effort, não afeta os relatórios)
   const pruned = await pruneBehaviorData().catch((e) => ({ error: String(e) }));
 
-  return NextResponse.json({ processed: results.length, results, pruned });
+  // Report Quinzenal de Produto: atualiza a quinzena encerrada (só onde a automação foi ligada)
+  const productReport = await runProductReportCron().catch(() => [{ period: "", status: "error" }]);
+
+  return NextResponse.json({ processed: results.length, results, pruned, productReport });
 }

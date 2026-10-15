@@ -6,7 +6,7 @@ import { Lock, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LuumuLogo } from "@/components/ui/Mascot";
 import { ProjectSwitcher } from "./ProjectSwitcher";
-import { NAV } from "./nav";
+import { NAV, PRODUCT_REPORT_NAV_ITEM } from "./nav";
 
 /** Rótulo flutuante dos itens quando a sidebar está recolhida (hover e foco do teclado). */
 function Tip({ children }: { children: React.ReactNode }) {
@@ -27,6 +27,7 @@ export function Sidebar({
   activeProjectId,
   collapsed = false,
   onToggle,
+  productReport = false,
 }: {
   onNavigate?: () => void;
   workspace: { name: string; plan: string; logoUrl: string | null };
@@ -36,8 +37,13 @@ export function Sidebar({
   collapsed?: boolean;
   /** sem isto (gaveta do celular) não há botão de recolher */
   onToggle?: () => void;
+  /** mostra o Report Quinzenal (decidido no servidor pelo layout) */
+  productReport?: boolean;
 }) {
   const pathname = usePathname();
+  const nav = productReport
+    ? NAV.map((g) => (g.title === "Inteligência" ? { ...g, items: [...g.items, PRODUCT_REPORT_NAV_ITEM] } : g))
+    : NAV;
 
   return (
     <div className="relative h-full">
@@ -69,7 +75,7 @@ export function Sidebar({
         />
 
         <nav className="flex flex-col gap-4">
-          {NAV.map((group) => (
+          {nav.map((group) => (
             <div key={group.title}>
               {collapsed ? (
                 <div className="mx-auto mb-2 h-px w-8 bg-line" aria-hidden />

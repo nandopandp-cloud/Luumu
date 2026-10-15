@@ -21,6 +21,7 @@ export function AppShell({
   usage,
   hosts = [],
   platform = "",
+  productReport = false,
 }: {
   children: React.ReactNode;
   user: { name: string; email: string; avatarUrl: string | null };
@@ -35,6 +36,8 @@ export function AppShell({
   hosts?: string[];
   /** plataforma escolhida no header (cookie), "" = todas */
   platform?: string;
+  /** conta autorizada no Report Quinzenal: exibe o item no menu */
+  productReport?: boolean;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(initialCollapsed);
@@ -77,6 +80,7 @@ export function AppShell({
             activeProjectId={activeProjectId}
             collapsed={collapsed}
             onToggle={toggle}
+            productReport={productReport}
           />
         </div>
 
@@ -93,6 +97,7 @@ export function AppShell({
                 projects={projects}
                 activeProjectId={activeProjectId}
                 onNavigate={() => setMobileOpen(false)}
+                productReport={productReport}
               />
             </div>
           </div>
