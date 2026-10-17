@@ -110,23 +110,7 @@ export const apiKeys = pgTable(
   (t) => [
     index("api_keys_ws_idx").on(t.workspaceId),
     index("api_keys_project_idx").on(t.projectId),
-    index("api_keys_pk_idx").on(t.publicKey),
   ]
-);
-
-/**
- * [EM DESUSO] O rate limit passou a ser contado em memória (lib/api/ratelimit.ts) — no banco
- * era uma escrita por requisição do SDK, e sem rotina de limpeza a tabela só crescia.
- * Mantida no schema para não exigir migração destrutiva; pode ser removida (DROP TABLE) num
- * momento planejado. As linhas antigas podem ser apagadas com segurança a qualquer momento.
- */
-export const rateLimits = pgTable(
-  "rate_limits",
-  {
-    bucket: text("bucket").primaryKey(), // ex.: "res:<ip>:<pk>:<minuteWindow>"
-    count: integer("count").notNull().default(0),
-    windowStart: timestamp("window_start", { withTimezone: true }).notNull().defaultNow(),
-  }
 );
 
 /**
@@ -148,10 +132,8 @@ export const events = pgTable(
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
     firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [
-    uniqueIndex("events_project_name_uidx").on(t.projectId, t.name),
-    index("events_project_idx").on(t.projectId),
-  ]
+  // a UNIQUE (project_id, name) também atende às buscas só por projeto (migração 0036)
+  (t) => [uniqueIndex("events_project_name_uidx").on(t.projectId, t.name)]
 );
 
 /**
@@ -201,10 +183,7 @@ export const eventHosts = pgTable(
     name: text("name").notNull(), // slug do evento (normalizeEventName)
     firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [
-    uniqueIndex("event_hosts_project_host_name_uidx").on(t.projectId, t.host, t.name),
-    index("event_hosts_project_idx").on(t.projectId),
-  ]
+  (t) => [uniqueIndex("event_hosts_project_host_name_uidx").on(t.projectId, t.host, t.name)]
 );
 
 export const surveys = pgTable(
@@ -490,10 +469,7 @@ export const productElements = pgTable(
     firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull().defaultNow(),
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [
-    uniqueIndex("product_elements_uidx").on(t.projectId, t.host, t.route, t.fingerprint),
-    index("product_elements_project_idx").on(t.projectId),
-  ]
+  (t) => [uniqueIndex("product_elements_uidx").on(t.projectId, t.host, t.route, t.fingerprint)]
 );
 
 export type Tour = typeof tours.$inferSelect;
@@ -680,6 +656,8 @@ export const analyticsUsers = pgTable(
     // busca por ID/e-mail (lib/db/people.ts) — migração 0030
     index("analytics_users_user_id_idx").on(t.projectId, t.userId).where(sql`${t.userId} is not null`),
     index("analytics_users_email_idx").on(t.projectId, sql`lower(${t.userEmail})`).where(sql`${t.userEmail} is not null`),
+    // nome "pessoal" (lib/db/analytics.ts → personal()) — migração 0036
+    index("analytics_users_name_idx").on(t.projectId, t.userName).where(sql`${t.userName} is not null`),
   ]
 );
 

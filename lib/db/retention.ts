@@ -11,7 +11,7 @@ import { planOf } from "@/lib/plans";
    - heatmaps: a retenção do plano, com teto de 180 dias (são as linhas mais pesadas, com
      cliques e movimento; mapa de calor antigo descreve uma página que já mudou);
    - analytics: telas pela retenção do plano (teto de 2 anos); sessões e usuários seguem a
-     mesma regra das telas.
+     mesma regra das telas (usuário só sai quando a última visita dele passou do corte).
   Apaga em lotes, com orçamento de tempo, para não segurar o banco numa transação longa.
 */
 
@@ -33,7 +33,7 @@ async function deleteInBatches(statement: (limit: number) => ReturnType<typeof s
 export async function pruneBehaviorData(budgetMs = 45_000) {
   const deadline = Date.now() + budgetMs;
   const ws = await db.select({ id: workspaces.id, plan: workspaces.plan }).from(workspaces);
-  const out = { heatmaps: 0, pageviews: 0, sessions: 0 };
+  const out = { heatmaps: 0, pageviews: 0, sessions: 0, users: 0 };
   for (const w of ws) {
     if (Date.now() > deadline) break;
     const days = planOf(w.plan).limits.retentionDays;
@@ -58,7 +58,18 @@ export async function pruneBehaviorData(budgetMs = 45_000) {
       out.sessions += await deleteInBatches(
         (n) => sql`delete from analytics_sessions where id in (
           select s.id from analytics_sessions s join projects pr on pr.id = s.project_id
-           where pr.workspace_id = ${w.id} and s.last_seen_at < ${anCut}::timestamptz limit ${n})`,
+           where pr.workspace_id = ${w.id} and s.started_at < ${anCut}::timestamptz
+             and s.last_seen_at < ${anCut}::timestamptz limit ${n})`,
+        deadline
+      );
+      // started_at/first_seen_at no filtro (redundante: começou antes de terminar) só para
+      // usar os índices (project_id, started_at) e (project_id, first_seen_at) em vez de ler
+      // a tabela inteira a cada lote
+      out.users += await deleteInBatches(
+        (n) => sql`delete from analytics_users where (project_id, anon_id) in (
+          select u.project_id, u.anon_id from analytics_users u join projects pr on pr.id = u.project_id
+           where pr.workspace_id = ${w.id} and u.first_seen_at < ${anCut}::timestamptz
+             and u.last_seen_at < ${anCut}::timestamptz limit ${n})`,
         deadline
       );
     } catch {

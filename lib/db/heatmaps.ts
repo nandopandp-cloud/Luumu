@@ -330,12 +330,18 @@ export async function snapshotDevices(projectId: string, host: string, path: str
 
 /** Cópia da página para o dispositivo pedido (ou a mais recente de qualquer dispositivo). */
 export async function getSnapshot(projectId: string, host: string, path: string, device?: HeatmapDevice) {
-  const rows = await db
+  // a escolha é feita no banco: cada cópia é um HTML de dezenas de KB e só uma é usada —
+  // trazer todas (uma por dispositivo) era transferência do Neon jogada fora
+  const [pick] = await db
     .select()
     .from(heatmapSnapshots)
     .where(and(eq(heatmapSnapshots.projectId, projectId), eq(heatmapSnapshots.host, host), eq(heatmapSnapshots.path, path)))
-    .orderBy(desc(heatmapSnapshots.createdAt));
-  const pick = rows.find((r) => r.device === (device ?? "desktop")) ?? rows.find((r) => r.device === "desktop") ?? rows[0];
+    .orderBy(
+      desc(sql`${heatmapSnapshots.device} = ${device ?? "desktop"}`),
+      desc(sql`${heatmapSnapshots.device} = 'desktop'`),
+      desc(heatmapSnapshots.createdAt)
+    )
+    .limit(1);
   if (!pick) return null;
   let html = "";
   try {
