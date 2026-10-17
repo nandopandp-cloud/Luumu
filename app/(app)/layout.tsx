@@ -7,7 +7,7 @@ import { db } from "@/lib/db/client";
 import { workspaces } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { cookies } from "next/headers";
-import { getWorkspaceUsage } from "@/lib/db/workspace";
+import { getWorkspaceUsageCached } from "@/lib/db/workspace";
 import { listHosts } from "@/lib/db/hosts";
 import { savedPlatform } from "@/lib/platform";
 import { INTRO_COOKIE } from "@/components/intro/cookie";
@@ -35,7 +35,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const [hosts, platform] = activeProject ? await Promise.all([listHosts(activeProject.id).catch(() => []), savedPlatform(activeProject.id)]) : [[], ""];
   // mesmo nome de SIDEBAR_COOKIE (AppShell): a página já nasce com a bandeja do jeito salvo
   // sem await: o card de plano da sidebar entra via Suspense quando a contagem chega
-  const usage = getWorkspaceUsage(session.workspaceId).catch(() => null);
+  const usage = getWorkspaceUsageCached(session.workspaceId).catch(() => null);
   const jar = await cookies();
   const sidebarCollapsed = jar.get("luumu_sidebar")?.value === "collapsed";
   // acabou de entrar: a animação já vem no HTML (cobre o primeiro quadro, sem o app piscar antes)

@@ -6,7 +6,7 @@ import { drizzle } from "drizzle-orm/neon-http";
 import { customAlphabet } from "nanoid";
 import { randomBytes, scryptSync, createHash } from "crypto";
 import * as schema from "./schema";
-import { workspaces, projects, surveys, questions, responses, answers, users, memberships, apiKeys, rateLimits } from "./schema";
+import { workspaces, projects, surveys, questions, responses, answers, users, memberships, apiKeys } from "./schema";
 import { surveys as mockSurveys } from "../lib/mock/surveys";
 import { responses as mockResponses } from "../lib/mock/responses";
 import { questionTemplates } from "../lib/survey-templates";
@@ -39,7 +39,6 @@ async function main() {
   console.log("🌱 Seed iniciando…");
 
   // limpa (idempotente)
-  await db.delete(rateLimits);
   await db.delete(answers);
   await db.delete(responses);
   await db.delete(questions);

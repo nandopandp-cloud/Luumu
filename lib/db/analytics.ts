@@ -66,6 +66,9 @@ export async function saveAnalyticsSettings(projectId: string, userId: string, p
 
 /* ---------- gravação ---------- */
 
+/** De quanto a última visita precisa avançar para regravar o usuário (ver recordAnalytics). */
+const LAST_SEEN_STEP = "10 minutes";
+
 /*
   A coluna do avatar chegou na migração 0022. Se o deploy for ao ar antes dela, o upsert do
   usuário (que o Drizzle monta com TODAS as colunas da tabela) falharia e a visita inteira se
@@ -117,6 +120,21 @@ export async function recordAnalytics(workspaceId: string, projectId: string, ho
   const dur = p.pages.reduce((a, x) => a + x.dur, 0);
   const exit = p.pages[p.pages.length - 1].path;
 
+  /*
+    Reescrever o usuário a cada envio do SDK (uma saída de página) era ~1/3 das escritas da
+    ingestão: cada UPDATE cria uma versão nova da linha, gera WAL (histórico cobrado pelo Neon)
+    e deixa linha morta para o autovacuum. Só vale atualizar quando a identidade mudou ou a
+    última visita avançou mais que LAST_SEEN_STEP; a hora exata da última atividade continua
+    vindo das sessões (lista e perfil usam o maior dos dois).
+  */
+  const changed = (t: string, avatar: boolean) =>
+    sql.raw(`excluded.last_seen_at > ${t}.last_seen_at + interval '${LAST_SEEN_STEP}'
+      or (excluded.user_id is not null and excluded.user_id is distinct from ${t}.user_id)
+      or (excluded.user_email is not null and excluded.user_email is distinct from ${t}.user_email)
+      or (excluded.user_name is not null and excluded.user_name is distinct from ${t}.user_name)${
+        avatar ? `\n      or (excluded.user_avatar is not null and excluded.user_avatar is distinct from ${t}.user_avatar)` : ""
+      }`);
+
   const user = (withAvatar: boolean) =>
     withAvatar
       ? db
@@ -146,6 +164,7 @@ export async function recordAnalytics(workspaceId: string, projectId: string, ho
               userName: sql`coalesce(excluded.user_name, ${analyticsUsers.userName})`,
               userAvatar: sql`coalesce(excluded.user_avatar, ${analyticsUsers.userAvatar})`,
             },
+            setWhere: changed("analytics_users", true),
           })
       : db.execute(sql`
           insert into analytics_users (project_id, anon_id, user_id, user_email, user_name, first_seen_at, last_seen_at,
@@ -156,7 +175,8 @@ export async function recordAnalytics(workspaceId: string, projectId: string, ho
             last_seen_at = greatest(analytics_users.last_seen_at, excluded.last_seen_at),
             user_id = coalesce(excluded.user_id, analytics_users.user_id),
             user_email = coalesce(excluded.user_email, analytics_users.user_email),
-            user_name = coalesce(excluded.user_name, analytics_users.user_name)`);
+            user_name = coalesce(excluded.user_name, analytics_users.user_name)
+          where ${changed("analytics_users", false)}`);
 
   const write = (withAvatar: boolean) =>
     db.batch([
@@ -519,6 +539,9 @@ async function newUserOutcomes(s: AnalyticsScope, st: AnalyticsSettings) {
         select p.anon_id, bool_or(${act}) act, bool_or(${SURVEY_EVENT} = any(p.events)) sv
           from analytics_pageviews p join nu on nu.anon_id = p.anon_id
          where p.project_id = ${s.projectId} and p.created_at >= nu.f and p.created_at < nu.f + interval '7 days'
+           -- mesmo recorte, só que constante: deixa o Postgres usar o índice (project_id, created_at)
+           -- em vez de ler todas as telas do projeto para cruzar com os novos usuários
+           and p.created_at >= ${iso(s.from)}::timestamptz and p.created_at < ${iso(s.to)}::timestamptz + interval '7 days'
          group by p.anon_id
       )
       select nu.ch, nu.landing, nu.campaign, count(*)::int users, count(*) filter (where ev.act)::int activated, count(*) filter (where ev.sv)::int surveyed
@@ -899,7 +922,7 @@ export async function getAnalyticsUserProfile(projectId: string, anonId: string)
        where p.project_id = ${projectId} and p.anon_id = ${anonId} group by 1 order by 2 desc limit 12`),
     db.execute(sql`
       select count(*)::int sessions, coalesce(sum(pageviews), 0)::int pv, coalesce(sum(duration_ms), 0)::bigint ms,
-             count(distinct (started_at at time zone ${TZ})::date)::int days
+             count(distinct (started_at at time zone ${TZ})::date)::int days, ${isoTs(sql`max(last_seen_at)`)} last
         from analytics_sessions where project_id = ${projectId} and anon_id = ${anonId}`),
     db.execute(sql`
       select ${day(sql`started_at`)} d, count(*)::int sessions, coalesce(sum(duration_ms), 0)::bigint ms
@@ -923,6 +946,9 @@ export async function getAnalyticsUserProfile(projectId: string, anonId: string)
     bySession.set(p.session_id, list);
   }
   const t = rows<Record<string, number>>(totals)[0] ?? {};
+  // o usuário só é regravado a cada LAST_SEEN_STEP: a sessão mais recente tem a hora exata
+  const lastSession = (t as unknown as { last?: string | null }).last;
+  const lastSeenAt = lastSession && Date.parse(lastSession) > u.lastSeenAt.getTime() ? lastSession : u.lastSeenAt.toISOString();
   const pageCount = new Map<string, number>();
   for (const p of pv) pageCount.set(p.path, (pageCount.get(p.path) ?? 0) + 1);
 
@@ -937,7 +963,7 @@ export async function getAnalyticsUserProfile(projectId: string, anonId: string)
     name: own?.name ?? null,
     avatar: own?.avatar ?? null,
     firstSeenAt: u.firstSeenAt.toISOString(),
-    lastSeenAt: u.lastSeenAt.toISOString(),
+    lastSeenAt,
     channel: u.firstChannel as Channel,
     source: u.firstSource,
     campaign: u.firstCampaign,
