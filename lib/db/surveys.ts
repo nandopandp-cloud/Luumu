@@ -1,7 +1,7 @@
 import { hostList } from "@/lib/hosts";
 import "server-only";
 import { cache } from "react";
-import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "./client";
 import { surveys, questions, responses, users } from "@/db/schema";
 import { surveyId, questionId } from "./ids";
@@ -76,11 +76,11 @@ export async function listSurveys(projectId: string) {
     db
       .select({ surveyId: responses.surveyId, score: responses.score })
       .from(responses)
-      .where(and(inArray(responses.surveyId, surveyIds), sql`${responses.score} is not null`)),
+      .where(and(inArray(responses.surveyId, surveyIds), sql`${responses.score} is not null`, isNull(responses.excludedAt))),
     db
       .select({ surveyId: responses.surveyId, n: count() })
       .from(responses)
-      .where(inArray(responses.surveyId, surveyIds))
+      .where(and(inArray(responses.surveyId, surveyIds), isNull(responses.excludedAt)))
       .groupBy(responses.surveyId),
     creatorIds.length
       ? db
@@ -411,7 +411,7 @@ export async function enforceResponseLimit(id: string, known?: SurveyRow) {
   const s = known ?? (await db.select().from(surveys).where(eq(surveys.id, id)).limit(1))[0];
   if (!s || s.responseLimit == null || s.status !== "ativa") return;
 
-  const [{ n } = { n: 0 }] = await db.select({ n: count() }).from(responses).where(eq(responses.surveyId, id));
+  const [{ n } = { n: 0 }] = await db.select({ n: count() }).from(responses).where(and(eq(responses.surveyId, id), isNull(responses.excludedAt)));
   if (n >= s.responseLimit) {
     const scheduled = Boolean(s.startsAt || s.endsAt);
     await db

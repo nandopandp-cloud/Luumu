@@ -1,6 +1,6 @@
 import { resolvePeople, type Person } from "./people";
 import "server-only";
-import { and, asc, desc, eq, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, sql, type SQL } from "drizzle-orm";
 import { db } from "./client";
 import { answers, questions, responses, surveys } from "@/db/schema";
 import { scopeWhere, type Scope } from "./responses";
@@ -23,7 +23,8 @@ export const FEED_SORTS = [
 ] as const;
 export type FeedSort = (typeof FEED_SORTS)[number];
 
-export const FEED_VIEWS = ["all", "comments", "positive", "negative", "neutral"] as const;
+// "excluded" = respostas desconsideradas: a única aba que as mostra (todas as outras as ignoram)
+export const FEED_VIEWS = ["all", "comments", "positive", "negative", "neutral", "excluded"] as const;
 export type FeedView = (typeof FEED_VIEWS)[number];
 
 /**
@@ -81,6 +82,7 @@ export interface FeedItem {
   score: number | null;
   comment: string;
   createdAt: Date;
+  excludedAt: Date | null;
   /** nome, e-mail e foto (de Analytics › Usuários) */
   person: Person;
 }
@@ -104,10 +106,11 @@ export async function getResponseFeed(
       score: responses.score,
       comment: commentSql,
       createdAt: responses.createdAt,
+      excludedAt: responses.excludedAt,
     })
     .from(responses)
     .innerJoin(surveys, eq(responses.surveyId, surveys.id))
-    .where(and(scopeWhere(scope), viewWhere(opts.view)))
+    .where(and(scopeWhere(opts.view === "excluded" ? { ...scope, excluded: "only" } : scope), viewWhere(opts.view)))
     .orderBy(...sortOrder(opts.sort))
     .limit(opts.limit + 1);
 
@@ -130,27 +133,33 @@ export interface ViewCounts {
   positive: number;
   negative: number;
   neutral: number;
+  /** desconsideradas (fora de todas as outras contagens) */
+  excluded: number;
 }
 
 /** Contagem de cada aba numa única consulta (filtros agregados). */
 export async function getViewCounts(scope: Scope): Promise<ViewCounts> {
+  // lê os dois grupos de uma vez e separa no filter: as abas comuns só contam as consideradas
+  const kept = sql`${responses.excludedAt} is null`;
   const [r] = await db
     .select({
-      all: sql<number>`count(*)::int`,
-      comments: sql<number>`count(*) filter (where ${commentSql} is not null)::int`,
-      positive: sql<number>`count(*) filter (where ${responses.sentiment} = 'positivo')::int`,
-      negative: sql<number>`count(*) filter (where ${responses.sentiment} = 'negativo')::int`,
-      neutral: sql<number>`count(*) filter (where ${responses.sentiment} = 'neutro')::int`,
+      all: sql<number>`count(*) filter (where ${kept})::int`,
+      comments: sql<number>`count(*) filter (where ${kept} and ${commentSql} is not null)::int`,
+      positive: sql<number>`count(*) filter (where ${kept} and ${responses.sentiment} = 'positivo')::int`,
+      negative: sql<number>`count(*) filter (where ${kept} and ${responses.sentiment} = 'negativo')::int`,
+      neutral: sql<number>`count(*) filter (where ${kept} and ${responses.sentiment} = 'neutro')::int`,
+      excluded: sql<number>`count(*) filter (where ${responses.excludedAt} is not null)::int`,
     })
     .from(responses)
     .innerJoin(surveys, eq(responses.surveyId, surveys.id))
-    .where(scopeWhere(scope));
+    .where(scopeWhere({ ...scope, excluded: "any" }));
   return {
     all: Number(r?.all ?? 0),
     comments: Number(r?.comments ?? 0),
     positive: Number(r?.positive ?? 0),
     negative: Number(r?.negative ?? 0),
     neutral: Number(r?.neutral ?? 0),
+    excluded: Number(r?.excluded ?? 0),
   };
 }
 
@@ -198,6 +207,7 @@ export interface ResponseDetail {
   sentiment: string | null;
   score: number | null;
   createdAt: Date;
+  excludedAt: Date | null;
   answers: { question: string; blockId: string; value: string }[];
 }
 
@@ -225,6 +235,7 @@ export async function getResponseDetail(id: string, projectId: string): Promise<
       sentiment: responses.sentiment,
       score: responses.score,
       createdAt: responses.createdAt,
+      excludedAt: responses.excludedAt,
     })
     .from(responses)
     .innerJoin(surveys, eq(responses.surveyId, surveys.id))
@@ -250,8 +261,28 @@ export async function getResponseDetail(id: string, projectId: string): Promise<
     sentiment: head.sentiment,
     score: head.score,
     createdAt: head.createdAt,
+    excludedAt: head.excludedAt,
     answers: rows
       .map((r) => ({ question: r.title ?? "Pergunta removida", blockId: r.blockId ?? "", value: answerText(r.value) }))
       .filter((a) => a.value !== ""),
   };
+}
+
+/**
+ * Desconsidera (ou volta a considerar) respostas do projeto. A resposta continua guardada;
+ * só sai dos cálculos. Ids de outro projeto são ignorados em silêncio. Devolve quantas mudaram.
+ */
+export async function setResponsesExcluded(ids: string[], projectId: string, excluded: boolean, userId: string): Promise<number> {
+  if (ids.length === 0) return 0;
+  const owned = db
+    .select({ id: responses.id })
+    .from(responses)
+    .innerJoin(surveys, eq(responses.surveyId, surveys.id))
+    .where(and(inArray(responses.id, ids), eq(surveys.projectId, projectId)));
+  const changed = await db
+    .update(responses)
+    .set(excluded ? { excludedAt: new Date(), excludedBy: userId } : { excludedAt: null, excludedBy: null })
+    .where(and(inArray(responses.id, owned), excluded ? isNull(responses.excludedAt) : isNotNull(responses.excludedAt)))
+    .returning({ id: responses.id });
+  return changed.length;
 }

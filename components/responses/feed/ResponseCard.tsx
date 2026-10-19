@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Copy, Frown, Loader2, Meh, Monitor, MoreHorizontal, Smartphone, Smile, Star, Tablet } from "lucide-react";
+import { Ban, Copy, Frown, Loader2, Meh, Monitor, MoreHorizontal, RotateCcw, Smartphone, Smile, Star, Tablet } from "lucide-react";
 import { DEVICE_LABEL, isDeviceKind, type DeviceKind } from "@/lib/device";
 import { Dialog } from "@/components/ui/Dialog";
 import { HostBadge } from "@/components/ui/HostBadge";
@@ -9,6 +9,7 @@ import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils";
 import { UserIdentity, type PersonLike } from "@/components/ui/UserIdentity";
 import { getResponseDetailAction } from "@/app/(app)/responses/actions";
+import { SelectBox, useFeedSelection } from "./FeedSelection";
 
 export interface ResponseCardData {
   id: string;
@@ -24,6 +25,8 @@ export interface ResponseCardData {
   score: number | null;
   comment: string;
   tags: string[];
+  /** data em que foi desconsiderada ("23 nov 2026"); null = conta nos cálculos */
+  excludedOn: string | null;
 }
 
 const DEVICE_ICON: Record<DeviceKind, React.ReactNode> = {
@@ -57,7 +60,10 @@ export function ResponseCard({ r, hosts }: { r: ResponseCardData; hosts: string[
   const [menu, setMenu] = useState(false);
   const [detail, setDetail] = useState<Detail | null | "loading">(null);
   const toast = useToast();
+  const sel = useFeedSelection();
   const s = r.sentiment ? SENTIMENT[r.sentiment] : null;
+  const checked = sel.selected.has(r.id);
+  const excluded = r.excludedOn != null;
 
   async function openDetail() {
     setDetail("loading");
@@ -79,8 +85,26 @@ export function ResponseCard({ r, hosts }: { r: ResponseCardData; hosts: string[
   }
 
   return (
-    <article className="group rounded-2xl border border-line bg-bg-elev p-4 shadow-[var(--shadow-sm)] transition hover:border-line-strong sm:p-5">
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,240px)_minmax(0,1fr)_auto]">
+    <article
+      className={cn(
+        "group flex gap-3 rounded-2xl border bg-bg-elev p-4 shadow-[var(--shadow-sm)] transition sm:p-5",
+        checked ? "border-accent ring-[3px] ring-accent/15" : "border-line hover:border-line-strong",
+        excluded && !checked && "border-dashed bg-bg-sunken/40"
+      )}
+    >
+      {sel.enabled && (
+        <button
+          type="button"
+          role="checkbox"
+          aria-checked={checked}
+          aria-label="Selecionar resposta"
+          onClick={() => sel.toggle(r.id)}
+          className="-m-1 self-start p-1"
+        >
+          <SelectBox state={checked ? "on" : "off"} />
+        </button>
+      )}
+      <div className={cn("grid min-w-0 flex-1 grid-cols-1 gap-4 md:grid-cols-[minmax(0,240px)_minmax(0,1fr)_auto]", excluded && "opacity-75")}>
         {/* quem */}
         <UserIdentity
           u={r.person}
@@ -96,6 +120,15 @@ export function ResponseCard({ r, hosts }: { r: ResponseCardData; hosts: string[
         {/* o que disse */}
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-1.5">
+            {excluded && (
+              <span
+                className="inline-flex items-center gap-1 rounded-full bg-erro/10 px-2.5 py-0.5 text-xs font-semibold text-erro"
+                title={`Desconsiderada em ${r.excludedOn}: guardada, mas fora de todos os cálculos`}
+              >
+                <Ban className="size-3.5" />
+                Desconsiderada
+              </span>
+            )}
             {s && (
               <span className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold", s.cls)}>
                 {s.icon}
@@ -162,6 +195,24 @@ export function ResponseCard({ r, hosts }: { r: ResponseCardData; hosts: string[
                         <Copy className="size-4" /> Copiar comentário
                       </button>
                     )}
+                    {sel.enabled && (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        disabled={sel.pending}
+                        onClick={() => {
+                          setMenu(false);
+                          sel.apply([r.id], !excluded);
+                        }}
+                        className={cn(
+                          "flex w-full items-center gap-2.5 border-t border-line px-3.5 py-2 text-left hover:bg-bg-sunken",
+                          excluded ? "text-fg-soft" : "text-erro"
+                        )}
+                      >
+                        {excluded ? <RotateCcw className="size-4" /> : <Ban className="size-4" />}
+                        {excluded ? "Voltar a considerar" : "Desconsiderar do cálculo"}
+                      </button>
+                    )}
                   </div>
                 </>
               )}
@@ -172,6 +223,12 @@ export function ResponseCard({ r, hosts }: { r: ResponseCardData; hosts: string[
 
       {detail && detail !== "loading" && (
         <Dialog title="Detalhes da resposta" description={`${detail.surveyName} · ${new Date(detail.createdAt).toLocaleString("pt-BR")}`} onClose={() => setDetail(null)} size="lg">
+          {detail.excludedAt && (
+            <p className="mb-4 flex items-center gap-2 rounded-xl bg-erro/10 px-4 py-3 text-sm text-erro">
+              <Ban className="size-4 shrink-0" />
+              Desconsiderada em {new Date(detail.excludedAt).toLocaleDateString("pt-BR")}: está guardada, mas não entra em nenhum cálculo.
+            </p>
+          )}
           <dl className="mb-5 grid grid-cols-2 gap-3 rounded-xl bg-bg-sunken p-4 text-sm sm:grid-cols-4">
             <div className="col-span-2 min-w-0">
               <dt className="text-xs text-fg-mut">Pessoa</dt>

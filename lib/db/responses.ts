@@ -1,7 +1,7 @@
 import { resolvePeople } from "./people";
 import "server-only";
 import { hostList } from "@/lib/hosts";
-import { and, asc, desc, eq, count, avg, sql, inArray, gte, lte, or, isNull, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, count, avg, sql, inArray, gte, lte, or, isNull, isNotNull, type SQL } from "drizzle-orm";
 import { db } from "./client";
 import { responses, answers, surveys, questions } from "@/db/schema";
 import { responseId, answerId } from "./ids";
@@ -23,11 +23,19 @@ export interface Scope {
   dateTo?: Date; // opcional: só respostas até esta data (inclusive)
   host?: string; // opcional: só respostas de uma plataforma (hostname)
   surveyType?: string; // opcional: só pesquisas deste tipo (ex.: "CSAT")
+  /**
+   * Respostas desconsideradas (spam, teste): por padrão ficam FORA — notas, contagens,
+   * gráficos, insights, relatórios e exportações não as veem. "only" = só elas (aba do
+   * feed); "any" = todas (quando a consulta separa os dois grupos por conta própria).
+   */
+  excluded?: "only" | "any";
 }
 
 /** Filtro combinado: sempre por projeto (via join com surveys), opcionalmente por pesquisa e período. */
 export function scopeWhere(scope: Scope): SQL | undefined {
   const parts = [eq(surveys.projectId, scope.projectId)];
+  if (scope.excluded === "only") parts.push(isNotNull(responses.excludedAt));
+  else if (scope.excluded !== "any") parts.push(isNull(responses.excludedAt));
   if (scope.surveyId) parts.push(eq(responses.surveyId, scope.surveyId));
   if (scope.surveyType) parts.push(eq(surveys.type, scope.surveyType));
   if (scope.dateFrom) parts.push(gte(responses.createdAt, scope.dateFrom));

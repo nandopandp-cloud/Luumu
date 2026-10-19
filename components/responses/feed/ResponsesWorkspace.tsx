@@ -17,6 +17,8 @@ import type { WordCloudItem } from "@/lib/wordcloud";
 import { InsightCard, pctDelta, scoreDelta } from "@/components/ui/InsightCard";
 import { SortMenu, ViewTabs } from "./FeedToolbar";
 import { ResponseCard, type ResponseCardData } from "./ResponseCard";
+import { FeedSelection } from "./FeedSelection";
+import { getCurrentRole } from "@/lib/auth/current";
 import { ScoreDistributionCard, WordsCard } from "./SideCards";
 
 export interface WorkspaceParams {
@@ -59,11 +61,12 @@ export async function ResponsesWorkspace({
   const view: FeedView = (FEED_VIEWS as readonly string[]).includes(params.view ?? "") ? (params.view as FeedView) : "all";
   const sort: FeedSort = (FEED_SORTS as readonly string[]).includes(params.sort ?? "") ? (params.sort as FeedSort) : "recent";
   const limit = Math.min(300, Math.max(PAGE, Number(params.limit) || PAGE));
-  const [feed, overview, distribution, words] = await Promise.all([
+  const [feed, overview, distribution, words, role] = await Promise.all([
     getResponseFeed(scope, { view, sort, limit }),
     getOverview(scope),
     getScoreDistribution(scope),
     getWordCloud(scope),
+    getCurrentRole(),
   ]);
   const { counts, prevCounts, mainScore, prevScore, positivePct, prevPositivePct } = overview;
   // minigráficos: série diária do período, com zero nos dias sem resposta
@@ -83,6 +86,7 @@ export async function ResponsesWorkspace({
     score: r.score,
     comment: r.comment,
     tags: tagsFor(r.comment, words),
+    excludedOn: r.excludedAt ? shortDate(r.excludedAt) : null,
   }));
 
   const moreHref = (() => {
@@ -98,7 +102,8 @@ export async function ResponsesWorkspace({
         <SortMenu value={sort} />
       </div>
 
-      {counts.all === 0 ? (
+      {/* só desconsideradas no recorte: o feed continua acessível para revê-las */}
+      {counts.all === 0 && counts.excluded === 0 ? (
         <NoResponses surveyId={scope.surveyId} surveyName={surveyFilter?.options?.find((o) => o.id === scope.surveyId)?.name} />
       ) : (
         <>
@@ -144,6 +149,7 @@ export async function ResponsesWorkspace({
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="flex min-w-0 flex-col gap-3">
+          <FeedSelection ids={cards.map((c) => c.id)} mode={view === "excluded" ? "restore" : "exclude"} enabled={role !== "viewer"}>
           {cards.length === 0 ? (
             <EmptyState
               mascot="Pensativo"
@@ -157,6 +163,7 @@ export async function ResponsesWorkspace({
           ) : (
             cards.map((r) => <ResponseCard key={r.id} r={r} hosts={hosts} />)
           )}
+          </FeedSelection>
           {feed.hasMore && (
             <Link
               href={moreHref}

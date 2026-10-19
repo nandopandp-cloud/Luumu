@@ -5,6 +5,7 @@ import Link from "@/components/ui/Link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowDown,
+  Ban,
   ArrowUp,
   Check,
   ChevronDown,
@@ -126,6 +127,7 @@ const VIEWS: { value: FeedView; label: string; icon: React.ReactNode; tone: stri
   { value: "positive", label: "Positivas", icon: <Smile className="size-4" />, tone: "text-sucesso" },
   { value: "negative", label: "Negativas", icon: <Frown className="size-4" />, tone: "text-erro" },
   { value: "neutral", label: "Neutras", icon: <Meh className="size-4" />, tone: "text-aviso" },
+  { value: "excluded", label: "Desconsideradas", icon: <Ban className="size-4" />, tone: "text-erro" },
 ];
 
 /** Abas do feed com a contagem de cada uma (no recorte dos filtros). */
@@ -137,10 +139,12 @@ export function ViewTabs({ value, counts }: { value: FeedView; counts: ViewCount
     positive: counts.positive,
     negative: counts.negative,
     neutral: counts.neutral,
+    excluded: counts.excluded,
   };
   return (
     <nav className="flex flex-wrap gap-2" aria-label="Filtrar respostas">
-      {VIEWS.map((v) => {
+      {/* "Desconsideradas" só aparece quando há alguma (ou quando já se está nela) */}
+      {VIEWS.filter((v) => v.value !== "excluded" || n.excluded > 0 || value === "excluded").map((v) => {
         const on = v.value === value;
         return (
           <Link

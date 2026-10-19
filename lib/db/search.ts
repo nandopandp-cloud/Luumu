@@ -1,6 +1,6 @@
 import { resolvePeople } from "./people";
 import "server-only";
-import { and, count, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNull, sql, type SQL } from "drizzle-orm";
 import { db } from "./client";
 import { answers, responses, surveys, tours } from "@/db/schema";
 import { commentSql } from "./response-feed";
@@ -70,7 +70,7 @@ export async function searchProject(projectId: string, q: string) {
 
   const ids = surveyRows.map((s) => s.id);
   const counts = ids.length
-    ? await db.select({ surveyId: responses.surveyId, n: count() }).from(responses).where(inArray(responses.surveyId, ids)).groupBy(responses.surveyId)
+    ? await db.select({ surveyId: responses.surveyId, n: count() }).from(responses).where(and(inArray(responses.surveyId, ids), isNull(responses.excludedAt))).groupBy(responses.surveyId)
     : [];
   const nBy = new Map(counts.map((c) => [c.surveyId, Number(c.n)]));
 

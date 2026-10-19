@@ -266,6 +266,9 @@ export const responses = pgTable(
     sentiment: text("sentiment"), // positivo|neutro|negativo (derivado)
     score: real("score"), // nota principal (nullable)
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    // desconsiderada pelo time (spam, teste...): continua guardada, mas fica fora de todo cálculo
+    excludedAt: timestamp("excluded_at", { withTimezone: true }),
+    excludedBy: text("excluded_by").references(() => users.id, { onDelete: "set null" }),
   },
   (t) => [index("responses_survey_idx").on(t.surveyId)]
 );
