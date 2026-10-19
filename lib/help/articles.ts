@@ -110,8 +110,8 @@ export const HELP: HelpCategory[] = [
       {
         id: "quem-recebe",
         q: "Como escolher quem recebe a pesquisa?",
-        a: "Em Configurações → Público: \"Todos os usuários\" ou \"Usuários específicos\", informando uma lista de e-mails ou IDs. Para isso funcionar, seu produto precisa informar quem é o usuário com Luumu.identify({ id, email }).",
-        keywords: ["público", "segmento", "identify", "audiência"],
+        a: "Em Configurações → Público: \"Todos os usuários\" ou \"Usuários específicos\", informando uma lista de e-mails ou IDs. Para isso funcionar, seu produto precisa informar quem é o usuário com Luumu.identify({ id, email }). Também dá para limitar por ano escolar (um ou vários anos do Fundamental I, Fundamental II e Ensino Médio): no Exploradores o SDK lê o ano sozinho do perfil do aluno (GRADE_6 = 6º ano), a partir da primeira vez que ele abre o perfil naquele navegador. Outros produtos podem informar o ano com Luumu.identify({ school_year: \"7º ano\" }). Quem não tiver ano conhecido não recebe a pesquisa.",
+        keywords: ["público", "segmento", "identify", "audiência", "ano escolar", "série", "school_year", "grade_level"],
       },
       {
         id: "gatilho",

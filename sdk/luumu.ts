@@ -12,6 +12,7 @@
  *   Luumu.init({ key: "pk_...", surveyId?: "svy_..." })
  */
 import { canShow } from "../lib/tours/frequency";
+import { gradeFromTexts, matchesSchoolYears } from "../lib/school-years";
 import { detectDevice } from "../lib/device";
 import type { TourCatalogEntry } from "../lib/tours/types";
 import type { ToursRuntime } from "./tours/runtime";
@@ -142,6 +143,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     audience?: string | null; // "Todos os usuários" | "Usuários específicos"
     audienceMode?: "email" | "id" | null;
     audienceList?: string[] | null;
+    audienceSchoolYears?: string[] | null; // anos escolares ("EF7", "EM1"...); vazio = todos
     targetHosts?: string[] | null; // plataformas onde pode aparecer; vazio = todas
     frequency?: string | null; // "Uma vez por usuário" | "Recorrente (30 dias)" | "Sempre"
     appearance?: Appearance;
@@ -765,6 +767,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     activeTours = catalog.tours;
     if (catalog.sdk) bundleVersion = catalog.sdk;
     catalogLoaded = true;
+    scheduleGradeScan();
     maybeAnnounceHost(key);
     safe(maybeLoadTours);
     if (catalog.heatmaps && heatmapsSampled(catalog.hmRate)) safe(() => loadHeatmaps(key, catalog.hmRate, catalog.hmFresh));
@@ -1105,8 +1108,74 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     return list.map(slug).filter(Boolean);
   }
 
+  /*
+    Ano escolar lido da tela, sem o produto mudar nada (Exploradores: o perfil do aluno mostra
+    "6º ANO B • GRADE_6"). O perfil não aparece em toda página, então guardamos o último ano
+    visto POR USUÁRIO neste navegador (computador de escola é compartilhado). Fica só aqui:
+    não vai para o servidor. Se o identify trouxer school_year/grade_level, ele manda.
+  */
+  const GRADE_KEY = "luumu_grade";
+  type GradeMemo = Record<string, { y: string; at: number }>;
+  const gradeOwner = () => String(identity.id || identity.email || "");
+  const usesGrades = () => activeSurveys.some((s) => (s.audienceSchoolYears || []).length > 0);
+
+  function readGrades(): GradeMemo {
+    try {
+      return JSON.parse(localStorage.getItem(GRADE_KEY) || "{}") || {};
+    } catch {
+      return {};
+    }
+  }
+
+  function scanGrade() {
+    if (!document.body) return;
+    const texts: string[] = [];
+    // só texto visível do documento: nada de <script>/<style>
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const t = n.nodeValue;
+      const tag = n.parentElement?.tagName;
+      if (t && t.length < 500 && /grade_/i.test(t) && tag !== "SCRIPT" && tag !== "STYLE" && tag !== "NOSCRIPT") texts.push(t);
+    }
+    const year = gradeFromTexts(texts);
+    if (!year) return;
+    const memo = readGrades();
+    const who = gradeOwner();
+    if (memo[who]?.y === year) return;
+    memo[who] = { y: year, at: Date.now() };
+    // só os 5 usuários mais recentes deste navegador
+    const keep: GradeMemo = {};
+    Object.keys(memo)
+      .sort((a, b) => memo[b].at - memo[a].at)
+      .slice(0, 5)
+      .forEach((k) => (keep[k] = memo[k]));
+    try {
+      localStorage.setItem(GRADE_KEY, JSON.stringify(keep));
+    } catch {}
+  }
+
+  // a tela de perfil carrega os dados depois da troca de rota: olha de novo um pouco depois
+  function scheduleGradeScan() {
+    if (!usesGrades()) return;
+    for (const ms of [1500, 5000]) setTimeout(() => safe(scanGrade), ms);
+  }
+
+  function audienceTraits(): Record<string, unknown> {
+    const informed = [identity.school_year, identity.schoolYear, identity.grade_level, identity.gradeLevel].some(
+      (v) => v !== undefined && v !== null && v !== ""
+    );
+    if (informed) return identity;
+    const y = readGrades()[gradeOwner()]?.y;
+    return y ? { ...identity, school_year: y } : identity;
+  }
+
   // decide se o usuário atual está no público-alvo da survey
   function inAudience(s: ActiveSurvey): boolean {
+    // ano escolar soma-se ao público: precisa casar os dois
+    if ((s.audienceSchoolYears || []).length > 0) {
+      safe(scanGrade);
+      if (!matchesSchoolYears(s.audienceSchoolYears, audienceTraits())) return false;
+    }
     if (s.audience !== "Usuários específicos") return true; // "Todos os usuários" (ou não definido)
     const list = (s.audienceList || []).map((x) => String(x).trim().toLowerCase()).filter(Boolean);
     if (list.length === 0) return false; // específico sem lista = ninguém
@@ -1551,6 +1620,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     // navegação: load inicial + trocas de rota em SPA (pushState/replaceState/popstate)
     const notifyRouteChange = () => {
       trackPageView();
+      scheduleGradeScan();
       safe(() => heatmaps?.route());
       safe(() => analytics?.route());
     };
@@ -1648,13 +1718,22 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
       track(event);
     },
     // informa quem é o usuário logado (habilita público-alvo por email/ID e segmentação de
-    // tours por traits: plan, role, company...). Só valores simples são guardados.
+    // tours por traits: plan, role, company...; pesquisas por school_year/grade_level).
+    // Só valores simples são guardados, ou listas curtas deles (p.ex. professor com
+    // várias turmas: school_year: ["6º ano", "7º ano"]).
     identify(user: { id?: string; email?: string; [trait: string]: unknown } = {}) {
+      const simple = (v: unknown) =>
+        // URLs (ex.: avatar) podem passar de 200 caracteres; o resto é cortado em 200
+        typeof v === "string" ? v.slice(0, /^https:\/\//i.test(v) ? 500 : 200)
+        : typeof v === "number" || typeof v === "boolean" ? v
+        : undefined;
       const next: typeof identity = {};
       for (const [k, v] of Object.entries(user || {}).slice(0, 30)) {
-        // URLs (ex.: avatar) podem passar de 200 caracteres; o resto é cortado em 200
-        if (typeof v === "string") next[k] = v.slice(0, /^https:\/\//i.test(v) ? 500 : 200);
-        else if (typeof v === "number" || typeof v === "boolean") next[k] = v;
+        // id/email são lidos como texto em vários pontos: lista ali não faz sentido
+        if (Array.isArray(v) && k !== "id" && k !== "email") {
+          const items = v.slice(0, 20).map(simple).filter((x) => x !== undefined);
+          if (items.length) next[k] = items;
+        } else if (simple(v) !== undefined) next[k] = simple(v);
       }
       identity = next;
       try {

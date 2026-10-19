@@ -281,6 +281,7 @@ export async function duplicateSurvey(
     triggerEvents: source.triggerEvents as object,
     audienceMode: source.audienceMode,
     audienceList: source.audienceList as object,
+    audienceSchoolYears: source.audienceSchoolYears as object,
     targetHosts: source.targetHosts as object,
     frequency: source.frequency,
     delay: source.delay,
@@ -324,7 +325,7 @@ export async function duplicateSurvey(
 export async function updateSurvey(
   id: string,
   scope: SurveyScope,
-  patch: Partial<Pick<SurveyRow, "name" | "type" | "channel" | "audience" | "segment" | "language" | "trigger" | "triggerEvent" | "triggerEvents" | "audienceMode" | "audienceList" | "targetHosts" | "frequency" | "delay" | "startsAt" | "endsAt" | "responseLimit">>
+  patch: Partial<Pick<SurveyRow, "name" | "type" | "channel" | "audience" | "segment" | "language" | "trigger" | "triggerEvent" | "triggerEvents" | "audienceMode" | "audienceList" | "audienceSchoolYears" | "targetHosts" | "frequency" | "delay" | "startsAt" | "endsAt" | "responseLimit">>
 ) {
   await assertOwned(id, scope);
   await db.update(surveys).set({ ...patch, updatedAt: new Date() }).where(eq(surveys.id, id));
@@ -505,6 +506,7 @@ export async function listActiveSurveysForSdk(projectId: string) {
       audience: surveys.audience,
       audienceMode: surveys.audienceMode,
       audienceList: surveys.audienceList,
+      audienceSchoolYears: surveys.audienceSchoolYears,
       targetHosts: surveys.targetHosts,
       frequency: surveys.frequency,
     })

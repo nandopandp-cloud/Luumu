@@ -20,6 +20,7 @@ import { deriveSentiment } from "@/lib/sentiment";
 import { normalizeAppearance, isPlaceholderMissing, type QuestionConfig } from "@/lib/builder";
 import { isWithinSchedule, normalizeDate } from "@/lib/schedule";
 import { normalizeHost } from "@/lib/hosts";
+import { normalizeSchoolYears } from "@/lib/school-years";
 import { headers } from "next/headers";
 import { detectDevice, isDeviceKind } from "@/lib/device";
 import { getCurrentWorkspaceId, getCurrentProjectId, requireUser } from "@/lib/auth/current";
@@ -76,6 +77,7 @@ const settingsSchema = z.object({
   triggerEvents: z.array(z.string()).optional(),
   audienceMode: z.enum(["email", "id"]).nullable().optional(),
   audienceList: z.array(z.string()).optional(),
+  audienceSchoolYears: z.array(z.string()).max(20).optional(),
   targetHosts: z.array(z.string()).max(50).optional(),
   frequency: z.string().optional(),
   startsAt: z.string().optional(),
@@ -84,7 +86,7 @@ const settingsSchema = z.object({
 });
 
 export async function saveSettingsAction(input: unknown) {
-  const { id, triggerEvents, targetHosts, ...rest } = settingsSchema.parse(input);
+  const { id, triggerEvents, targetHosts, audienceSchoolYears, ...rest } = settingsSchema.parse(input);
   const from = normalizeDate(rest.startsAt);
   const to = normalizeDate(rest.endsAt);
   if (from && to && from > to) {
@@ -101,6 +103,8 @@ export async function saveSettingsAction(input: unknown) {
     ...(targetHosts !== undefined
       ? { targetHosts: Array.from(new Set(targetHosts.map(normalizeHost).filter(Boolean))) }
       : {}),
+    // só códigos conhecidos, sem repetição ([] = todos os anos)
+    ...(audienceSchoolYears !== undefined ? { audienceSchoolYears: normalizeSchoolYears(audienceSchoolYears) } : {}),
   };
   await updateSurvey(id, { projectId }, patch);
   revalidatePath(`/surveys/${id}/settings`);

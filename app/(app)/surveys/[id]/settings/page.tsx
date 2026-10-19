@@ -65,6 +65,7 @@ export default async function SurveySettingsPage({
               : [],
           audienceMode: (survey.audienceMode as "email" | "id" | null) ?? null,
           audienceList: (survey.audienceList as string[]) ?? [],
+          audienceSchoolYears: (survey.audienceSchoolYears as string[]) ?? [],
           targetHosts: (survey.targetHosts as string[]) ?? [],
           frequency: survey.frequency,
           startsAt: survey.startsAt ?? "",

@@ -213,6 +213,8 @@ export const surveys = pgTable(
     audienceMode: text("audience_mode"), // "email" | "id" | null
     // lista de emails ou IDs alvo quando audience = "Usuários específicos"
     audienceList: jsonb("audience_list").notNull().default([]),
+    // anos escolares do público ("EF1".."EF9", "EM1".."EM3"; ver lib/school-years); [] = todos
+    audienceSchoolYears: jsonb("audience_school_years").notNull().default([]),
     // plataformas (hostnames) onde a pesquisa pode aparecer; [] = em todas as plataformas do projeto
     targetHosts: jsonb("target_hosts").notNull().default([]),
     frequency: text("frequency").notNull().default("Uma vez por usuário"),

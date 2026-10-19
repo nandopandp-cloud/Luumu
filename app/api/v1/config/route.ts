@@ -108,6 +108,7 @@ export async function GET(req: Request) {
         audience: s.audience, // "Todos os usuários" | "Usuários específicos"
         audienceMode: s.audienceMode, // "email" | "id" | null
         audienceList: (s.audienceList as string[]) ?? [], // emails/IDs alvo
+        audienceSchoolYears: (s.audienceSchoolYears as string[]) ?? [], // anos escolares ([] = todos)
         targetHosts: (s.targetHosts as string[]) ?? [], // plataformas onde pode aparecer ([] = todas)
         frequency: s.frequency,
       })),
