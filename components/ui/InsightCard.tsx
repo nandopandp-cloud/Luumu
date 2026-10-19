@@ -89,6 +89,7 @@ export function InsightCard({
   chart = "line",
   delta,
   hint,
+  detail,
   dense = false,
 }: {
   label: string;
@@ -99,6 +100,8 @@ export function InsightCard({
   chart?: "line" | "bars";
   delta: Delta | null;
   hint?: string;
+  /** linha de apoio abaixo do número (ex.: "90% de 1.000 exibições") */
+  detail?: string;
   /** faixas com muitos cards (5–6 por linha): número e minigráfico menores */
   dense?: boolean;
 }) {
@@ -123,6 +126,7 @@ export function InsightCard({
           >
             {value}
           </div>
+          {detail ? <div className={cn("mt-1.5 font-semibold text-fg-soft", dense ? "text-[11px]" : "text-xs")}>{detail}</div> : null}
           <div className={cn("mt-2.5 min-h-9 leading-snug", dense ? "text-[11px]" : "text-xs")}>
             {delta ? (
               <>

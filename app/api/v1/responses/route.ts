@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { submitResponse } from "@/lib/db/responses";
+import { markViewResponded } from "@/lib/db/survey-views";
 import { getSurvey, enforceResponseLimit } from "@/lib/db/surveys";
 import { hostFromOrigin } from "@/lib/db/hosts";
 import { detectDevice, isDeviceKind } from "@/lib/device";
@@ -26,6 +27,7 @@ const schema = z.object({
   respondent: z.string().max(200).nullish(), // id externo (Luumu.identify)
   respondentEmail: z.string().max(200).nullish(), // email (Luumu.identify)
   device: z.string().max(20).nullish(), // mobile | tablet | desktop (detectado no navegador)
+  viewId: z.string().max(64).nullish(), // exibição do widget que gerou a resposta (/surveys/views)
 });
 
 /**
@@ -93,7 +95,11 @@ export async function POST(req: Request) {
     device: isDeviceKind(data.device) ? data.device : detectDevice(req.headers.get("user-agent")),
   });
   // reaproveita a linha já carregada acima em vez de reler a pesquisa
-  await enforceResponseLimit(data.surveyId, survey);
+  await Promise.all([
+    enforceResponseLimit(data.surveyId, survey),
+    // SDK antigo em cache não registra exibição nem manda viewId: fica fora do indicador
+    data.viewId ? markViewResponded(data.viewId, data.surveyId) : null,
+  ]);
 
   /*
     Sem revalidatePath aqui de propósito. As três telas que esta rota invalidava

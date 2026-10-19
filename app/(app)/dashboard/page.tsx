@@ -5,7 +5,7 @@ import { IllustratedState } from "@/components/ui/IllustratedState";
 import { DashboardEmptyArt } from "@/components/illustrations/EmptyArt";
 import { hostList } from "@/lib/hosts";
 import { selectedPlatform } from "@/lib/platform";
-import { CalendarDays, MessagesSquare, Plus, Smile, Timer } from "lucide-react";
+import { CalendarDays, EyeOff, MessagesSquare, Plus, Smile, Timer } from "lucide-react";
 import { DataFilters } from "@/components/ui/DataFilters";
 import { InsightCard, pctDelta, scoreDelta } from "@/components/ui/InsightCard";
 import { ScoreEvolutionCard } from "@/components/dashboard/ScoreEvolutionCard";
@@ -15,6 +15,7 @@ import { TemplatesTip } from "@/components/dashboard/TemplatesTip";
 import { listSurveys, listSurveyOptions, resolveSurveyScope } from "@/lib/db/surveys";
 import { getScoreDistribution } from "@/lib/db/responses";
 import { getOverview, getScoreSeries, previousScope } from "@/lib/db/overview";
+import { getViewOverview } from "@/lib/db/survey-views";
 import { requireUser, getCurrentProjectId } from "@/lib/auth/current";
 import { formatScore } from "@/lib/scoring";
 import { formatDayBR, periodToRange } from "@/lib/period";
@@ -56,11 +57,12 @@ export default async function DashboardPage({
   const { surveyId: scopedSurveyId, defaultSurveyId } = await resolveSurveyScope(projectId, surveyId ?? "all", host);
   const scope = { projectId, surveyId: scopedSurveyId, dateFrom, dateTo, host };
 
-  const [projectSurveys, surveyOptions, overview, distribution] = await Promise.all([
+  const [projectSurveys, surveyOptions, overview, distribution, views] = await Promise.all([
     listSurveys(projectId),
     listSurveyOptions(projectId, host),
     getOverview(scope),
     getScoreDistribution(scope),
+    getViewOverview(scope),
   ]);
   const series = await getScoreSeries(scope, overview.mainScore);
   const { counts, prevCounts, mainScore, prevScore, positivePct, prevPositivePct, daily } = overview;
@@ -117,7 +119,8 @@ export default async function DashboardPage({
 
       <DataFilters surveys={surveyOptions} defaultSurveyId={defaultSurveyId} defaultPeriod={DASHBOARD_DEFAULT_PERIOD} />
 
-      {counts.all === 0 ? (
+      {/* pesquisa exibida e nunca respondida também é dado: o card de não resposta precisa aparecer */}
+      {counts.all === 0 && views.viewed === 0 ? (
         <IllustratedState
           className="pt-2"
           wideActions
@@ -145,7 +148,7 @@ export default async function DashboardPage({
         <>
 
       {/* Métricas */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <InsightCard
           label={scoreName}
           value={mainScore ? formatScore(mainScore) : "—"}
@@ -180,6 +183,25 @@ export default async function DashboardPage({
           series={daily.map(() => activeCount)}
           // sem pesquisa no ar antes, variação % não faz sentido; 0 → 0 é "estável"
           delta={prevActive ? pctDelta(activeCount, prevActive) : prevActive === 0 && activeCount === 0 ? { value: 0, unit: "%" } : null}
+        />
+        <InsightCard
+          label="Visualizaram e não responderam"
+          value={views.viewed ? views.notResponded.toLocaleString("pt-BR") : "—"}
+          tone="roxo"
+          icon={<EyeOff className="size-5" />}
+          detail={
+            views.viewed
+              ? `${views.notRespondedPct!.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}% de ${views.viewed.toLocaleString("pt-BR")} ${views.viewed === 1 ? "exibição" : "exibições"}`
+              : "Nenhuma exibição registrada"
+          }
+          series={views.daily.map((d) => (d.viewed ? (d.notResponded / d.viewed) * 100 : 0))}
+          // taxa de não resposta subir é ruim
+          delta={
+            views.notRespondedPct != null && views.prev?.notRespondedPct != null
+              ? { value: Math.round((views.notRespondedPct - views.prev.notRespondedPct) * 10) / 10, unit: "p.p.", inverted: true }
+              : null
+          }
+          hint="Pessoas que viram a pesquisa no produto (widget do SDK) e fecharam ou saíram sem responder. Respostas pelo link público não entram nesta conta."
         />
       </div>
 

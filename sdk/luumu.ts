@@ -318,6 +318,27 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     let step = 0;
     let done = false;
 
+    /*
+      Registra a exibição (base do indicador "visualizaram e não responderam"). O id nasce
+      aqui e volta com a resposta, que marca a exibição como respondida. Não espera nem
+      bloqueia o widget; na aba do administrador (builder/preview) não conta.
+    */
+    const viewId = `svv_${Math.random().toString(36).slice(2, 12)}${Date.now().toString(36)}`;
+    if (!builderToken && !previewToken) {
+      fetch(`${API}/surveys/views`, {
+        method: "POST",
+        keepalive: true,
+        headers: { "Content-Type": SIMPLE_CONTENT_TYPE },
+        body: JSON.stringify({
+          key: activeKey,
+          surveyId: survey.id,
+          viewId,
+          respondent: identity.id || null,
+          device: detectDevice(navigator.userAgent, navigator.maxTouchPoints || 0),
+        }),
+      }).catch(() => {});
+    }
+
     const wrap = el("div", { class: "wrap" });
     const stage = el("div", { class: "stage" });
     wrap.append(stage);
@@ -377,6 +398,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
             respondent: identity.id || null,
             respondentEmail: identity.email || null,
             device: detectDevice(navigator.userAgent, navigator.maxTouchPoints || 0),
+            viewId,
           }),
         });
         // conversão para pesquisa no Analytics

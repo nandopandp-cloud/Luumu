@@ -284,6 +284,27 @@ export const answers = pgTable(
 );
 
 /**
+ * Exibições do widget de pesquisa (SDK): uma linha por vez que a pesquisa apareceu na tela.
+ * O id é gerado no navegador e volta junto com a resposta, que marca `respondedAt` —
+ * base do indicador "visualizaram e não responderam" (conversão da pesquisa).
+ */
+export const surveyViews = pgTable(
+  "survey_views",
+  {
+    id: text("id").primaryKey(),
+    surveyId: text("survey_id")
+      .notNull()
+      .references(() => surveys.id, { onDelete: "cascade" }),
+    host: text("host"), // plataforma (hostname) onde a pesquisa apareceu
+    device: text("device"), // mobile | tablet | desktop
+    respondent: text("respondent"), // id externo (Luumu.identify), se houver
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    respondedAt: timestamp("responded_at", { withTimezone: true }), // null = não respondeu
+  },
+  (t) => [index("survey_views_survey_created_idx").on(t.surveyId, t.createdAt)]
+);
+
+/**
  * Agendamento de envio automático de relatórios por e-mail.
  * O cron diário (/api/cron/reports) processa os que já venceram (nextRunAt <= agora e ativo).
  */
