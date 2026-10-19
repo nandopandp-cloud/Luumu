@@ -1113,12 +1113,13 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     "6º ANO B • GRADE_6"). O perfil não aparece em toda página, então guardamos o último ano
     visto POR USUÁRIO neste navegador (computador de escola é compartilhado). Fica só aqui:
     não vai para o servidor. Se o identify trouxer school_year/grade_level, ele manda.
+
+    Lê SEMPRE, mesmo sem pesquisa com filtro de ano no ar: o aluno costuma abrir o perfil
+    antes de a pesquisa existir, e sem guardar ali ele ficaria de fora até voltar ao perfil.
   */
   const GRADE_KEY = "luumu_grade";
   type GradeMemo = Record<string, { y: string; at: number }>;
   const gradeOwner = () => String(identity.id || identity.email || "");
-  const usesGrades = () => activeSurveys.some((s) => (s.audienceSchoolYears || []).length > 0);
-
   function readGrades(): GradeMemo {
     try {
       return JSON.parse(localStorage.getItem(GRADE_KEY) || "{}") || {};
@@ -1127,8 +1128,8 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     }
   }
 
-  function scanGrade() {
-    if (!document.body) return;
+  function gradeOnPage(): string | null {
+    if (!document.body) return null;
     const texts: string[] = [];
     // só texto visível do documento: nada de <script>/<style>
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
@@ -1137,7 +1138,11 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
       const tag = n.parentElement?.tagName;
       if (t && t.length < 500 && /grade_/i.test(t) && tag !== "SCRIPT" && tag !== "STYLE" && tag !== "NOSCRIPT") texts.push(t);
     }
-    const year = gradeFromTexts(texts);
+    return gradeFromTexts(texts);
+  }
+
+  function scanGrade() {
+    const year = gradeOnPage();
     if (!year) return;
     const memo = readGrades();
     const who = gradeOwner();
@@ -1156,7 +1161,6 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
 
   // a tela de perfil carrega os dados depois da troca de rota: olha de novo um pouco depois
   function scheduleGradeScan() {
-    if (!usesGrades()) return;
     for (const ms of [1500, 5000]) setTimeout(() => safe(scanGrade), ms);
   }
 
@@ -1739,6 +1743,23 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
       try {
         localStorage.setItem("luumu_identity", JSON.stringify(identity));
       } catch {}
+    },
+    // Diagnóstico do ano escolar, para rodar no console do produto logado: Luumu.debugGrade()
+    debugGrade() {
+      safe(scanGrade);
+      const informed = [identity.school_year, identity.schoolYear, identity.grade_level, identity.gradeLevel].find(
+        (v) => v !== undefined && v !== null && v !== ""
+      );
+      return {
+        usuario: gradeOwner() || "(não identificado: o identify não trouxe id nem e-mail)",
+        naTela: gradeOnPage(),
+        guardado: readGrades()[gradeOwner()]?.y ?? null,
+        informadoNoIdentify: informed ?? null,
+        catalogoCarregado: catalogLoaded,
+        pesquisasComFiltroDeAno: activeSurveys
+          .filter((s) => (s.audienceSchoolYears || []).length > 0)
+          .map((s) => ({ id: s.id, anos: s.audienceSchoolYears, recebe: inAudience(s) })),
+      };
     },
     /*
       Diagnóstico da captura de nome/foto, para rodar no console do produto logado:
