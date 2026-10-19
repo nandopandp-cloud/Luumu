@@ -4,7 +4,8 @@ import { Plus, Trash2, GitBranch } from "lucide-react";
 import { Switch } from "@/components/ui/Switch";
 import { Input, Select } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-import { blockKind, type BuilderQuestion } from "@/lib/builder";
+import { cn } from "@/lib/utils";
+import { blockKind, isPlaceholderMissing, type BuilderQuestion } from "@/lib/builder";
 
 export function QuestionSettings({
   question,
@@ -116,11 +117,39 @@ export function QuestionSettings({
         </div>
       )}
 
+      {/* Placeholder opcional: desativado = chave ausente (o campo fica vazio);
+          ativado = o texto passa a ser obrigatório para publicar */}
       {kind === "text" && (
-        <label className="flex flex-col gap-1">
-          <span className="text-xs font-semibold text-fg-soft">Placeholder</span>
-          <Input value={cfg.placeholder ?? ""} onChange={(e) => setConfig({ placeholder: e.target.value })} className="py-2" />
-        </label>
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-semibold text-fg-soft">Placeholder</span>
+            <Switch
+              checked={cfg.placeholder !== undefined}
+              onChange={(on) => {
+                if (on) return setConfig({ placeholder: "" });
+                const rest = { ...cfg };
+                delete rest.placeholder;
+                onChange({ config: rest });
+              }}
+              label="Placeholder"
+            />
+          </div>
+          {cfg.placeholder !== undefined && (
+            <>
+              <Input
+                value={cfg.placeholder}
+                onChange={(e) => setConfig({ placeholder: e.target.value })}
+                placeholder="Ex.: Conte pra gente…"
+                aria-invalid={isPlaceholderMissing(question.blockId, cfg)}
+                autoFocus={!cfg.placeholder}
+                className={cn("py-2", isPlaceholderMissing(question.blockId, cfg) && "border-erro")}
+              />
+              {isPlaceholderMissing(question.blockId, cfg) && (
+                <span className="text-xs text-erro">Escreva o texto do placeholder ou desative a opção.</span>
+              )}
+            </>
+          )}
+        </div>
       )}
 
       {/* Lógica condicional */}

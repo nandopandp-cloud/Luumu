@@ -65,7 +65,13 @@ export interface QuestionConfig {
   max?: number;
   minLabel?: string;
   maxLabel?: string;
+  /** texto curto/longo: ausente = placeholder desativado; presente = ativado (texto obrigatório) */
   placeholder?: string;
+}
+
+/** Placeholder ativado mas sem texto — impede a publicação. */
+export function isPlaceholderMissing(blockId: string, config: QuestionConfig | null | undefined): boolean {
+  return blockKind[blockId] === "text" && typeof config?.placeholder === "string" && !config.placeholder.trim();
 }
 
 export interface QuestionLogic {
@@ -123,10 +129,6 @@ export function defaultConfig(blockId: string): QuestionConfig {
     case "checkbox":
     case "dropdown":
       return { options: ["Opção 1", "Opção 2", "Opção 3"] };
-    case "short":
-      return { placeholder: "Sua resposta" };
-    case "long":
-      return { placeholder: "Escreva aqui…" };
     default:
       return {};
   }

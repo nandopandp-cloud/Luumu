@@ -17,7 +17,7 @@ import {
 } from "@/lib/db/surveys";
 import { submitResponse } from "@/lib/db/responses";
 import { deriveSentiment } from "@/lib/sentiment";
-import { normalizeAppearance } from "@/lib/builder";
+import { normalizeAppearance, isPlaceholderMissing, type QuestionConfig } from "@/lib/builder";
 import { isWithinSchedule, normalizeDate } from "@/lib/schedule";
 import { normalizeHost } from "@/lib/hosts";
 import { headers } from "next/headers";
@@ -115,6 +115,12 @@ export async function publishSurveyAction(id: string) {
   if (!data.survey.name.trim()) return { ok: false as const, error: "Dê um nome à pesquisa antes de publicar." };
   if (data.questions.length === 0)
     return { ok: false as const, error: "Adicione ao menos uma pergunta antes de publicar." };
+  const noPlaceholder = data.questions.findIndex((q) => isPlaceholderMissing(q.blockId, q.config as QuestionConfig));
+  if (noPlaceholder !== -1)
+    return {
+      ok: false as const,
+      error: `A pergunta ${noPlaceholder + 1} está com o placeholder ativado, mas sem texto. Escreva o texto ou desative a opção.`,
+    };
   // publicar uma pesquisa já expirada geraria uma "ativa" que ninguém jamais veria
   if (data.survey.endsAt && !isWithinSchedule(null, data.survey.endsAt))
     return {
