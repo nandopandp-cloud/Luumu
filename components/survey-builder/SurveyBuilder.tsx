@@ -20,7 +20,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
-  GripVertical, Trash2, Plus, Eye, Settings2, Check, Loader2,
+  GripVertical, Trash2, Copy, Plus, Eye, Settings2, Check, Loader2,
   Star, Smile, Hash, Type, AlignLeft, ListChecks, CheckSquare, ChevronDown,
   Calendar, Upload, Gauge, Link2,
 } from "lucide-react";
@@ -76,10 +76,10 @@ function PaletteItem({ id, label, hint }: { id: string; label: string; hint: str
 
 /* ---- Pergunta ordenável ---- */
 function CanvasQuestion({
-  q, index, selected, hasLogic, onSelect, onDelete,
+  q, index, selected, hasLogic, onSelect, onDuplicate, onDelete,
 }: {
   q: BuilderQuestion; index: number; selected: boolean; hasLogic: boolean;
-  onSelect: () => void; onDelete: () => void;
+  onSelect: () => void; onDuplicate: () => void; onDelete: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: q.uid });
   const block = builderBlocks.find((b) => b.id === q.blockId);
@@ -125,13 +125,24 @@ function CanvasQuestion({
           </div>
         )}
       </div>
-      <button
-        onClick={(e) => { e.stopPropagation(); onDelete(); }}
-        className="text-fg-mut opacity-0 transition hover:text-erro group-hover:opacity-100"
-        aria-label="Excluir"
-      >
-        <Trash2 className="size-4" />
-      </button>
+      <div className="flex items-center gap-2 opacity-0 transition group-hover:opacity-100">
+        <button
+          onClick={(e) => { e.stopPropagation(); onDuplicate(); }}
+          className="text-fg-mut transition hover:text-accent"
+          aria-label="Duplicar"
+          title="Duplicar"
+        >
+          <Copy className="size-4" />
+        </button>
+        <button
+          onClick={(e) => { e.stopPropagation(); onDelete(); }}
+          className="text-fg-mut transition hover:text-erro"
+          aria-label="Excluir"
+          title="Excluir"
+        >
+          <Trash2 className="size-4" />
+        </button>
+      </div>
     </div>
   );
 }
@@ -259,6 +270,19 @@ export function SurveyBuilder({
     }
   }
 
+  /** Copia o bloco (texto, configuração e condição) logo abaixo do original e seleciona a cópia. */
+  function duplicateQuestion(uid: string) {
+    const copyUid = newUid();
+    setQuestions((prev) => {
+      const idx = prev.findIndex((q) => q.uid === uid);
+      if (idx === -1) return prev;
+      const copy = [...prev];
+      copy.splice(idx + 1, 0, { ...structuredClone(prev[idx]), uid: copyUid });
+      return copy;
+    });
+    setSelectedUid(copyUid);
+  }
+
   function patchSelected(patch: Partial<BuilderQuestion>) {
     if (!selectedUid) return;
     setQuestions((prev) => prev.map((q) => (q.uid === selectedUid ? { ...q, ...patch } : q)));
@@ -372,6 +396,7 @@ export function SurveyBuilder({
                       selected={q.uid === selectedUid}
                       hasLogic={!!q.logic?.showIf}
                       onSelect={() => setSelectedUid(q.uid)}
+                      onDuplicate={() => duplicateQuestion(q.uid)}
                       onDelete={() => setQuestions((prev) => prev.filter((x) => x.uid !== q.uid))}
                     />
                   ))
