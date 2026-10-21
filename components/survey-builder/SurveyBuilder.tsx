@@ -20,7 +20,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
-  GripVertical, Trash2, Copy, Plus, Eye, Settings2, Check, Loader2,
+  GripVertical, Trash2, CopyPlus, Plus, Eye, Settings2, Check, Loader2,
   Star, Smile, Hash, Type, AlignLeft, ListChecks, CheckSquare, ChevronDown,
   Calendar, Upload, Gauge, Link2,
 } from "lucide-react";
@@ -132,7 +132,7 @@ function CanvasQuestion({
           aria-label="Duplicar"
           title="Duplicar"
         >
-          <Copy className="size-4" />
+          <CopyPlus className="size-4" />
         </button>
         <button
           onClick={(e) => { e.stopPropagation(); onDelete(); }}
