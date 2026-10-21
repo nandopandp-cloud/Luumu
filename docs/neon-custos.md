@@ -26,6 +26,29 @@ autoscaling subir de CU. Reduzir picos de CPU é o que mais economiza.
 | Heatmap: só a cópia usada é baixada | `lib/db/heatmaps.ts` (`getSnapshot`) | Antes vinham os HTMLs de todos os dispositivos para usar um. |
 | Remoção de índices redundantes e da tabela `rate_limits` | migração 0036 | Menos escrita, WAL e espaço em toda gravação. |
 
+### Rodada 2 (21/10/2026) — cache compartilhado entre instâncias
+
+Medido no `pg_stat_statements` (30 h, compute sem suspender nenhuma vez): a contagem de sessões
+de heatmap do mês (`heatmapQuota`) somava **878 s de CPU em 30 h** (1.094 chamadas × ~800 ms,
+~270 GB de páginas lidas) — mais que todas as outras consultas juntas. O cache em memória de
+5 min valia por instância da função de coleta, e cada instância nova refazia a leitura do mês.
+
+| Mudança | Onde | Efeito medido |
+| --- | --- | --- |
+| `sharedCache` (`unstable_cache` do Next) | `lib/db/shared-cache.ts` | Cache compartilhado entre todas as instâncias e deploys na Vercel. |
+| Cota de heatmap: dias encerrados no cache compartilhado (1×/dia), só hoje relido | `lib/db/heatmaps.ts` | 400–800 ms → 30–100 ms por recálculo. |
+| Estimativa de sessões/24h do `heatmapPlan` no cache compartilhado (10 min) | `lib/db/heatmaps.ts` | 2.441 chamadas/30 h → no máximo 1 a cada 10 min por projeto. |
+| Eventos do mês: dias encerrados no cache compartilhado; hoje com 5 min | `lib/db/workspace.ts` | ~4–5 s → ~250 ms, e o dia fechado 1×/dia em vez de 1× por instância. |
+
+### Piso do custo: a compute nunca dorme
+
+Tráfego de madrugada (1h–6h BRT): 100–250 telas/hora, intervalos acima de 5 min são raros.
+Com a compute sempre ligada, o **mínimo** é `CU mínima × 24 h × 30` — a 0,25 CU, ~183 CU-h ≈
+US$ 19/mês. Tudo acima disso vem da compute escalando por consultas pesadas, que é o que estas
+mudanças atacam. Para ficar abaixo do piso seria preciso a compute dormir de madrugada
+(enfileirar a ingestão fora do Postgres) — economiza ~US$ 4/mês e exige um serviço de fila
+pago; não compensa hoje.
+
 ### Aplicar a migração
 
 Rode `db/migrations/0036_neon_cost.sql` no SQL Editor do Neon, **um comando por vez**
@@ -39,6 +62,7 @@ Rode `db/migrations/0036_neon_cost.sql` no SQL Editor do Neon, **um comando por 
    o banco para um ponto até 24 h atrás.
 2. **Autoscaling** — *Branches → main → Compute → Edit*. Defina um teto (ex.: mín. 0,25 CU,
    máx. 1–2 CU). Sem teto baixo, uma consulta pesada do painel sobe a compute e ela demora a descer.
+   Em 21/10/2026 o `effective_cache_size` da compute (25,6 GB) indicava teto de ~8 CU.
 3. **Branches de preview** — a integração Neon + Vercel cria um branch (com compute própria)
    por deploy de preview. Apague os antigos em *Branches* e ative a exclusão automática na
    integração. Branches parados também guardam histórico.

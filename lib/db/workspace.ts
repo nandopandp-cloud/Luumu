@@ -3,6 +3,7 @@ import { and, count, eq, gte, sql } from "drizzle-orm";
 import { monthStart, planOf, type PlanId } from "@/lib/plans";
 import { startOfTodayBR } from "@/lib/period";
 import { db } from "./client";
+import { sharedCache } from "./shared-cache";
 import { workspaces, surveys, responses, memberships, events } from "@/db/schema";
 
 export type WorkspaceRow = typeof workspaces.$inferSelect;
@@ -38,33 +39,33 @@ export interface WorkspaceUsage {
  * Somar `cardinality(events)` exige ler do heap TODAS as telas do mês (a coluna não está em
  * índice nenhum) — e isto roda a cada carregamento do app e a cada atualização do medidor. No
  * fim do mês eram milhões de linhas por consulta, o que mantinha a compute do Neon escalada.
- * Os dias já encerrados não mudam mais, então a soma deles fica em cache até o dia virar;
- * só o dia de hoje é relido.
+ * Os dias já encerrados não mudam mais, então a soma deles fica no cache compartilhado entre
+ * instâncias (a data de hoje está na chave: uma leitura por workspace por dia — o cache em
+ * memória de cada instância refazia os ~5 s de leitura a cada instância nova). O dia de hoje
+ * fica 5 min no mesmo cache: o medidor é informativo (sem limite) e a leitura de hoje também
+ * passa de 1 s nos dias de pico.
  */
-const closedDaysCache = new Map<string, number>();
-
-async function sumTrackedEvents(workspaceId: string, from: Date, to?: Date): Promise<number> {
+async function sumTrackedEvents(workspaceId: string, from: string, to?: string): Promise<number> {
   const r = (await db.execute(sql`
     select coalesce(sum(cardinality(p.events)), 0)::bigint n
       from analytics_pageviews p join projects pr on pr.id = p.project_id
-     where pr.workspace_id = ${workspaceId} and p.created_at >= ${from.toISOString()}::timestamptz
-       ${to ? sql`and p.created_at < ${to.toISOString()}::timestamptz` : sql``}`)) as unknown as { rows?: { n: string }[] };
+     where pr.workspace_id = ${workspaceId} and p.created_at >= ${from}::timestamptz
+       ${to ? sql`and p.created_at < ${to}::timestamptz` : sql``}`)) as unknown as { rows?: { n: string }[] };
   return Number((r.rows ?? (r as unknown as { n: string }[]))[0]?.n) || 0;
 }
+
+const closedDaysTrackedEvents = sharedCache(sumTrackedEvents, "tracked-events-closed-days", 86_400);
+const todayTrackedEvents = sharedCache(sumTrackedEvents, "tracked-events-today", 300);
 
 async function trackedEventsThisMonth(workspaceId: string, since: Date): Promise<number> {
   try {
     const today = startOfTodayBR();
-    if (today <= since) return await sumTrackedEvents(workspaceId, since);
-    const key = `${workspaceId}|${since.toISOString()}|${today.toISOString()}`;
-    let closed = closedDaysCache.get(key);
-    if (closed === undefined) {
-      closed = await sumTrackedEvents(workspaceId, since, today);
-      // uma entrada por workspace e dia: as de dias anteriores já não servem
-      for (const k of closedDaysCache.keys()) if (k.startsWith(`${workspaceId}|`)) closedDaysCache.delete(k);
-      closedDaysCache.set(key, closed);
-    }
-    return closed + (await sumTrackedEvents(workspaceId, today));
+    if (today <= since) return await todayTrackedEvents(workspaceId, since.toISOString());
+    const [closed, todayN] = await Promise.all([
+      closedDaysTrackedEvents(workspaceId, since.toISOString(), today.toISOString()),
+      todayTrackedEvents(workspaceId, today.toISOString()),
+    ]);
+    return closed + todayN;
   } catch {
     const [{ n } = { n: 0 }] = await db.select({ n: count() }).from(events).where(eq(events.workspaceId, workspaceId));
     return Number(n) || 0;

@@ -6,6 +6,8 @@ import { heatmapPageviews, heatmapSettings, heatmapSnapshots, workspaces } from 
 import { heatmapPageviewId, heatmapSnapshotId } from "./ids";
 import { monthStart, planAllowsHeatmaps, planOf } from "@/lib/plans";
 import { clickPathKey, heatmapSampleRate, SNAPSHOT_TTL_DAYS, type HeatmapDevice, type PageviewPayload } from "@/lib/heatmaps/core";
+import { startOfTodayBR } from "@/lib/period";
+import { sharedCache } from "./shared-cache";
 
 /*
   Heatmaps no banco. A coleta grava UMA linha por visita a uma página; o painel agrega no
@@ -39,20 +41,54 @@ export async function setHeatmapsEnabled(projectId: string, enabled: boolean, us
 
 const quotaCache = new Map<string, { used: number; limit: number; allowed: boolean; exp: number }>();
 
+/** Sessões distintas gravadas pela workspace em [from, to) — datas em ISO (chave do cache). */
+async function countHeatmapSessions(workspaceId: string, from: string, to?: string): Promise<number> {
+  const [{ n } = { n: 0 }] = await db
+    .select({ n: countDistinct(heatmapPageviews.sessionId) })
+    .from(heatmapPageviews)
+    .where(
+      and(
+        eq(heatmapPageviews.workspaceId, workspaceId),
+        gte(heatmapPageviews.createdAt, new Date(from)),
+        to ? lt(heatmapPageviews.createdAt, new Date(to)) : undefined
+      )
+    );
+  return Number(n) || 0;
+}
+
+/*
+  Contar as sessões do mês inteiro lia todas as visitas do mês (~900 mil linhas no fim do mês,
+  ~800 ms) e rodava a cada 5 min em CADA instância da função de coleta — era a consulta que mais
+  gastava CPU no banco, mais que todas as outras somadas, e segurava a compute do Neon escalada.
+  Os dias encerrados não mudam mais: a contagem deles fica no cache compartilhado (a data de
+  hoje está na chave, então é uma leitura por workspace por dia) e só o dia de hoje é relido.
+  Uma sessão aberta na virada da meia-noite conta nos dois lados — erro desprezível, e para o
+  lado seguro da cota.
+*/
+const closedDaysHeatmapSessions = sharedCache(countHeatmapSessions, "heatmap-sessions-closed-days", 86_400);
+
+async function heatmapSessionsThisMonth(workspaceId: string): Promise<number> {
+  const since = monthStart();
+  const today = startOfTodayBR();
+  if (today <= since) return countHeatmapSessions(workspaceId, since.toISOString());
+  const [closed, todayN] = await Promise.all([
+    closedDaysHeatmapSessions(workspaceId, since.toISOString(), today.toISOString()),
+    countHeatmapSessions(workspaceId, today.toISOString()),
+  ]);
+  return closed + todayN;
+}
+
 /** Sessões analisadas no mês vs. o plano. Cache de 5 min por instância (uma contagem, não uma por visita). */
 export async function heatmapQuota(workspaceId: string, fresh = false) {
   const hit = quotaCache.get(workspaceId);
   if (!fresh && hit && hit.exp > Date.now()) return hit;
-  const [[ws], [{ n } = { n: 0 }]] = await Promise.all([
+  const [[ws], n] = await Promise.all([
     db.select({ plan: workspaces.plan }).from(workspaces).where(eq(workspaces.id, workspaceId)).limit(1),
-    db
-      .select({ n: countDistinct(heatmapPageviews.sessionId) })
-      .from(heatmapPageviews)
-      .where(and(eq(heatmapPageviews.workspaceId, workspaceId), gte(heatmapPageviews.createdAt, monthStart()))),
+    heatmapSessionsThisMonth(workspaceId),
   ]);
   const plan = planOf(ws?.plan);
   // plano sem heatmaps (Free) = limite zero: nada é gravado
-  const v = { used: Number(n) || 0, limit: planAllowsHeatmaps(plan) ? plan.limits.sessions : 0, allowed: planAllowsHeatmaps(plan), exp: Date.now() + 5 * 60_000 };
+  const v = { used: n, limit: planAllowsHeatmaps(plan) ? plan.limits.sessions : 0, allowed: planAllowsHeatmaps(plan), exp: Date.now() + 5 * 60_000 };
   quotaCache.set(workspaceId, v);
   return v;
 }
@@ -168,6 +204,34 @@ export interface HeatmapPlan {
 const planCache = new Map<string, { v: HeatmapPlan; exp: number }>();
 
 /**
+ * Sessões do projeto nas últimas 24h, corrigidas pela amostragem (sessões gravadas ÷ a taxa
+ * com que foram gravadas). Uma estimativa que varia devagar: 10 min no cache compartilhado,
+ * em vez de uma consulta por instância a cada 10 min.
+ */
+const estimatedDailySessions = sharedCache(
+  async (projectId: string): Promise<number> => {
+    const since = new Date(Date.now() - 86_400_000).toISOString();
+    const est = await db
+      .execute(
+        sql`select coalesce(sum(1.0 / r), 0)::float est from (
+              select max(${heatmapPageviews.sampleRate}) r from ${heatmapPageviews}
+               where ${heatmapPageviews.projectId} = ${projectId} and ${heatmapPageviews.createdAt} >= ${since}::timestamptz
+               group by ${heatmapPageviews.sessionId}) t`
+      )
+      // sem a coluna (migração pendente): conta as sessões como gravadas integralmente
+      .catch(() =>
+        db.execute(
+          sql`select count(distinct ${heatmapPageviews.sessionId})::float est from ${heatmapPageviews}
+               where ${heatmapPageviews.projectId} = ${projectId} and ${heatmapPageviews.createdAt} >= ${since}::timestamptz`
+        )
+      );
+    return Number(((est as unknown as { rows?: { est: number }[] }).rows ?? (est as unknown as { est: number }[]))[0]?.est) || 0;
+  },
+  "heatmap-estimated-daily-sessions",
+  600
+);
+
+/**
  * Quanto gravar: a cota do mês que sobra, dividida pelos dias que faltam (com teto diário),
  * sobre o volume estimado das últimas 24h (sessões gravadas ÷ a taxa com que foram gravadas).
  * Heatmap é distribuição: uma amostra representa bem o todo, e cada sessão a menos é uma
@@ -178,23 +242,9 @@ export async function heatmapPlan(workspaceId: string, projectId: string, host: 
   const hit = planCache.get(key);
   if (hit && hit.exp > Date.now()) return hit.v;
 
-  const since = new Date(Date.now() - 86_400_000);
-  const [quota, est, fresh] = await Promise.all([
+  const [quota, estimated, fresh] = await Promise.all([
     heatmapQuota(workspaceId),
-    db
-      .execute(
-        sql`select coalesce(sum(1.0 / r), 0)::float est from (
-              select max(${heatmapPageviews.sampleRate}) r from ${heatmapPageviews}
-               where ${heatmapPageviews.projectId} = ${projectId} and ${heatmapPageviews.createdAt} >= ${since.toISOString()}::timestamptz
-               group by ${heatmapPageviews.sessionId}) t`
-      )
-      // sem a coluna (migração pendente): conta as sessões como gravadas integralmente
-      .catch(() =>
-        db.execute(
-          sql`select count(distinct ${heatmapPageviews.sessionId})::float est from ${heatmapPageviews}
-               where ${heatmapPageviews.projectId} = ${projectId} and ${heatmapPageviews.createdAt} >= ${since.toISOString()}::timestamptz`
-        )
-      ),
+    estimatedDailySessions(projectId),
     db
       .select({ device: heatmapSnapshots.device, path: heatmapSnapshots.path })
       .from(heatmapSnapshots)
@@ -203,7 +253,6 @@ export async function heatmapPlan(workspaceId: string, projectId: string, host: 
       .limit(400),
   ]);
 
-  const estimated = Number(((est as unknown as { rows?: { est: number }[] }).rows ?? (est as unknown as { est: number }[]))[0]?.est) || 0;
   const now = new Date();
   const daysLeft = (new Date(now.getFullYear(), now.getMonth() + 1, 1).getTime() - now.getTime()) / 86_400_000;
   const rate = heatmapSampleRate({ limit: quota.allowed ? quota.limit : 0, used: quota.used, daysLeft, estimatedDaily: estimated, dailyCap: HEATMAP_DAILY_CAP });
