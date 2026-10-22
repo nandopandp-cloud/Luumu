@@ -27,50 +27,8 @@ frequência de tours, posicionamento, limites de heatmap etc.
 
 ## Pastas
 
-```
-src/
-  app/                        rotas (App Router)
-    (auth)/                   login
-    (app)/                    painel autenticado (AppShell); uma pasta por módulo, cada uma com
-                              page.tsx + actions.ts (Server Actions) quando há escrita
-    api/v1/                   API PÚBLICA consumida pelo SDK (CORS + chave pública do projeto)
-    api/*                     API INTERNA do painel (exports, uploads, busca, cron)
-    s/[id]                    página pública de pesquisa (link)
-    r/[token]                 relatório público
-    demo/                     demonstração do widget
-  components/
-    ui/                       design system: Button, Card, Dialog, Select, Toast…
-    shell/                    AppShell, Sidebar, Topbar, nav.ts (menu)
-    <módulo>/                 componentes de uma tela do painel (surveys, tours, insights…)
-    surveys/builder/          builder drag-and-drop de pesquisas
-  lib/
-    db/                       acesso a dados (server-only): client.ts, schema.ts e uma query
-                              por agregado (surveys.ts, responses.ts, tours.ts…)
-    auth/                     sessão (JWT), senha, usuário/workspace/projeto atuais
-    api/                      CORS, chaves e rate limit da API pública
-    surveys/                  tipos, templates, builder, vigência, score, sentimento, ano escolar
-    tours/ heatmaps/ analytics/ insights/ product-report/ search/ help/
-                              regras de cada módulo (puras sempre que possível)
-    billing/                  catálogo de planos e limites
-    platform/                 hosts dos projetos e plataforma selecionada no header
-    email/                    envio (Resend) e templates de e-mail
-    export/                   CSV, XLSX e PDF
-    ai/                       cliente de LLM
-    config/                   URL pública do app e rotas bloqueadas
-    utils/                    cn(), formatação, período, ordenação
-    mock/                     dados fictícios: telas ainda bloqueadas e o seed
-  sdk/                        SDK do cliente; build com scripts/build-sdk.mjs
-    luumu.ts                  core (carregado em toda página do cliente)
-    tours/ builder/ heatmaps/ analytics/   bundles carregados sob demanda
-    shared/                   DOM e memória (localStorage) compartilhados
-  types/                      declarações de tipos de terceiros
-  proxy.ts                    sessão obrigatória e rotas bloqueadas, antes do render
-drizzle/                      migrações SQL (histórico) + meta do drizzle-kit
-scripts/                      build-sdk.mjs, seed.ts, prune-events.ts, test-report-email.ts
-tests/<módulo>/               *.test.ts (unitário) e *.integration.test.ts (happy-dom)
-docs/                         esta documentação; docs/design guarda protótipos e arte-fonte
-public/                       mascote, imagens e os bundles gerados do SDK
-```
+A árvore completa de pastas e arquivos, com a função de cada um, está na seção
+[Estrutura do README](../README.md#estrutura).
 
 ## Onde colocar cada coisa
 

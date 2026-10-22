@@ -61,21 +61,143 @@ pnpm dev                     # http://localhost:3000
 
 ## Estrutura
 
+Todo o código-fonte fica em `src/`, e o alias `@/` aponta para lá (`@/lib/db/surveys` →
+`src/lib/db/surveys.ts`). Na raiz ficam só configuração, migrações, scripts, testes e docs.
+
 ```
-src/
-  app/            rotas (App Router): painel, login, páginas públicas e API
-  components/     componentes React: ui/ (design system), shell/ e uma pasta por módulo
-  lib/            regras de negócio, acesso a dados (lib/db) e utilitários, por domínio
-  sdk/            código do SDK que roda no site do cliente
-  proxy.ts        autenticação e bloqueio de rotas antes do render
-drizzle/          histórico de migrações SQL
-scripts/          build do SDK, seed e jobs avulsos
-tests/            testes automatizados, espelhando os módulos
-docs/             arquitetura e documentação por módulo
-public/           assets estáticos e bundles gerados do SDK
+luumu/
+├── src/
+│   ├── app/                          rotas (Next.js App Router)
+│   │   ├── (auth)/                   login: AuthForm, BrandPanel, actions.ts
+│   │   ├── (app)/                    painel autenticado (layout com AppShell)
+│   │   │   ├── dashboard/            visão geral do projeto
+│   │   │   ├── surveys/              lista, nova pesquisa e /[id]: builder, appearance,
+│   │   │   │                         preview, responses, settings
+│   │   │   ├── responses/            feed de respostas
+│   │   │   ├── tours/                product tours e /[id]: analytics, appearance,
+│   │   │   │                         settings, versions
+│   │   │   ├── heatmaps/             mapas de clique, movimento e scroll
+│   │   │   ├── replay/               session replay (bloqueado, dados mock)
+│   │   │   ├── analytics/            analytics de produto
+│   │   │   ├── insights/             insights com IA
+│   │   │   ├── reports/              relatórios agendados e links públicos
+│   │   │   ├── product-report/       Report Quinzenal (acesso restrito)
+│   │   │   ├── settings/             perfil, membros, cobrança, SDK, integrações
+│   │   │   ├── billing/              plano e uso
+│   │   │   ├── projects/             actions de projetos
+│   │   │   ├── sdk/                  instalação do SDK
+│   │   │   └── help/                 central de ajuda
+│   │   ├── api/
+│   │   │   ├── v1/                   API PÚBLICA usada pelo SDK (CORS + chave do projeto):
+│   │   │   │                         config, collect, events, responses, surveys, tours,
+│   │   │   │                         builder, heatmaps, analytics, avatars
+│   │   │   └── …                     API INTERNA do painel: exports (analytics, reports,
+│   │   │                             product-report), uploads (logo, avatar, tours), search,
+│   │   │                             usage, events/status, cron/reports
+│   │   ├── s/[id]/                   página pública de pesquisa (link compartilhável)
+│   │   ├── r/[token]/                relatório público
+│   │   ├── demo/                     demonstração do widget
+│   │   ├── layout.tsx · page.tsx · error.tsx · global-error.tsx · globals.css · icon.png
+│   │
+│   ├── components/                   componentes React
+│   │   ├── ui/                       design system: Button, Card, Badge, Dialog, Drawer,
+│   │   │                             Input, Select, Tabs, Toast, Skeleton, MetricCard,
+│   │   │                             Mascot, LuumuLogo, EmptyState, DataFilters…
+│   │   ├── shell/                    AppShell, Sidebar, Topbar, ProjectSwitcher,
+│   │   │                             PlatformPicker, PlanUsageMenu, ThemeToggle, nav.ts (menu)
+│   │   ├── surveys/                  tabela, renderer, widget, aparência, settings, publicar
+│   │   │   └── builder/              builder drag-and-drop de perguntas
+│   │   ├── tours/                    builder de tours, editor de passos, alvo, versões, analytics
+│   │   ├── responses/                feed de respostas e exportação
+│   │   ├── insights/                 telas de insights + chat/ (perguntas à IA)
+│   │   ├── analytics/                views, widgets e lista de usuários
+│   │   ├── heatmaps/                 workspace, filtros e mapa da página
+│   │   ├── dashboard/                cards do dashboard
+│   │   ├── reports/                  exportação, agendamento e links públicos
+│   │   ├── product-report/           tela e configurações do Report Quinzenal
+│   │   ├── billing/                  planos, comparação e uso
+│   │   ├── settings/                 formulários de perfil, workspace e membros
+│   │   ├── sdk/                      snippets de instalação e captura de identidade
+│   │   ├── search/                   paleta de comandos (⌘K)
+│   │   ├── help/                     central de ajuda
+│   │   ├── replay/                   player de sessão
+│   │   ├── charts/                   gráficos Recharts genéricos
+│   │   ├── illustrations/            ilustrações SVG
+│   │   ├── intro/                    animação de entrada pós-login
+│   │   └── page-loader/              loader entre rotas
+│   │
+│   ├── lib/                          regras de negócio e acesso a dados, por domínio
+│   │   ├── db/                       acesso ao banco (server-only)
+│   │   │   ├── client.ts             conexão Neon + Drizzle
+│   │   │   ├── schema.ts             schema do banco (fonte da verdade)
+│   │   │   └── *.ts                  uma query por agregado: surveys, responses, tours,
+│   │   │                             heatmaps, analytics, reports, users, workspace…
+│   │   ├── auth/                     session.ts (JWT), password.ts, current.ts (usuário,
+│   │   │                             workspace e projeto atuais + permissões)
+│   │   ├── api/                      cors.ts, keys.ts, ratelimit.ts da API pública
+│   │   ├── surveys/                  types.ts, templates.ts, builder.ts (blocos e aparência),
+│   │   │                             schedule.ts (vigência), scoring.ts (NPS/CSAT/CES),
+│   │   │                             sentiment.ts, moods.ts, school-years.ts, device.ts,
+│   │   │                             wordcloud.ts
+│   │   ├── tours/                    tipos, normalização, posição, alvo, condições,
+│   │   │                             frequência, render do card, token, sdk-version.ts (gerado)
+│   │   ├── heatmaps/                 core.ts (limites, compactação), draw.ts (render)
+│   │   ├── analytics/                core, derive (métricas), selectors, identity-filter,
+│   │   │                             svg-avatar, export
+│   │   ├── insights/                 análise de temas, perguntas (regra + IA), contexto da IA
+│   │   ├── product-report/           acesso, coleta, indicadores, modelo, render HTML/PDF/e-mail
+│   │   ├── search/                   busca global
+│   │   ├── help/                     artigos da central de ajuda
+│   │   ├── billing/                  plans.ts: catálogo de planos, preços e limites
+│   │   ├── platform/                 hosts.ts (normalização), selected.ts (plataforma do header)
+│   │   ├── email/                    send.ts (Resend), report-template.ts
+│   │   ├── export/                   csv.ts, xlsx.ts, pdf.ts
+│   │   ├── ai/                       llm.ts: cliente de LLM compatível com OpenAI
+│   │   ├── config/                   env.ts (URL pública), locked-routes.ts (rotas bloqueadas)
+│   │   ├── utils/                    index.ts (cn, formatação), period.ts, sort.ts
+│   │   └── mock/                     dados fictícios: telas bloqueadas e seed
+│   │
+│   ├── sdk/                          SDK que roda no site do cliente (compilado para public/)
+│   │   ├── luumu.ts                  core: pesquisas, eventos, identify; carregado em toda página
+│   │   ├── tours/runtime.ts          runtime dos tours (sob demanda)
+│   │   ├── builder/                  overlay de seleção de elementos + discovery (sob demanda)
+│   │   ├── heatmaps/recorder.ts      gravador de heatmaps (sob demanda)
+│   │   ├── analytics/                coletor de analytics e identidade (sob demanda)
+│   │   └── shared/                   dom.ts, memory.ts (localStorage)
+│   │
+│   ├── types/                        declarações de tipos de terceiros
+│   └── proxy.ts                      exige sessão e bloqueia rotas antes do render
+│
+├── drizzle/                          migrações SQL (histórico) + meta/ do drizzle-kit
+├── scripts/
+│   ├── build-sdk.mjs                 compila src/sdk → public/sdk*.js (roda no prebuild)
+│   ├── seed.ts                       popula um workspace demo
+│   ├── prune-events.ts               remove duplicatas do catálogo de eventos (ids em URL)
+│   ├── test-report-email.ts          envia um e-mail de relatório de teste
+│   ├── tsconfig.scripts.json         tsconfig de scripts e testes (alias @/, stub server-only)
+│   └── support/                      stub de server-only
+├── tests/                            um diretório por módulo: analytics, billing, export,
+│                                     heatmaps, help, insights, platform, product-report,
+│                                     sdk, search, surveys, tours, ui
+├── docs/
+│   ├── ARQUITETURA.md                camadas, onde colocar cada coisa, convenções
+│   ├── tours/                        arquitetura e integração dos product tours
+│   ├── product-report/               Report Quinzenal
+│   ├── infra/                        custos do Neon
+│   └── design/                       protótipos HTML e arte-fonte
+├── public/
+│   ├── mascot/ · mascot-anim/        mascote, logos e emojis de sentimento
+│   ├── login-panel.png
+│   └── sdk*.js                       bundles do SDK (gerados, não editar)
+│
+├── .env.example                      variáveis de ambiente
+├── next.config.ts                    headers de cache e imagens remotas
+├── drizzle.config.ts                 schema e pasta de migrações
+├── vercel.json                       região e cron
+└── AGENTS.md / CLAUDE.md             instruções para agentes de IA
 ```
 
-Os detalhes (camadas, onde colocar cada coisa e convenções) estão em
+Camadas, a tabela "onde colocar cada coisa" e as convenções estão em
 **[docs/ARQUITETURA.md](docs/ARQUITETURA.md)**.
 
 ## Documentação
