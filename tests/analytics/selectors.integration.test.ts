@@ -6,8 +6,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { installDom } from "../tours/support/dom-env";
-import { isSafeSelector, resolveCaptureRule, stabilizeSelector, type CaptureRule } from "../../lib/analytics/selectors";
-import { readPageIdentity as readFull } from "../../sdk/analytics/page-identity";
+import { isSafeSelector, resolveCaptureRule, stabilizeSelector, type CaptureRule } from "@/lib/analytics/selectors";
+import { readPageIdentity as readFull } from "@/sdk/analytics/page-identity";
 // nome e foto (os testes de diagnóstico olham os outros campos)
 const readPageIdentity = (...a: Parameters<typeof readFull>) => {
   const r = readFull(...a);
@@ -94,7 +94,7 @@ test("foto que não dá para capturar diz o porquê (Luumu.debugIdentity)", () =
 });
 
 test("servidor: foto de seletor vale mesmo sendo SVG; do automático, não", async () => {
-  const { parseAnalytics } = await import("../../lib/analytics/core");
+  const { parseAnalytics } = await import("@/lib/analytics/core");
   const now = Date.now();
   const base = { key: "pk_x", aid: "anon123456", sid: "sess123456", st: now, uid: "u1", pages: [{ id: "pg1", path: "home", t: now, dur: 1000, ev: [] }] };
   const svg = "https://squad.jovensgenios.com/battles/vs/astra-avatar.svg";

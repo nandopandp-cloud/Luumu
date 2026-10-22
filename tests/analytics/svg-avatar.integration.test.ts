@@ -6,8 +6,8 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { installDom } from "../tours/support/dom-env";
-import { sanitizeSvg, svgHash, SVG_MAX } from "../../lib/analytics/svg-avatar";
-import { readPageIdentity } from "../../sdk/analytics/page-identity";
+import { sanitizeSvg, svgHash, SVG_MAX } from "@/lib/analytics/svg-avatar";
+import { readPageIdentity } from "@/sdk/analytics/page-identity";
 
 installDom("https://squad.jovensgenios.com/inicio");
 
@@ -45,7 +45,7 @@ test("SDK: com seletor, copia o SVG embutido com as cores aplicadas pela página
 let col: any;
 before(async () => {
   Object.defineProperty(navigator, "sendBeacon", { configurable: true, value: () => true });
-  await import("../../sdk/analytics/collector");
+  await import("@/sdk/analytics/collector");
   col = (window as any).__luumuAnalytics;
   col.boot({ api: "https://luumu.test/api/v1", key: "pk_x", host: "squad.jovensgenios.com", device: "desktop", path: () => "inicio", identity: () => ({ id: "u-9", email: null, name: null, avatar: null }), requestFlush: () => {}, capture: { n: "", a: "header button" } });
 });
@@ -70,7 +70,7 @@ test("coletor: fotografa em segundo plano; o desenho vai no 1º envio, depois s�
 });
 
 test("servidor: aceita o desenho só se a impressão bater", async () => {
-  const { parseAnalytics } = await import("../../lib/analytics/core");
+  const { parseAnalytics } = await import("@/lib/analytics/core");
   const now = Date.now();
   const svg = "<svg><circle r=\"3\"/></svg>";
   const base = { key: "pk_x", aid: "anon123456", sid: "sess123456", st: now, uid: "u1", pages: [{ id: "pg1", path: "home", t: now, dur: 1000, ev: [] }] };

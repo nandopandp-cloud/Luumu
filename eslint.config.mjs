@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Bundles do SDK gerados por scripts/build-sdk.mjs (minificados)
+    "public/sdk*.js",
   ]),
 ]);
 

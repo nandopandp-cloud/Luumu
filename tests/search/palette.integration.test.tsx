@@ -16,7 +16,7 @@ process.env.DATABASE_URL ||= "postgres://u:p@localhost/test";
 
 let React: typeof import("react");
 let createRoot: typeof import("react-dom/client").createRoot;
-let SearchProvider: typeof import("../../components/search/SearchProvider").SearchProvider;
+let SearchProvider: typeof import("@/components/search/SearchProvider").SearchProvider;
 let AppRouterContext: React.Context<unknown>;
 
 const pushed: string[] = [];
@@ -33,7 +33,7 @@ const RESULTS = {
 before(async () => {
   React = await import("react");
   ({ createRoot } = await import("react-dom/client"));
-  ({ SearchProvider } = await import("../../components/search/SearchProvider"));
+  ({ SearchProvider } = await import("@/components/search/SearchProvider"));
   ({ AppRouterContext } = (await import("next/dist/shared/lib/app-router-context.shared-runtime")) as unknown as { AppRouterContext: React.Context<unknown> });
 });
 

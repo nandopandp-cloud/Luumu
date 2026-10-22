@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { compareValues, firstDir, sortRows } from "../../lib/sort";
+import { compareValues, firstDir, sortRows } from "@/lib/utils/sort";
 
 test("números e datas nos dois sentidos; vazios sempre no fim", () => {
   const rows = [{ v: 3 }, { v: null }, { v: 10 }, { v: 1 }, { v: undefined }];

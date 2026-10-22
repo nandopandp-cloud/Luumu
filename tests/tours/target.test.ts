@@ -10,8 +10,8 @@ import {
   bestStrategy,
   stabilityOf,
   MIN_SCORE,
-} from "../../lib/tours/target";
-import type { ElementTarget } from "../../lib/tours/types";
+} from "@/lib/tours/target";
+import type { ElementTarget } from "@/lib/tours/types";
 
 test("ids gerados por framework não são estáveis", () => {
   for (const id of [":r1:", "«r3»", "radix-:r2:", "headlessui-menu-button-3", "mui-123", "ember1234", "a1b2c3d4e5f6"]) {

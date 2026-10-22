@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isProductReportUser, PRODUCT_REPORT_EMAIL, type ProductReportUserLookup } from "../../lib/product-report/authorize";
+import { isProductReportUser, PRODUCT_REPORT_EMAIL, type ProductReportUserLookup } from "@/lib/product-report/authorize";
 
 const AUTHORIZED = { id: "usr_ok", email: PRODUCT_REPORT_EMAIL };
 const OTHER = { id: "usr_other", email: "outra.pessoa@jovensgenios.com" };

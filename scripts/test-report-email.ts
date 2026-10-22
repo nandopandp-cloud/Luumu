@@ -1,8 +1,8 @@
 import { config } from "dotenv";
 config({ path: ".env.local" });
 import { Resend } from "resend";
-import { reportEmailHtml } from "@/lib/email-templates";
-import { getAppOrigin } from "@/lib/env";
+import { reportEmailHtml } from "@/lib/email/report-template";
+import { getAppOrigin } from "@/lib/config/env";
 
 /**
  * Cenários de exemplo por tipo de pesquisa — refletem o que buildReportSnapshot()

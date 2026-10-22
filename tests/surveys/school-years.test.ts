@@ -7,7 +7,7 @@ import {
   parseGradeLevel,
   parseSchoolYear,
   schoolYearsLabel,
-} from "../../lib/school-years";
+} from "@/lib/surveys/school-years";
 
 test("lê o ano escolar nos formatos que o produto pode mandar", () => {
   assert.equal(parseSchoolYear("EF7"), "EF7");

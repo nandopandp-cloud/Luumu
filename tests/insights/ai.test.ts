@@ -4,12 +4,12 @@
 */
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
-import { buildContext, MAX_CONTEXT_CHARS, parseAnswer, redactPII } from "../../lib/insights/ai-context";
-import { insightsMock } from "../../lib/insights/mock";
-import type { InsightsData } from "../../lib/insights/types";
+import { buildContext, MAX_CONTEXT_CHARS, parseAnswer, redactPII } from "@/lib/insights/ai-context";
+import { insightsMock } from "@/lib/insights/mock";
+import type { InsightsData } from "@/lib/insights/types";
 
 process.env.GROQ_API_KEY = "gsk_test";
-let askInsights: typeof import("../../lib/insights/ask-ai").askInsights;
+let askInsights: typeof import("@/lib/insights/ask-ai").askInsights;
 const calls: { model: string; body: Record<string, unknown> }[] = [];
 let respond: (model: string) => Response;
 
@@ -19,7 +19,7 @@ before(async () => {
     calls.push({ model: body.model, body });
     return respond(body.model);
   };
-  ({ askInsights } = await import("../../lib/insights/ask-ai"));
+  ({ askInsights } = await import("@/lib/insights/ask-ai"));
 });
 
 const ok = (content: unknown) =>

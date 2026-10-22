@@ -32,16 +32,16 @@ Separação de módulos (cada um substituível sem reescrever os outros):
 
 | Módulo | Onde | Responsabilidade |
 |---|---|---|
-| **Discovery** | `sdk/builder/discovery.ts` | Varre o DOM no modo builder e descreve elementos relevantes |
-| **Element Registry** | `lib/db/product-registry.ts`, tabelas `product_routes` / `product_elements` | Guarda o que o discovery viu, por plataforma e rota |
-| **Identificação** | `lib/tours/target.ts` (puro) + `sdk/tours/resolve.ts` (DOM) | Descritor resiliente do alvo e resolução em tempo de execução |
-| **Builder** | `components/tours/*` (painel) + `sdk/builder/*` (overlay no produto) | Montar passos, selecionar elemento, preview |
-| **Runtime** | `sdk/tours/*` | Exibir o tour: navegação, espera, posição, foco, eventos |
-| **Analytics** | `lib/db/tour-events.ts` | Ingestão e métricas (funil por passo, conclusão, tempo, alvos ausentes) |
-| **API** | `app/api/v1/tours/*`, `app/api/v1/builder/*` | Contratos públicos com CORS, key e token |
-| **Database** | `db/schema.ts` + `db/migrations/0016_product_tours.sql` | Neon Postgres via Drizzle |
+| **Discovery** | `src/sdk/builder/discovery.ts` | Varre o DOM no modo builder e descreve elementos relevantes |
+| **Element Registry** | `src/lib/db/product-registry.ts`, tabelas `product_routes` / `product_elements` | Guarda o que o discovery viu, por plataforma e rota |
+| **Identificação** | `src/lib/tours/target.ts` (puro) + `src/sdk/tours/resolve.ts` (DOM) | Descritor resiliente do alvo e resolução em tempo de execução |
+| **Builder** | `src/components/tours/*` (painel) + `src/sdk/builder/*` (overlay no produto) | Montar passos, selecionar elemento, preview |
+| **Runtime** | `src/sdk/tours/*` | Exibir o tour: navegação, espera, posição, foco, eventos |
+| **Analytics** | `src/lib/db/tour-events.ts` | Ingestão e métricas (funil por passo, conclusão, tempo, alvos ausentes) |
+| **API** | `src/app/api/v1/tours/*`, `src/app/api/v1/builder/*` | Contratos públicos com CORS, key e token |
+| **Database** | `src/lib/db/schema.ts` + `drizzle/0016_product_tours.sql` | Neon Postgres via Drizzle |
 
-O que é **puro** (sem DOM, sem banco) fica em `lib/tours/` e é importado tanto pelo painel
+O que é **puro** (sem DOM, sem banco) fica em `src/lib/tours/` e é importado tanto pelo painel
 (React) quanto pelos bundles do SDK (esbuild). É a mesma regra de posição e o mesmo HTML do
 card nos dois lados: o preview do painel é idêntico ao que o usuário final vê.
 
@@ -75,14 +75,14 @@ product_routes ─< product_elements                  (Element Registry, por hos
   `(project, host, route[, fingerprint])`, com teto por projeto.
 
 **Entidades do briefing como JSON tipado.** `TourStepTarget`, `TourCondition`, `TourSegment`
-e `TourTrigger` são estruturas tipadas (`lib/tours/types.ts`) gravadas em `tour_steps.target`,
+e `TourTrigger` são estruturas tipadas (`src/lib/tours/types.ts`) gravadas em `tour_steps.target`,
 `tour_steps.config.conditions` e `tour_versions.settings`. Elas são sempre lidas e gravadas
 junto com o passo/versão a que pertencem, e versionar como linhas separadas só multiplicaria
 cópias no publish. Se um dia precisarem de consulta própria (ex.: "todos os tours com gatilho
 X"), viram tabela sem mudar o formato da API.
 
 **Multi-tenancy.** Toda tabela tem `workspace_id` e `project_id`. O painel resolve o projeto
-pela sessão (`getCurrentProjectId`, já com o escopo do membro) e toda função de `lib/db/tours.ts`
+pela sessão (`getCurrentProjectId`, já com o escopo do membro) e toda função de `src/lib/db/tours.ts`
 recebe o projeto e confere a posse antes de ler ou escrever. A API pública resolve o projeto pela
 SDK key; as rotas de builder exigem um token assinado cujo projeto precisa ser o da key.
 
@@ -191,7 +191,7 @@ Ao selecionar um elemento, o SDK grava um **descritor** com várias estratégias
 }
 ```
 
-Resolução em tempo de execução (`sdk/tours/resolve.ts`), em ordem de prioridade:
+Resolução em tempo de execução (`src/sdk/tours/resolve.ts`), em ordem de prioridade:
 
 1. `data-luumu-id` — se existir, decide sozinho (prioridade absoluta);
 2. `id` estável (sem dígitos aleatórios / hash);
@@ -246,7 +246,7 @@ Os métodos de `Luumu.tours` existem desde o core; o primeiro uso carrega o runt
 ## 8. Estrutura de pastas
 
 ```
-lib/tours/            puro e compartilhado (painel + SDK)
+src/lib/tours/            puro e compartilhado (painel + SDK)
   types.ts            contratos: TourStep, ElementTarget, TourSettings, Rule, eventos
   defaults.ts         passo/config padrão por tipo
   normalize.ts        validação/whitelist de tudo que vem do cliente ou do painel
@@ -256,13 +256,13 @@ lib/tours/            puro e compartilhado (painel + SDK)
   frequency.ts        decisão de exibição por frequência
   render.ts           HTML + CSS do card (mesmo no preview e no runtime)
   token.ts            token de builder/preview (server-only)
-lib/db/tours.ts, tour-events.ts, product-registry.ts
-app/api/v1/tours/*, app/api/v1/builder/*
-app/(app)/tours/*     telas do painel
-components/tours/*    componentes do builder
-sdk/luumu.ts          core: ponte + carregamento sob demanda
-sdk/tours/            runtime.ts, resolve.ts, dom.ts
-sdk/builder/          builder.ts, discovery.ts
+src/lib/db/tours.ts, tour-events.ts, product-registry.ts
+src/app/api/v1/tours/*, src/app/api/v1/builder/*
+src/app/(app)/tours/*     telas do painel
+src/components/tours/*    componentes do builder
+src/sdk/luumu.ts          core: ponte + carregamento sob demanda
+src/sdk/tours/            runtime.ts, resolve.ts, dom.ts
+src/sdk/builder/          builder.ts, discovery.ts
 tests/tours/          testes unitários e de integração (node:test)
 ```
 

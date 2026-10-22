@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { axisTicks, dotValue, moodFor } from "../../components/dashboard/ScoreEvolutionCard";
+import { axisTicks, dotValue, moodFor } from "@/components/dashboard/ScoreEvolutionCard";
 
 test("o ponto do gráfico de área usa o valor real, não o par [base, valor]", () => {
   // formato que o Recharts entrega no <Area>: value = [0, 75]

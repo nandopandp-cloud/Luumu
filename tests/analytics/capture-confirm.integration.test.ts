@@ -15,7 +15,7 @@ const header = `<header><button aria-haspopup="menu"><span data-slot="avatar"><i
 
 before(async () => {
   Object.defineProperty(navigator, "sendBeacon", { configurable: true, value: () => true });
-  await import("../../sdk/analytics/collector");
+  await import("@/sdk/analytics/collector");
   col = (window as any).__luumuAnalytics;
   col.boot({ api: "https://luumu.test/api/v1", key: "pk_x", host: "preparasp.jovensgenios.com", device: "desktop", path: () => path, identity: () => ({ id: "u-1", email: "ana@escola.com", name: null, avatar: null }), requestFlush: () => {}, capture: { n: "", a: "" } });
 });

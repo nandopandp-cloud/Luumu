@@ -1,11 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildReportModel, type SyncSnapshot } from "../../lib/product-report/model";
-import { DEFAULT_WEIGHTS, formatCompact } from "../../lib/product-report/indicators";
-import { renderReportHtml } from "../../lib/product-report/render-html";
-import { pdfText, renderReportPdf } from "../../lib/product-report/render-pdf";
-import { buildCharts, chartSvg, layoutChart, segments } from "../../lib/product-report/charts";
-import { defaultIntro, reportStatus } from "../../lib/product-report/html";
+import { buildReportModel, type SyncSnapshot } from "@/lib/product-report/model";
+import { DEFAULT_WEIGHTS, formatCompact } from "@/lib/product-report/indicators";
+import { renderReportHtml } from "@/lib/product-report/render-html";
+import { pdfText, renderReportPdf } from "@/lib/product-report/render-pdf";
+import { buildCharts, chartSvg, layoutChart, segments } from "@/lib/product-report/charts";
+import { defaultIntro, reportStatus } from "@/lib/product-report/html";
 
 const sync: SyncSnapshot = {
   createdAt: "2026-10-16T10:00:00.000Z",
@@ -125,8 +125,8 @@ test("PDF: texto só com caracteres que a fonte padrão tem (senão a linha emba
 });
 
 test("e-mail: layout da referência só com tabelas, estilos inline e gráficos como imagem", async () => {
-  const { renderEmailHtml } = await import("../../lib/product-report/render-email");
-  const { chartCardSvg } = await import("../../lib/product-report/charts");
+  const { renderEmailHtml } = await import("@/lib/product-report/render-email");
+  const { chartCardSvg } = await import("@/lib/product-report/charts");
   const m = model();
   const images = Object.fromEntries(buildCharts(m).map((c) => [c.id, `data:image/png;base64,${c.id}`]));
   const html = renderEmailHtml(m, { status: "concluido", generatedAt: "2026-10-20T12:00:00.000Z", chartImages: images });

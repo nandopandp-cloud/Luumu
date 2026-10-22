@@ -4,7 +4,7 @@
 */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isJunkAvatar, isJunkName, stripNameNoise } from "../../lib/analytics/identity-filter";
+import { isJunkAvatar, isJunkName, stripNameNoise } from "@/lib/analytics/identity-filter";
 
 test("nomes: ruído removido, rótulos de interface e personagens rejeitados", () => {
   assert.equal(stripNameNoise("ALEXANDRE BORGES CESARINO FERREIRA avatar"), "ALEXANDRE BORGES CESARINO FERREIRA");

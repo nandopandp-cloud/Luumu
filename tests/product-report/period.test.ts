@@ -11,7 +11,7 @@ import {
   periodShortLabel,
   periodsUntil,
   shiftPeriod,
-} from "../../lib/product-report/period";
+} from "@/lib/product-report/period";
 
 test("1ª quinzena = dias 1 a 15; 2ª = 16 ao fim do mês, em horário de Brasília", () => {
   const q1 = periodRange("2026-10-1");

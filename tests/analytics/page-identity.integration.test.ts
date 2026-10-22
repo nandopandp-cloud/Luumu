@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { installDom } from "../tours/support/dom-env";
-import { readPageIdentity as readFull, looksLikeName } from "../../sdk/analytics/page-identity";
+import { readPageIdentity as readFull, looksLikeName } from "@/sdk/analytics/page-identity";
 // nome e foto (os testes de diagnóstico olham os outros campos)
 const readPageIdentity = (...a: Parameters<typeof readFull>) => {
   const r = readFull(...a);

@@ -13,14 +13,14 @@ installDom("https://app.luumu.test/dashboard");
 
 let React: typeof import("react");
 let createRoot: typeof import("react-dom/client").createRoot;
-let PlanUsageMenu: typeof import("../../components/shell/PlanUsageMenu").PlanUsageMenu;
-let UsageProvider: typeof import("../../components/shell/UsageProvider").UsageProvider;
+let PlanUsageMenu: typeof import("@/components/shell/PlanUsageMenu").PlanUsageMenu;
+let UsageProvider: typeof import("@/components/shell/UsageProvider").UsageProvider;
 
 before(async () => {
   React = await import("react");
   ({ createRoot } = await import("react-dom/client"));
-  ({ PlanUsageMenu } = await import("../../components/shell/PlanUsageMenu"));
-  ({ UsageProvider } = await import("../../components/shell/UsageProvider"));
+  ({ PlanUsageMenu } = await import("@/components/shell/PlanUsageMenu"));
+  ({ UsageProvider } = await import("@/components/shell/UsageProvider"));
 });
 
 const usage = {

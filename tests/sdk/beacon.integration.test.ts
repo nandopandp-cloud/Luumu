@@ -45,7 +45,7 @@ before(async () => {
     return orig(node);
   }) as typeof head.appendChild;
   config = { surveys: [], events: { open: false, known: [] }, host: { known: true }, tours: [], sdk: "t1", heatmaps: true, analytics: true, hmRate: 1, hmFresh: [] };
-  await import("../../sdk/luumu");
+  await import("@/sdk/luumu");
 });
 
 const hide = async () => {

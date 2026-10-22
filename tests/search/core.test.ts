@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cleanQuery, fold, highlight, likePattern, matchCommands, relativeTime, score, snippet, SQL_ACCENTS_FROM, SQL_ACCENTS_TO } from "../../lib/search/core";
+import { cleanQuery, fold, highlight, likePattern, matchCommands, relativeTime, score, snippet, SQL_ACCENTS_FROM, SQL_ACCENTS_TO } from "@/lib/search/core";
 
 test("ignora acento e caixa", () => {
   assert.equal(fold("Satisfação NÚMERO"), "satisfacao numero");

@@ -22,7 +22,7 @@ function exportedFunctions(src: string): { name: string; body: string }[] {
 }
 
 test("toda server action do módulo começa pelo guard", () => {
-  const fns = exportedFunctions(read("app/(app)/product-report/actions.ts"));
+  const fns = exportedFunctions(read("src/app/(app)/product-report/actions.ts"));
   assert.ok(fns.length >= 6, `actions encontradas: ${fns.map((f) => f.name)}`);
   for (const f of fns) {
     const first = f.body.trim().split("\n")[0];
@@ -31,13 +31,13 @@ test("toda server action do módulo começa pelo guard", () => {
 });
 
 test("layout e página do módulo chamam o guard", () => {
-  for (const file of ["app/(app)/product-report/layout.tsx", "app/(app)/product-report/page.tsx"]) {
+  for (const file of ["src/app/(app)/product-report/layout.tsx", "src/app/(app)/product-report/page.tsx"]) {
     assert.match(read(file), /await requireProductReportAccess\(\)/, file);
   }
 });
 
 test("toda rota de API do módulo responde 404 sem a conta autorizada", () => {
-  const dir = path.join(root, "app/api/product-report");
+  const dir = path.join(root, "src/app/api/product-report");
   const routes: string[] = [];
   const walk = (d: string) => {
     for (const f of readdirSync(d)) {
@@ -59,8 +59,8 @@ test("toda rota de API do módulo responde 404 sem a conta autorizada", () => {
 });
 
 test("a rota exige sessão no proxy e o item de menu não está no NAV público", () => {
-  assert.match(read("proxy.ts"), /"\/product-report"/);
-  const nav = read("components/shell/nav.ts");
+  assert.match(read("src/proxy.ts"), /"\/product-report"/);
+  const nav = read("src/components/shell/nav.ts");
   const navBlock = nav.slice(nav.indexOf("export const NAV"));
   assert.ok(!navBlock.includes("/product-report"), "o item do módulo não pode ir no NAV de todos");
 });

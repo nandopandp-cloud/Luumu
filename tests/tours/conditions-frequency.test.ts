@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { evaluateRule, evaluateRules, matchesAudience, type ConditionContext } from "../../lib/tours/conditions";
-import { canShow } from "../../lib/tours/frequency";
+import { evaluateRule, evaluateRules, matchesAudience, type ConditionContext } from "@/lib/tours/conditions";
+import { canShow } from "@/lib/tours/frequency";
 
 const ctx: ConditionContext = {
   user: { plan: "Pro", role: "admin", company: { size: 80 }, tags: ["beta"], onboardingCompleted: false },

@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { retargetHosts } from "../../lib/tours/retarget";
-import { defaultSettings, starterSteps } from "../../lib/tours/defaults";
-import type { TourSettings, TourStep } from "../../lib/tours/types";
+import { retargetHosts } from "@/lib/tours/retarget";
+import { defaultSettings, starterSteps } from "@/lib/tours/defaults";
+import type { TourSettings, TourStep } from "@/lib/tours/types";
 
 const SRC = "preparasp.jovensgenios.com";
 const DST = "matematicaem.jovensgenios.com";

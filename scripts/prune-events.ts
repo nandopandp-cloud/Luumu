@@ -20,8 +20,8 @@
  */
 import "dotenv/config";
 import { inArray } from "drizzle-orm";
-import { db } from "../lib/db/client";
-import { events, surveys } from "../db/schema";
+import { db } from "@/lib/db/client";
+import { events, surveys } from "@/lib/db/schema";
 
 const APPLY = process.argv.includes("--apply");
 

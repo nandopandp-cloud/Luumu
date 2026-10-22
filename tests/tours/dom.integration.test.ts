@@ -4,11 +4,11 @@ import { installDom, sleep } from "./support/dom-env";
 
 installDom();
 // importados depois do ambiente existir
-let dom: typeof import("../../sdk/shared/dom");
-let discovery: typeof import("../../sdk/builder/discovery");
+let dom: typeof import("@/sdk/shared/dom");
+let discovery: typeof import("@/sdk/builder/discovery");
 before(async () => {
-  dom = await import("../../sdk/shared/dom");
-  discovery = await import("../../sdk/builder/discovery");
+  dom = await import("@/sdk/shared/dom");
+  discovery = await import("@/sdk/builder/discovery");
 });
 
 const page = (html: string) => {

@@ -3,10 +3,10 @@ import assert from "node:assert/strict";
 import { installDom } from "../tours/support/dom-env";
 
 installDom("https://luumu.test/heatmaps");
-let draw: typeof import("../../lib/heatmaps/draw");
+let draw: typeof import("@/lib/heatmaps/draw");
 before(async () => {
   (globalThis as Record<string, unknown>).DOMParser = (window as unknown as { DOMParser: typeof DOMParser }).DOMParser;
-  draw = await import("../../lib/heatmaps/draw");
+  draw = await import("@/lib/heatmaps/draw");
 });
 
 test("o painel limpa a cópia de novo antes de exibir", () => {

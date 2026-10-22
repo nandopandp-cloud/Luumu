@@ -14,7 +14,7 @@ import {
   sectionStats,
   splitPath,
   heatmapSampleRate,
-} from "../../lib/heatmaps/core";
+} from "@/lib/heatmaps/core";
 
 const base = { key: "pk_x", host: "App.Cliente.com", path: "home", device: "desktop", sid: "s1" };
 
@@ -118,7 +118,7 @@ test("amostragem: cabe na cota do mês, com teto diário", () => {
 });
 
 test("formato compacto: o servidor reconstrói exatamente o mesmo registro do formato antigo", async () => {
-  const { compactVisit } = await import("../../lib/heatmaps/core");
+  const { compactVisit } = await import("@/lib/heatmaps/core");
   const SEL = "body>div:nth-of-type(2)>div>div>div>div>div:nth-of-type(1)>div:nth-of-type(3)>button:nth-of-type(1)";
   const OTHER = "body>div:nth-of-type(2)>div>div>div>div>div:nth-of-type(1)";
   const legacy = {

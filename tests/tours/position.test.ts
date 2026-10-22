@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { computePosition, resolveSide } from "../../lib/tours/position";
+import { computePosition, resolveSide } from "@/lib/tours/position";
 
 const vp = { width: 1280, height: 800 };
 const card = { width: 340, height: 180 };

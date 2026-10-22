@@ -6,8 +6,8 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { installDom, sleep } from "./support/dom-env";
-import { defaultSettings, defaultStep } from "../../lib/tours/defaults";
-import type { TourPayload, TourEventInput } from "../../lib/tours/types";
+import { defaultSettings, defaultStep } from "@/lib/tours/defaults";
+import type { TourPayload, TourEventInput } from "@/lib/tours/types";
 
 installDom("https://app.cliente.com/dashboard");
 
@@ -46,7 +46,7 @@ const tour: TourPayload = {
   return new Response("{}", { status: 404 });
 };
 
-type Runtime = import("../../sdk/tours/runtime").ToursRuntime;
+type Runtime = import("@/sdk/tours/runtime").ToursRuntime;
 let rt: Runtime;
 
 const card = () => document.querySelector("[data-luumu-ui=tour]")?.shadowRoot?.querySelector(".lt-card") as HTMLElement | null;
@@ -67,7 +67,7 @@ before(async () => {
     history.pushState({}, "", "/reports");
     document.querySelector("main")!.innerHTML = `<button>Exportar</button>`;
   });
-  await import("../../sdk/tours/runtime");
+  await import("@/sdk/tours/runtime");
   rt = (window as unknown as { __luumuToursRuntime: Runtime }).__luumuToursRuntime;
   rt.boot({
     api: "https://luumu.test/api/v1",

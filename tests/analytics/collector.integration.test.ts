@@ -23,7 +23,7 @@ before(async () => {
       return true;
     },
   });
-  await import("../../sdk/analytics/collector");
+  await import("@/sdk/analytics/collector");
   col = (window as unknown as { __luumuAnalytics: typeof col }).__luumuAnalytics;
 });
 

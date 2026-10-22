@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { annualTotal, COMPARE_ROWS, formatLimit, monthlyPrice, monthStart, PLAN_IDS, PLANS, planAllowsHeatmaps, planOf } from "../../lib/plans";
+import { annualTotal, COMPARE_ROWS, formatLimit, monthlyPrice, monthStart, PLAN_IDS, PLANS, planAllowsHeatmaps, planOf } from "@/lib/billing/plans";
 
 test("catálogo segue a referência: 5 planos, Growth popular, Enterprise sob consulta", () => {
   assert.deepEqual(PLANS.map((p) => p.id), [...PLAN_IDS]);

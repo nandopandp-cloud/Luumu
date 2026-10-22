@@ -8,10 +8,10 @@ import { installDom } from "./support/dom-env";
 
 installDom("https://preparasp.jovensgenios.com/home");
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-let blockingModal: typeof import("../../sdk/shared/dom").blockingModal;
-let whenScreenFree: typeof import("../../sdk/shared/dom").whenScreenFree;
+let blockingModal: typeof import("@/sdk/shared/dom").blockingModal;
+let whenScreenFree: typeof import("@/sdk/shared/dom").whenScreenFree;
 before(async () => {
-  ({ blockingModal, whenScreenFree } = await import("../../sdk/shared/dom"));
+  ({ blockingModal, whenScreenFree } = await import("@/sdk/shared/dom"));
 });
 
 function rect(el: Element, w: number, h: number) {

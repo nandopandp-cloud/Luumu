@@ -8,8 +8,8 @@ config({ path: ".env.local" });
 const url = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL!;
 
 export default defineConfig({
-  schema: "./db/schema.ts",
-  out: "./db/migrations",
+  schema: "./src/lib/db/schema.ts",
+  out: "./drizzle",
   dialect: "postgresql",
   dbCredentials: { url },
   verbose: true,

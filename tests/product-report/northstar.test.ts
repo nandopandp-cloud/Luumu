@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { computeNorthStar, formatDelta, formatValue, goalStatus, type PlatformValues, type Targets } from "../../lib/product-report/indicators";
+import { computeNorthStar, formatDelta, formatValue, goalStatus, type PlatformValues, type Targets } from "@/lib/product-report/indicators";
 
 /** Uma aba da planilha North Star: valores das plataformas, metas e o resultado que ela calcula. */
 interface Sheet {

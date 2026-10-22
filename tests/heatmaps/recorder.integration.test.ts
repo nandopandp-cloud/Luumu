@@ -37,8 +37,8 @@ before(async () => {
     },
   });
   g.fetch = async () => new Response(JSON.stringify({ need: false }), { status: 200 });
-  await import("../../sdk/heatmaps/recorder");
-  ({ selectorOf, serializePage } = await import("../../sdk/heatmaps/recorder"));
+  await import("@/sdk/heatmaps/recorder");
+  ({ selectorOf, serializePage } = await import("@/sdk/heatmaps/recorder"));
   rec = (window as unknown as { __luumuHeatmaps: typeof rec }).__luumuHeatmaps;
 });
 

@@ -9,7 +9,7 @@ import { installDom } from "../tours/support/dom-env";
 installDom("https://app.luumu.test/");
 (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 
-type Mod = typeof import("../../components/ui/Select");
+type Mod = typeof import("@/components/ui/Select");
 let Select: Mod["Select"];
 let React: typeof import("react");
 let createRoot: typeof import("react-dom/client").createRoot;
@@ -19,7 +19,7 @@ before(async () => {
   React = await import("react");
   act = React.act;
   ({ createRoot } = await import("react-dom/client"));
-  ({ Select } = await import("../../components/ui/Select"));
+  ({ Select } = await import("@/components/ui/Select"));
 });
 
 function mount(el: React.ReactElement) {

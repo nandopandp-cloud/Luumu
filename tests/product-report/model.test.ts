@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildReportModel, goalFor, resolveValues, type StoredPeriod, type SyncSnapshot } from "../../lib/product-report/model";
-import { DEFAULT_WEIGHTS } from "../../lib/product-report/indicators";
+import { buildReportModel, goalFor, resolveValues, type StoredPeriod, type SyncSnapshot } from "@/lib/product-report/model";
+import { DEFAULT_WEIGHTS } from "@/lib/product-report/indicators";
 
 const NOW = new Date("2026-10-20T12:00:00Z"); // quinzena 2026-10-1 já fechada
 

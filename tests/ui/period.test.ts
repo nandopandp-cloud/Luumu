@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { fillDays, PERIOD_OPTIONS, periodToRange, periodLabel, startOfTodayBR } from "../../lib/period";
+import { fillDays, PERIOD_OPTIONS, periodToRange, periodLabel, startOfTodayBR } from "@/lib/utils/period";
 
 test("sem período na URL = Hoje (igual ao que o seletor mostra), desde a meia-noite de Brasília", () => {
   const { from } = periodToRange(undefined);

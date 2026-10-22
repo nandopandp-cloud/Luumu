@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { whoFrom } from "../../sdk/analytics/identity";
+import { whoFrom } from "@/sdk/analytics/identity";
 import {
   classifyChannel,
   detectBrowser,
@@ -10,9 +10,9 @@ import {
   parseAnalytics,
   parseViewConfig,
   viewHref,
-} from "../../lib/analytics/core";
-import { acquisitionKpis, channelSeries, channelTable, datasetsFor, hoursGrid, kpis, retentionCurve, TAB_LAYOUT, WIDGET_DATASETS } from "../../lib/analytics/derive";
-import { WIDGET_IDS } from "../../lib/analytics/core";
+} from "@/lib/analytics/core";
+import { acquisitionKpis, channelSeries, channelTable, datasetsFor, hoursGrid, kpis, retentionCurve, TAB_LAYOUT, WIDGET_DATASETS } from "@/lib/analytics/derive";
+import { WIDGET_IDS } from "@/lib/analytics/core";
 
 const now = Date.parse("2026-10-03T15:00:00Z");
 const base = { key: "pk_x", aid: "anon123456", sid: "sess123456", st: now, pages: [{ id: "pg1", path: "home", t: now, dur: 5000, ev: ["click_x"] }] };

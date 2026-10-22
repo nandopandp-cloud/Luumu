@@ -1,0 +1,695 @@
+"use client";
+
+import { useEffect, useRef, useState, useTransition } from "react";
+import { Zap, Loader2, Check, Minus, RefreshCw, Search, X, Plus, Globe } from "lucide-react";
+import { Card, CardTitle } from "@/components/ui/Card";
+import { Field, Input, Select } from "@/components/ui/Input";
+import { Button } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/Badge";
+import { useToast } from "@/components/ui/Toast";
+import { saveSettingsAction } from "@/app/(app)/surveys/actions";
+import { scheduleLabel, scheduleState } from "@/lib/surveys/schedule";
+import { hostLabel } from "@/lib/platform/hosts";
+import { HostBadge } from "@/components/ui/HostBadge";
+import { HostPicker } from "@/components/ui/HostPicker";
+import { SEGMENTS, SCHOOL_YEARS, yearsOfSegment, schoolYearsLabel } from "@/lib/surveys/school-years";
+import { cn } from "@/lib/utils";
+
+export interface SettingsValues {
+  id: string;
+  channel: string;
+  audience: string;
+  language: string;
+  triggerEvents: string[];
+  audienceMode: "email" | "id" | null;
+  audienceList: string[];
+  /** anos escolares ("EF7", "EM1"...); [] = todos */
+  audienceSchoolYears: string[];
+  targetHosts: string[];
+  frequency: string;
+  startsAt: string;
+  endsAt: string;
+  responseLimit: number | null;
+}
+
+export interface WorkspaceEvent {
+  name: string;
+  count: number;
+  lastSeenAt: Date | string;
+  /** plataformas onde o evento foi visto; [] = capturado antes da separação por plataforma */
+  hosts: string[];
+}
+
+// valor do filtro de plataforma para eventos sem plataforma identificada
+const NO_HOST = "__none__";
+// quantas plataformas cabem por linha antes de resumir em "+N"
+const MAX_ROW_HOSTS = 2;
+
+/*
+  Atualização da lista de eventos disponíveis como gatilho.
+
+  A 10s fixos, um formulário de configurações aberto gerava ~360 requisições/hora — cada uma
+  autenticada e com query no banco — mesmo com a aba em segundo plano e sem ninguém olhando.
+  O catálogo de eventos é descoberta lenta (nomes novos aparecem quando o cliente instrumenta
+  algo), então esse ritmo não comprava nada.
+
+  Agora segue o mesmo padrão do EventDetector: só com a aba visível, num intervalo folgado, e
+  com atualização imediata ao voltar o foco — que é quando o usuário de fato olha a lista. O
+  botão "atualizar" manual continua disponível para quem quer forçar agora.
+*/
+const EVENTS_POLL_MS = 60_000;
+
+// rótulo legível para o nome bruto do evento (prefixos gerados pelo auto-tracking em sdk/luumu.ts)
+function eventLabel(name: string): string {
+  if (name.startsWith("page_view_")) return `Página: /${name.slice("page_view_".length).replace(/_/g, "/")}`;
+  if (name.startsWith("click_")) return `Clique: ${name.slice("click_".length).replace(/_/g, " ")}`;
+  if (name.startsWith("link_")) return `Link: ${name.slice("link_".length).replace(/_/g, " ")}`;
+  if (name === "rage_click") return "Rage click (frustração)";
+  if (name === "exit_intent") return "Intenção de saída";
+  if (name === "page_leave") return "Saiu da página";
+  if (name.startsWith("form_submit")) return `Formulário enviado${name.length > "form_submit".length ? `: ${name.slice("form_submit_".length).replace(/_/g, " ")}` : ""}`;
+  if (name.startsWith("engaged_")) return `Engajou ${name.slice("engaged_".length)}`;
+  return `Manual: ${name.replace(/_/g, " ")}`;
+}
+
+/** Combobox multi-seleção com busca: cliente escolhe vários eventos-gatilho. */
+function EventMultiSelect({
+  events,
+  hosts,
+  targetHosts,
+  selected,
+  onChange,
+  refreshing,
+  onRefresh,
+}: {
+  events: WorkspaceEvent[];
+  /** plataformas do projeto */
+  hosts: string[];
+  /** plataformas que a pesquisa mira ([] = todas) */
+  targetHosts: string[];
+  selected: string[];
+  onChange: (next: string[]) => void;
+  refreshing: boolean;
+  onRefresh: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  /*
+    Filtro de plataforma. `null` = automático: se a pesquisa mira uma plataforma só, a lista
+    já abre nos eventos dela (são os que fazem sentido como gatilho); senão, todas. Escolher
+    um chip vira escolha explícita e deixa de acompanhar a pesquisa.
+  */
+  const [hostChoice, setHostChoice] = useState<string | null>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  const allHosts = Array.from(new Set([...hosts, ...events.flatMap((ev) => ev.hosts ?? [])]));
+  const hasUnknown = events.some((ev) => !ev.hosts || ev.hosts.length === 0);
+  const showHostFilter = allHosts.length > 1 || (allHosts.length === 1 && hasUnknown);
+  const autoHost = targetHosts.length === 1 && allHosts.includes(targetHosts[0]) ? targetHosts[0] : "";
+  const hostFilter = showHostFilter ? hostChoice ?? autoHost : "";
+
+  useEffect(() => {
+    function onDocClick(e: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, []);
+
+  const toggle = (name: string) =>
+    onChange(selected.includes(name) ? selected.filter((n) => n !== name) : [...selected, name]);
+
+  const filtered = events.filter((ev) => {
+    const evHosts = ev.hosts ?? [];
+    if (hostFilter === NO_HOST && evHosts.length > 0) return false;
+    if (hostFilter && hostFilter !== NO_HOST && !evHosts.includes(hostFilter)) return false;
+    const q = query.trim().toLowerCase();
+    if (!q) return true;
+    return ev.name.toLowerCase().includes(q) || eventLabel(ev.name).toLowerCase().includes(q);
+  });
+
+  const chip = (value: string, label: string, title?: string) => (
+    <button
+      key={value || "all"}
+      type="button"
+      title={title}
+      onClick={() => setHostChoice(value)}
+      className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
+        hostFilter === value ? "bg-accent text-white" : "bg-bg-sunken text-fg-soft hover:text-accent"
+      }`}
+    >
+      {label}
+    </button>
+  );
+
+  return (
+    <div ref={wrapRef} className="relative">
+      {/* chips dos selecionados + botão para abrir */}
+      <div
+        onClick={() => setOpen(true)}
+        className="flex min-h-[46px] flex-wrap items-center gap-1.5 rounded-xl border border-line-strong bg-bg-elev px-2.5 py-2 text-sm transition focus-within:border-accent"
+      >
+        {selected.length === 0 && (
+          <span className="px-1 text-fg-mut">Nenhum: exibir no carregamento</span>
+        )}
+        {selected.map((name) => (
+          <span
+            key={name}
+            className="inline-flex items-center gap-1 rounded-lg bg-surface-brand py-0.5 pl-2 pr-1 text-xs font-medium text-accent"
+          >
+            {eventLabel(name)}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                toggle(name);
+              }}
+              className="rounded p-0.5 hover:bg-accent/15"
+            >
+              <X className="size-3" />
+            </button>
+          </span>
+        ))}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpen((v) => !v);
+          }}
+          className="ml-auto inline-flex items-center gap-1 rounded-lg px-1.5 py-0.5 text-xs font-medium text-fg-mut hover:text-accent"
+        >
+          <Plus className="size-3.5" /> Adicionar
+        </button>
+      </div>
+
+      {open && (
+        <div className="absolute left-0 right-0 z-20 mt-1 overflow-hidden rounded-xl border border-line bg-bg-elev shadow-[var(--shadow-lg)]">
+          <div className="flex items-center gap-2 border-b border-line px-3 py-2">
+            <Search className="size-4 shrink-0 text-fg-mut" />
+            <input
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Buscar evento…"
+              className="w-full bg-transparent text-sm text-fg outline-none placeholder:text-fg-mut"
+            />
+            <button
+              type="button"
+              onClick={onRefresh}
+              disabled={refreshing}
+              title="Atualizar lista"
+              className="shrink-0 rounded p-1 text-fg-mut hover:text-accent disabled:opacity-50"
+            >
+              <RefreshCw className={`size-3.5 ${refreshing ? "animate-spin" : ""}`} />
+            </button>
+          </div>
+          {showHostFilter && (
+            <div className="flex gap-1.5 overflow-x-auto border-b border-line px-3 py-2">
+              {chip("", "Todas")}
+              {allHosts.map((h) => chip(h, hostLabel(h, allHosts), h))}
+              {hasUnknown &&
+                chip(NO_HOST, "Sem plataforma", "Eventos capturados antes da identificação por plataforma")}
+            </div>
+          )}
+          <div className="max-h-60 overflow-y-auto py-1">
+            {filtered.length === 0 ? (
+              <div className="px-3 py-4 text-center text-xs text-fg-mut">
+                {events.length === 0
+                  ? "Nenhum evento capturado ainda."
+                  : hostFilter && hostFilter !== NO_HOST && !query.trim()
+                  ? "Nenhum evento capturado nesta plataforma ainda."
+                  : "Nenhum evento corresponde à busca."}
+              </div>
+            ) : (
+              filtered.map((ev) => {
+                const on = selected.includes(ev.name);
+                return (
+                  <button
+                    key={ev.name}
+                    type="button"
+                    onClick={() => toggle(ev.name)}
+                    className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-bg-sunken"
+                  >
+                    <span
+                      className={`grid size-4 shrink-0 place-items-center rounded border ${
+                        on ? "border-accent bg-accent text-white" : "border-line-strong"
+                      }`}
+                    >
+                      {on && <Check className="size-3" />}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-fg-soft">{eventLabel(ev.name)}</span>
+                    {allHosts.length > 0 && (ev.hosts ?? []).length > 0 && (
+                      <span className="flex shrink-0 items-center gap-1">
+                        {ev.hosts.slice(0, MAX_ROW_HOSTS).map((h) => (
+                          <HostBadge key={h} host={h} all={allHosts} />
+                        ))}
+                        {ev.hosts.length > MAX_ROW_HOSTS && (
+                          <span className="text-[11px] font-semibold text-fg-mut" title={ev.hosts.join(", ")}>
+                            +{ev.hosts.length - MAX_ROW_HOSTS}
+                          </span>
+                        )}
+                      </span>
+                    )}
+                    <span className="shrink-0 font-mono text-[11px] text-fg-mut">{ev.count}×</span>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Editor de lista de emails/IDs (público específico): adicionar por Enter/vírgula, remover por chip. */
+function AudienceList({
+  mode,
+  values,
+  onChange,
+}: {
+  mode: "email" | "id";
+  values: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const [draft, setDraft] = useState("");
+
+  const commit = () => {
+    const parts = draft
+      .split(/[,\s;]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (parts.length) {
+      const merged = Array.from(new Set([...values, ...parts]));
+      onChange(merged);
+    }
+    setDraft("");
+  };
+
+  return (
+    <div className="rounded-xl border border-line-strong bg-bg-elev px-2.5 py-2">
+      <div className="flex flex-wrap gap-1.5">
+        {values.map((val) => (
+          <span
+            key={val}
+            className="inline-flex items-center gap-1 rounded-lg bg-bg-sunken py-0.5 pl-2 pr-1 text-xs font-medium text-fg-soft"
+          >
+            {val}
+            <button
+              type="button"
+              onClick={() => onChange(values.filter((v) => v !== val))}
+              className="rounded p-0.5 hover:bg-line"
+            >
+              <X className="size-3" />
+            </button>
+          </span>
+        ))}
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === ",") {
+              e.preventDefault();
+              commit();
+            } else if (e.key === "Backspace" && !draft && values.length) {
+              onChange(values.slice(0, -1));
+            }
+          }}
+          onBlur={commit}
+          placeholder={mode === "email" ? "email@exemplo.com" : "id_do_usuario"}
+          className="min-w-[140px] flex-1 bg-transparent px-1 py-0.5 text-sm text-fg outline-none placeholder:text-fg-mut"
+        />
+      </div>
+    </div>
+  );
+}
+
+/** Seleção de anos escolares agrupada por segmento; o rótulo do segmento marca/desmarca todos os anos dele. */
+function SchoolYearPicker({ selected, onChange }: { selected: string[]; onChange: (next: string[]) => void }) {
+  const toggle = (codes: string[], on: boolean) => {
+    const set = new Set(selected);
+    codes.forEach((c) => (on ? set.add(c) : set.delete(c)));
+    // mantém a ordem escolar
+    onChange(SCHOOL_YEARS.map((y) => y.code).filter((c) => set.has(c)));
+  };
+
+  return (
+    <div className="flex flex-col gap-2">
+      {SEGMENTS.map((seg) => {
+        const codes = yearsOfSegment(seg.id);
+        const picked = codes.filter((c) => selected.includes(c)).length;
+        const all = picked === codes.length;
+        return (
+          <div key={seg.id} className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => toggle(codes, !all)}
+              aria-pressed={all}
+              className="flex w-36 shrink-0 items-center gap-2 text-left text-sm font-semibold text-fg-soft hover:text-accent"
+            >
+              <span
+                className={cn(
+                  "grid size-4 shrink-0 place-items-center rounded border",
+                  picked ? "border-accent bg-accent text-white" : "border-line-strong"
+                )}
+              >
+                {all ? <Check className="size-3" /> : picked ? <Minus className="size-3" /> : null}
+              </span>
+              {seg.label}
+            </button>
+            {SCHOOL_YEARS.filter((y) => y.segment === seg.id).map((y) => {
+              const on = selected.includes(y.code);
+              return (
+                <button
+                  key={y.code}
+                  type="button"
+                  onClick={() => toggle([y.code], !on)}
+                  aria-pressed={on}
+                  className={cn(
+                    "rounded-full px-2.5 py-1 text-xs font-semibold transition",
+                    on ? "bg-accent text-white" : "bg-bg-sunken text-fg-soft hover:text-accent"
+                  )}
+                >
+                  {y.label}
+                </button>
+              );
+            })}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+export function SurveySettingsForm({
+  initial,
+  events: initialEvents = [],
+  hosts = [],
+  currentResponses = 0,
+  currentDate,
+}: {
+  initial: SettingsValues;
+  events?: WorkspaceEvent[];
+  /** plataformas (hostnames) em que o SDK deste projeto já rodou */
+  hosts?: string[];
+  currentResponses?: number;
+  /** "hoje" no fuso do workspace, para situar a vigência sem depender do relógio do navegador */
+  currentDate: string;
+}) {
+  const [v, setV] = useState(initial);
+  const [saving, startSaving] = useTransition();
+  const [saved, setSaved] = useState(false);
+  const [events, setEvents] = useState(initialEvents);
+  const [refreshing, setRefreshing] = useState(false);
+  const toast = useToast();
+
+  const set = (patch: Partial<SettingsValues>) => setV((s) => ({ ...s, ...patch }));
+
+  const refreshEvents = useRef(async (silent = false) => {
+    if (!silent) setRefreshing(true);
+    try {
+      /*
+        A rota responde com `private, max-age=10`, o que é o certo para os ticks de fundo
+        (polling, voltar para a aba): eles toleram alguns segundos de atraso e deixam de
+        acordar a função.
+
+        O clique em "atualizar" é o oposto: a pessoa está dizendo que acabou de disparar um
+        evento e quer vê-lo agora. Servir a cópia guardada aí faria o botão parecer quebrado,
+        então só este caminho força ida ao servidor.
+      */
+      const r = await fetch("/api/events/status", silent ? undefined : { cache: "no-store" });
+      if (r.ok) {
+        const d = await r.json();
+        setEvents((d.events || []) as WorkspaceEvent[]);
+      }
+    } finally {
+      if (!silent) setRefreshing(false);
+    }
+  });
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (!document.hidden) refreshEvents.current(true);
+    }, EVENTS_POLL_MS);
+    // voltar para a aba é o momento em que a lista desatualizada seria percebida
+    const onVisible = () => {
+      if (!document.hidden) refreshEvents.current(true);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
+
+  const specific = v.audience === "Usuários específicos";
+
+  const invalidRange = Boolean(v.startsAt && v.endsAt && v.startsAt > v.endsAt);
+  const period = scheduleState(v.startsAt || null, v.endsAt || null, currentDate);
+
+  function save() {
+    if (invalidRange) {
+      toast("error", "A data de fim não pode ser anterior à de início.");
+      return;
+    }
+    startSaving(async () => {
+      const res = await saveSettingsAction({
+        id: v.id,
+        channel: v.channel,
+        audience: v.audience,
+        language: v.language,
+        triggerEvents: v.triggerEvents,
+        // só persiste modo/lista quando o público é específico
+        audienceMode: specific ? v.audienceMode ?? "email" : null,
+        audienceList: specific ? v.audienceList : [],
+        audienceSchoolYears: v.audienceSchoolYears,
+        targetHosts: v.targetHosts,
+        frequency: v.frequency,
+        startsAt: v.startsAt,
+        endsAt: v.endsAt,
+        responseLimit: v.responseLimit,
+      });
+      if (!res.ok) {
+        toast("error", res.error ?? "Não foi possível salvar.");
+        return;
+      }
+      setSaved(true);
+      toast("success", "Configurações salvas.");
+      setTimeout(() => setSaved(false), 1800);
+    });
+  }
+
+  return (
+    <>
+      <Card className="mb-4">
+        <div className="flex items-center gap-2">
+          <Globe className="size-4 text-accent" />
+          <CardTitle>Plataforma</CardTitle>
+        </div>
+        <p className="mt-1 text-sm text-fg-mut">
+          A chave deste projeto pode estar instalada em mais de um produto. Escolha em quais endereços
+          esta pesquisa aparece.
+        </p>
+        <div className="mt-4">
+          <HostPicker hosts={hosts} selected={v.targetHosts} onChange={(targetHosts) => set({ targetHosts })} />
+        </div>
+      </Card>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card>
+          <CardTitle>Público</CardTitle>
+          <div className="mt-4 flex flex-col gap-4">
+            <Field label="Quem recebe a pesquisa">
+              <Select
+                value={v.audience}
+                onChange={(e) => set({ audience: e.target.value })}
+              >
+                <option>Todos os usuários</option>
+                <option>Usuários específicos</option>
+              </Select>
+            </Field>
+
+            {specific && (
+              <>
+                <Field label="Identificar por">
+                  <Select
+                    value={v.audienceMode ?? "email"}
+                    onChange={(e) => set({ audienceMode: e.target.value as "email" | "id" })}
+                  >
+                    <option value="email">E-mail</option>
+                    <option value="id">ID do usuário</option>
+                  </Select>
+                </Field>
+                <Field
+                  label={v.audienceMode === "id" ? "IDs que recebem a pesquisa" : "E-mails que recebem a pesquisa"}
+                  hint={
+                    v.audienceMode === "id"
+                      ? "Cole um ou mais IDs (Enter ou vírgula). O produto deve chamar Luumu.identify({ id })."
+                      : "Cole um ou mais e-mails (Enter ou vírgula). O produto deve chamar Luumu.identify({ email })."
+                  }
+                >
+                  <AudienceList
+                    mode={v.audienceMode ?? "email"}
+                    values={v.audienceList}
+                    onChange={(audienceList) => set({ audienceList })}
+                  />
+                </Field>
+              </>
+            )}
+
+            <Field
+              label="Ano escolar"
+              action={
+                v.audienceSchoolYears.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => set({ audienceSchoolYears: [] })}
+                    className="text-xs font-semibold text-fg-mut hover:text-accent"
+                  >
+                    Limpar
+                  </button>
+                )
+              }
+              hint={
+                v.audienceSchoolYears.length === 0
+                  ? "Nenhum selecionado: a pesquisa vale para todos os anos."
+                  : `Só para: ${schoolYearsLabel(v.audienceSchoolYears)}. O ano é lido do perfil do aluno no Exploradores (GRADE_N): ele precisa ter aberto o perfil ao menos uma vez neste navegador. Quem não tiver ano conhecido (professores, Geniex) não recebe.`
+              }
+            >
+              <SchoolYearPicker
+                selected={v.audienceSchoolYears}
+                onChange={(audienceSchoolYears) => set({ audienceSchoolYears })}
+              />
+            </Field>
+
+            <Field label="Idioma">
+              <Select value={v.language} onChange={(e) => set({ language: e.target.value })}>
+                <option value="pt">Português (BR)</option>
+                <option value="en">Inglês</option>
+                <option value="es">Espanhol</option>
+              </Select>
+            </Field>
+            <Field label="Canal">
+              <Select value={v.channel} onChange={(e) => set({ channel: e.target.value })}>
+                <option>In-app</option>
+                <option>E-mail</option>
+                <option>Link</option>
+                <option>WhatsApp</option>
+              </Select>
+            </Field>
+          </div>
+        </Card>
+
+        <Card>
+          <div className="flex items-center gap-2">
+            <Zap className="size-4 text-accent" />
+            <CardTitle>Gatilho & frequência</CardTitle>
+          </div>
+          <div className="mt-4 flex flex-col gap-4">
+            <Field
+              label="Gatilhos por evento (SDK)"
+              hint="A pesquisa dispara quando qualquer um dos eventos selecionados ocorrer. Sem gatilho, aparece no carregamento."
+            >
+              <EventMultiSelect
+                events={events}
+                hosts={hosts}
+                targetHosts={v.targetHosts}
+                selected={v.triggerEvents}
+                onChange={(triggerEvents) => set({ triggerEvents })}
+                refreshing={refreshing}
+                onRefresh={() => refreshEvents.current(false)}
+              />
+            </Field>
+
+            <Field label="Frequência">
+              <Select value={v.frequency} onChange={(e) => set({ frequency: e.target.value })}>
+                <option>Uma vez por usuário</option>
+                <option>Recorrente (30 dias)</option>
+                <option>Sempre</option>
+              </Select>
+            </Field>
+
+            <div>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Início da vigência">
+                  <Input type="date" value={v.startsAt} onChange={(e) => set({ startsAt: e.target.value })} />
+                </Field>
+                <Field label="Fim da vigência">
+                  <Input
+                    type="date"
+                    value={v.endsAt}
+                    min={v.startsAt || undefined}
+                    onChange={(e) => set({ endsAt: e.target.value })}
+                  />
+                </Field>
+              </div>
+              <p className={`mt-1.5 text-xs ${invalidRange ? "text-erro" : "text-fg-mut"}`}>
+                {invalidRange ? (
+                  "A data de fim não pode ser anterior à de início."
+                ) : (
+                  <>
+                    {scheduleLabel(v.startsAt, v.endsAt)}
+                    {period === "agendada" && " · ainda não começou"}
+                    {period === "expirada" && " · período encerrado, a pesquisa não é mais exibida"}
+                  </>
+                )}
+              </p>
+            </div>
+
+            <Field
+              label="Limite de respostas (opcional)"
+              hint={
+                v.responseLimit != null
+                  ? `${currentResponses} de ${v.responseLimit} respostas recebidas até agora.`
+                  : "Ao atingir o total definido, a pesquisa é pausada automaticamente e para de ser exibida."
+              }
+            >
+              <Input
+                type="number"
+                min={1}
+                inputMode="numeric"
+                placeholder="Sem limite"
+                value={v.responseLimit ?? ""}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  const n = raw === "" ? null : Math.max(1, Math.floor(Number(raw)));
+                  set({ responseLimit: raw === "" || isNaN(n as number) ? null : n });
+                }}
+              />
+            </Field>
+
+            <div className="rounded-xl bg-bg-sunken p-3">
+              {events.length === 0 && v.triggerEvents.length === 0 ? (
+                <p className="text-xs leading-relaxed text-fg-mut">
+                  Nenhum evento capturado ainda. Assim que o SDK for instalado no site, cliques e
+                  navegações do produto do cliente aparecem aqui automaticamente, sem precisar
+                  escrever código.
+                </p>
+              ) : v.triggerEvents.length > 0 ? (
+                <div className="flex flex-wrap items-center gap-2 text-xs text-fg-soft">
+                  <span>Dispara com:</span>
+                  {v.triggerEvents.map((ev) => (
+                    <Badge key={ev} tone="brand" dot={false}>
+                      {eventLabel(ev)}
+                    </Badge>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-fg-mut">
+                  Sem gatilho por evento: a pesquisa aparece no carregamento (respeitando frequência).
+                </p>
+              )}
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      <div className="mt-4 flex justify-end">
+        <Button onClick={save} disabled={saving}>
+          {saving ? <Loader2 className="size-4 animate-spin" /> : saved ? <Check className="size-4" /> : null}
+          {saved ? "Salvo" : "Salvar configurações"}
+        </Button>
+      </div>
+    </>
+  );
+}

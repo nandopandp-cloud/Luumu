@@ -9,9 +9,9 @@ process.env.AUTH_SECRET ||= "test-secret";
 process.env.DATABASE_URL ||= "postgres://u:p@localhost/test";
 
 test("cards e tabela renderizam com o plano atual e o pedido pendente", async () => {
-  const { PlanCards } = await import("../../components/billing/PlanCards");
-  const { ComparisonTable } = await import("../../components/billing/ComparisonTable");
-  const { ToastProvider } = await import("../../components/ui/Toast");
+  const { PlanCards } = await import("@/components/billing/PlanCards");
+  const { ComparisonTable } = await import("@/components/billing/ComparisonTable");
+  const { ToastProvider } = await import("@/components/ui/Toast");
 
   const html = renderToStaticMarkup(
     createElement(
@@ -33,8 +33,8 @@ test("cards e tabela renderizam com o plano atual e o pedido pendente", async ()
 });
 
 test("sem permissão, os botões ficam desabilitados e há aviso", async () => {
-  const { PlanCards } = await import("../../components/billing/PlanCards");
-  const { ToastProvider } = await import("../../components/ui/Toast");
+  const { PlanCards } = await import("@/components/billing/PlanCards");
+  const { ToastProvider } = await import("@/components/ui/Toast");
   const html = renderToStaticMarkup(createElement(ToastProvider, null, createElement(PlanCards, { current: "free", pendingPlan: null, canManage: false })));
   assert.match(html, /Só donos e administradores/);
   assert.equal((html.match(/disabled=""/g) ?? []).length, 5);

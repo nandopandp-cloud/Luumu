@@ -1,0 +1,194 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { BarChart3, Calendar, Layers } from "lucide-react";
+import { Select, Input } from "@/components/ui/Input";
+import { Button } from "@/components/ui/Button";
+import { DEFAULT_PERIOD, PERIOD_OPTIONS, periodLabel } from "@/lib/utils/period";
+
+export interface SurveyOption {
+  id: string;
+  name: string;
+}
+
+/**
+ * Barra de filtros de pesquisa + período, controlada via query string
+ * (?surveyId=&period=&from=&to=). Client component "burro": só lê/escreve a URL —
+ * quem busca os dados filtrados são as Server Components das páginas, lendo
+ * searchParams e usando periodToRange (lib/utils/period.ts).
+ *
+ * Quando period=custom, abre um popover com dois <input type="date"> para
+ * selecionar início e fim; ao confirmar, grava period=custom&from=&to= na URL.
+ *
+ * Sem ?surveyId na URL, o filtro cai em `defaultSurveyId` (a última pesquisa
+ * vigente/criada, resolvida no servidor) para refletir o recorte que a página já
+ * está mostrando. Ver "todas" é uma escolha explícita: grava surveyId=all.
+ */
+export function DataFilters({
+  surveys,
+  defaultSurveyId,
+  hosts,
+  defaultPeriod = DEFAULT_PERIOD,
+}: {
+  surveys?: SurveyOption[];
+  defaultSurveyId?: string;
+  /** plataformas do projeto; o filtro só aparece com mais de uma (?host=) */
+  hosts?: string[];
+  /** período quando a URL não diz nada (deve ser o MESMO que o servidor usa nesta página) */
+  defaultPeriod?: string;
+}) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const surveyId = searchParams.get("surveyId") ?? defaultSurveyId ?? "";
+  const host = searchParams.get("host") ?? "";
+  const period = searchParams.get("period") ?? defaultPeriod;
+  const from = searchParams.get("from") ?? "";
+  const to = searchParams.get("to") ?? "";
+
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [draftFrom, setDraftFrom] = useState(from);
+  const [draftTo, setDraftTo] = useState(to);
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setDraftFrom(from);
+    setDraftTo(to);
+  }, [from, to]);
+
+  useEffect(() => {
+    if (!pickerOpen) return;
+    function onClick(e: MouseEvent) {
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) setPickerOpen(false);
+    }
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [pickerOpen]);
+
+  function update(patch: Record<string, string | null>) {
+    const params = new URLSearchParams(searchParams.toString());
+    for (const [key, value] of Object.entries(patch)) {
+      if (value) params.set(key, value);
+      else params.delete(key);
+    }
+    router.push(`${pathname}?${params.toString()}`);
+  }
+
+  function onPeriodChange(value: string) {
+    if (value === "custom") {
+      setPickerOpen(true);
+      // não escreve na URL ainda — só ao confirmar as datas no popover
+      return;
+    }
+    update({ period: value, from: null, to: null });
+  }
+
+  function applyCustomRange() {
+    if (!draftFrom || !draftTo) return;
+    update({ period: "custom", from: draftFrom, to: draftTo });
+    setPickerOpen(false);
+  }
+
+  const periodSelectValue = period === "custom" && (!from || !to) ? defaultPeriod : period;
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {hosts && hosts.length > 1 && (
+        <Select
+          value={host}
+          // trocar de plataforma zera a pesquisa: a escolhida pode não existir na outra
+          onChange={(e) => update({ host: e.target.value, surveyId: null })}
+          aria-label="Plataforma"
+          icon={<Layers />}
+          className="w-auto min-w-[230px] py-2 text-sm"
+        >
+          <option value="">Todas as plataformas</option>
+          {hosts.map((h) => (
+            <option key={h} value={h}>
+              {h}
+            </option>
+          ))}
+        </Select>
+      )}
+      {surveys && (
+        <Select
+          value={surveyId}
+          onChange={(e) => update({ surveyId: e.target.value })}
+          aria-label="Pesquisa"
+          icon={<BarChart3 />}
+          className="w-auto min-w-[260px] py-2 text-sm"
+        >
+          <option value="all">Todas as pesquisas</option>
+          {surveys.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
+          ))}
+        </Select>
+      )}
+
+      <div className="relative">
+        <Select
+          value={periodSelectValue}
+          onChange={(e) => onPeriodChange(e.target.value)}
+          aria-label="Período"
+          icon={<Calendar />}
+          className="w-auto min-w-[200px] py-2 text-sm"
+        >
+          {/* link/visão antiga com "90d": o valor continua aparecendo em vez de cair na 1ª opção */}
+          {!PERIOD_OPTIONS.some((p) => p.value === periodSelectValue) && <option value={periodSelectValue}>{periodLabel(periodSelectValue)}</option>}
+          {PERIOD_OPTIONS.map((p) => (
+            <option key={p.value} value={p.value}>
+              {p.value === "custom" && period === "custom" && from && to
+                ? periodLabel(period, from, to)
+                : p.label}
+            </option>
+          ))}
+        </Select>
+
+        {pickerOpen && (
+          <div
+            ref={popoverRef}
+            className="absolute right-0 top-full z-30 mt-1.5 w-64 rounded-xl border border-line bg-bg-elev p-3.5 shadow-[var(--shadow-lg)]"
+          >
+            <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-fg-soft">
+              <Calendar className="size-3.5" /> Período específico
+            </div>
+            <div className="flex flex-col gap-2">
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-fg-mut">Início</span>
+                <Input
+                  type="date"
+                  value={draftFrom}
+                  max={draftTo || undefined}
+                  onChange={(e) => setDraftFrom(e.target.value)}
+                  className="py-1.5 text-sm"
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-fg-mut">Fim</span>
+                <Input
+                  type="date"
+                  value={draftTo}
+                  min={draftFrom || undefined}
+                  onChange={(e) => setDraftTo(e.target.value)}
+                  className="py-1.5 text-sm"
+                />
+              </label>
+            </div>
+            <div className="mt-3 flex items-center gap-2">
+              <Button size="sm" onClick={applyCustomRange} disabled={!draftFrom || !draftTo}>
+                Aplicar
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setPickerOpen(false)}>
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

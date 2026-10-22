@@ -1,9 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { classifyComment } from "../../lib/insights/themes";
-import { analyzeInsights, levelFromScore, type AnalyzedResponse } from "../../lib/insights/analyze";
-import { answerQuestion, detectIntent } from "../../lib/insights/ask";
-import { insightsMock } from "../../lib/insights/mock";
+import { classifyComment } from "@/lib/insights/themes";
+import { analyzeInsights, levelFromScore, type AnalyzedResponse } from "@/lib/insights/analyze";
+import { answerQuestion, detectIntent } from "@/lib/insights/ask";
+import { insightsMock } from "@/lib/insights/mock";
 
 test("dicionário: temas, pedidos, ruído e palavrão (comentários reais)", () => {
   assert.deepEqual(classifyComment("um lixo o site nao carrega de jeito nenhum").themes, ["performance"]);

@@ -13,16 +13,16 @@ installDom("https://app.luumu.test/insights");
 
 let React: typeof import("react");
 let createRoot: typeof import("react-dom/client").createRoot;
-let InsightsExperience: typeof import("../../components/insights/InsightsExperience").InsightsExperience;
-let insightsMock: typeof import("../../lib/insights/mock").insightsMock;
-let answerQuestion: typeof import("../../lib/insights/ask").answerQuestion;
+let InsightsExperience: typeof import("@/components/insights/InsightsExperience").InsightsExperience;
+let insightsMock: typeof import("@/lib/insights/mock").insightsMock;
+let answerQuestion: typeof import("@/lib/insights/ask").answerQuestion;
 
 before(async () => {
   React = await import("react");
   ({ createRoot } = await import("react-dom/client"));
-  ({ InsightsExperience } = await import("../../components/insights/InsightsExperience"));
-  ({ insightsMock } = await import("../../lib/insights/mock"));
-  ({ answerQuestion } = await import("../../lib/insights/ask"));
+  ({ InsightsExperience } = await import("@/components/insights/InsightsExperience"));
+  ({ insightsMock } = await import("@/lib/insights/mock"));
+  ({ answerQuestion } = await import("@/lib/insights/ask"));
 });
 
 const flush = () => React.act(async () => await new Promise((r) => setTimeout(r, 0)));

@@ -4,14 +4,14 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "prebuild": "node sdk/build.mjs",
+    "prebuild": "node scripts/build-sdk.mjs",
     "build": "next build",
-    "build:sdk": "node sdk/build.mjs",
+    "build:sdk": "node scripts/build-sdk.mjs",
     "start": "next start",
     "lint": "eslint",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "db:seed": "tsx db/seed.ts",
+    "db:seed": "tsx --tsconfig scripts/tsconfig.scripts.json scripts/seed.ts",
     "test": "TSX_TSCONFIG_PATH=scripts/tsconfig.scripts.json node --import tsx --test --test-force-exit \"tests/**/*.test.ts\" \"tests/**/*.test.tsx\"",
     "test:report-email": "tsx --tsconfig scripts/tsconfig.scripts.json scripts/test-report-email.ts"
   },

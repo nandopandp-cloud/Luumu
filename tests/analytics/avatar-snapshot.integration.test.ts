@@ -6,8 +6,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { installDom } from "../tours/support/dom-env";
-import { snapshotAvatar } from "../../sdk/analytics/avatar-snapshot";
-import { sanitizeSvg } from "../../lib/analytics/svg-avatar";
+import { snapshotAvatar } from "@/sdk/analytics/avatar-snapshot";
+import { sanitizeSvg } from "@/lib/analytics/svg-avatar";
 
 installDom("https://preparasp.jovensgenios.com/home");
 // PNG 1×1 embutido (sem rede nos testes)
@@ -49,7 +49,7 @@ test("sem nenhuma imagem: diz o porquê", async () => {
 });
 
 test("foco no rosto: com corpo na base, enquadra só cabeça/rosto/acessórios num quadrado", async () => {
-  const { focusBox } = await import("../../sdk/analytics/avatar-snapshot");
+  const { focusBox } = await import("@/sdk/analytics/avatar-snapshot");
   // camadas reais de um avatar da Geniex (40×40): cabeça, rosto, óculos, corpo
   const head = { x: 12.2, y: 4.6, w: 14.7, h: 17.6 };
   const face = { x: 17.4, y: 10.4, w: 8.9, h: 9.1 };
@@ -67,7 +67,7 @@ test("foco no rosto: com corpo na base, enquadra só cabeça/rosto/acessórios n
 });
 
 test("parece avatar? ícone de interface num botão não; foto/desenho sim", async () => {
-  const { looksLikeAvatarBox } = await import("../../sdk/analytics/avatar-snapshot");
+  const { looksLikeAvatarBox } = await import("@/sdk/analytics/avatar-snapshot");
   // o ambiente de teste não mede layout: cada caso diz o tamanho que teria na tela
   const el = (html: string, w = 40, h = 40) => {
     document.body.innerHTML = html;

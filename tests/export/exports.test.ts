@@ -5,11 +5,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import ExcelJS from "exceljs";
-import { toPdf, tablesToPdf } from "../../lib/export/pdf";
-import { tablesToCsv } from "../../lib/export/csv";
-import { tablesToXlsx } from "../../lib/export/xlsx";
-import { analyticsTables, fmtBucket, fmtDuration, usersTable } from "../../lib/analytics/export";
-import type { AnalyticsData } from "../../lib/db/analytics";
+import { toPdf, tablesToPdf } from "@/lib/export/pdf";
+import { tablesToCsv } from "@/lib/export/csv";
+import { tablesToXlsx } from "@/lib/export/xlsx";
+import { analyticsTables, fmtBucket, fmtDuration, usersTable } from "@/lib/analytics/export";
+import type { AnalyticsData } from "@/lib/db/analytics";
 
 const pages = (buf: Buffer) => (buf.toString("latin1").match(/\/Type \/Page\b/g) ?? []).length;
 

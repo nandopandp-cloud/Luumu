@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { normalizeStep, normalizeSteps, normalizeSettings, normalizeRoute, safeUrl, deviceConfig, deviceForWidth } from "../../lib/tours/normalize";
-import { renderCard, esc } from "../../lib/tours/render";
-import { DEFAULT_APPEARANCE } from "../../lib/tours/defaults";
+import { normalizeStep, normalizeSteps, normalizeSettings, normalizeRoute, safeUrl, deviceConfig, deviceForWidth } from "@/lib/tours/normalize";
+import { renderCard, esc } from "@/lib/tours/render";
+import { DEFAULT_APPEARANCE } from "@/lib/tours/defaults";
 
 test("URLs perigosas e rotas externas são recusadas", () => {
   assert.equal(safeUrl("javascript:alert(1)"), undefined);

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { HELP, HELP_EXAMPLES, searchHelp, totalArticles } from "../../lib/help/articles";
+import { HELP, HELP_EXAMPLES, searchHelp, totalArticles } from "@/lib/help/articles";
 
 test("categorias e artigos com ids únicos e links internos", () => {
   assert.equal(HELP.length, 12);

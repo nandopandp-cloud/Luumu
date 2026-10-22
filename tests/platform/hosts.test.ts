@@ -1,8 +1,8 @@
 // Seleção de várias plataformas no header: "a,b" na URL, no cookie e nos escopos de consulta.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { hostList, normalizeHosts } from "../../lib/hosts";
-import { parseViewConfig } from "../../lib/analytics/core";
+import { hostList, normalizeHosts } from "@/lib/platform/hosts";
+import { parseViewConfig } from "@/lib/analytics/core";
 
 test("lista de plataformas: normaliza, tira repetidas e vazias", () => {
   assert.deepEqual(hostList("Preparasp.jovensgenios.com, https://matematicaem.jovensgenios.com/x,,preparasp.jovensgenios.com"), [
