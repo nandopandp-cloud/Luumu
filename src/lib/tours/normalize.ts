@@ -224,6 +224,8 @@ function normalizeTrigger(v: unknown): TourTrigger {
     event,
     route: normalizeRoute(o.route),
     delaySec: num(o.delaySec, 0, 120, 1),
+    // tours salvos antes da opção existir continuam como estavam
+    waitReady: bool(o.waitReady, false),
   };
 }
 

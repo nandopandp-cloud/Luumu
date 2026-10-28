@@ -14,8 +14,8 @@ import { computePosition, isInViewport } from "../../lib/tours/position";
 import { cardWidth, renderCard, tourCss } from "../../lib/tours/render";
 import { routeMatches } from "../../lib/tours/target";
 import { deviceConfig, deviceForWidth, normalizeSettings, normalizeSteps } from "../../lib/tours/normalize";
-import type { TourCatalogEntry, TourEventInput, TourEventType, TourPayload, TourStep } from "../../lib/tours/types";
-import { LUUMU_HOST_ATTR, waitForElement, whenScreenFree } from "../shared/dom";
+import type { ElementTarget, TourCatalogEntry, TourEventInput, TourEventType, TourPayload, TourStep } from "../../lib/tours/types";
+import { blockingModal, findTarget, isUncovered, LUUMU_HOST_ATTR, waitForElement, whenScreenFree, whenStable } from "../shared/dom";
 import { launchConfetti } from "../../lib/tours/confetti";
 import {
   anonymousId,
@@ -463,11 +463,20 @@ function finish() {
 
 async function start(
   id: string,
-  opts: { preview?: boolean; v?: number | null; atIndex?: number; atKey?: string | null; run?: string; resumed?: boolean } = {}
+  opts: {
+    preview?: boolean;
+    v?: number | null;
+    atIndex?: number;
+    atKey?: string | null;
+    run?: string;
+    resumed?: boolean;
+    /** já buscado (início "quando a tela estiver livre") */
+    payload?: TourPayload;
+  } = {}
 ) {
   if (!ctx) return;
   if (cur) finish();
-  const payload = await fetchTour(id, opts.v ?? null, !!opts.preview);
+  const payload = opts.payload ?? (await fetchTour(id, opts.v ?? null, !!opts.preview));
   if (!payload) return;
   const steps = payload.steps.filter((s) => s.enabled);
   if (!steps.length) return;
@@ -498,16 +507,55 @@ async function start(
 function autoStart(t: TourCatalogEntry) {
   setTimeout(
     () =>
-      safe(() =>
+      safe(() => {
+        if (t.trigger.waitReady) return void startWhenReady(t);
         whenScreenFree(() =>
           safe(() => {
             if (cur || !eligible(t)) return;
+            // o site redirecionou durante o atraso/modal (ex.: "/" → "/onboarding"): volta para a fila
+            if (!onTriggerRoute(t)) return requeue(t);
             void start(t.id, { v: t.v });
           })
-        )
-      ),
+        );
+      }),
     Math.max(0, t.trigger.delaySec * 1000)
   );
+}
+
+/** Tempo que a tela precisa ficar pronta, sem interrupção, para o tour começar. */
+const READY_STABLE_MS = 2000;
+
+/*
+  "Esperar a tela ficar livre": o tour só começa quando o usuário está de fato na página do
+  gatilho, sem modal do site e com o elemento do primeiro passo visível e sem nada por cima,
+  tudo isso por READY_STABLE_MS seguidos. Cobre o que o site do cliente faz antes do produto
+  "assentar" (vídeo de boas-vindas, jornada de avatar no primeiro acesso, redirecionamentos)
+  sem ele precisar avisar nada. Continua esperando entre navegações SPA: quem é levado para
+  outra jornada recebe o tour quando voltar.
+*/
+async function startWhenReady(t: TourCatalogEntry) {
+  const payload = await fetchTour(t.id, t.v, false);
+  if (!payload) return;
+  const anchor = payload.steps.find((s) => s.enabled && s.type !== "modal" && s.target);
+  const ready = () =>
+    !cur &&
+    onTriggerRoute(t) &&
+    !blockingModal() &&
+    (!anchor || ((!anchor.route || routeMatches(anchor.route, location.pathname)) && anchorFree(anchor.target!)));
+  if (!(await whenStable(ready, READY_STABLE_MS, { cancelled: false }))) return;
+  if (cur || !eligible(t)) return;
+  void start(t.id, { v: t.v, payload });
+}
+
+function anchorFree(target: ElementTarget): boolean {
+  const el = findTarget(target);
+  return !!el && isUncovered(el);
+}
+
+const onTriggerRoute = (t: TourCatalogEntry) => !t.trigger.route || routeMatches(t.trigger.route, location.pathname);
+
+function requeue(t: TourCatalogEntry) {
+  if (!pendingTriggers.includes(t)) pendingTriggers.push(t);
 }
 
 function eligible(t: TourCatalogEntry): boolean {

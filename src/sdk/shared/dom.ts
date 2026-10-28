@@ -309,3 +309,43 @@ export function whenScreenFree(fn: () => void, settleMs = 700) {
   });
   obs.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-state", "open", "style", "class", "aria-hidden"] });
 }
+
+/*
+  O elemento está à vista e livre: visível e sem nada do site desenhado por cima do centro dele.
+  Pergunta ao navegador o que está de fato na frente (elementsFromPoint), então pega o vídeo de
+  boas-vindas, a jornada do avatar ou qualquer camada nova sem precisar conhecer o markup delas.
+  Fora da tela não dá para testar: conta como livre (o bloqueio por modal continua valendo).
+*/
+export function isUncovered(el: Element): boolean {
+  if (!isVisible(el)) return false;
+  if (typeof document.elementsFromPoint !== "function") return true;
+  const r = el.getBoundingClientRect();
+  const x = r.left + r.width / 2;
+  const y = r.top + r.height / 2;
+  if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) return true;
+  const top = document.elementsFromPoint(x, y).find((hit) => !isLuumuNode(hit));
+  return !top || el.contains(top) || top.contains(el);
+}
+
+/**
+ * Resolve true quando `ready()` fica verdadeiro sem interrupção por `stableMs` — a tela parou
+ * de mudar (redirecionamento, vídeo que abre um instante depois da página). Por polling: abrir
+ * ou fechar um vídeo nem sempre mexe no DOM de um jeito observável. Resolve false se cancelado.
+ */
+export function whenStable(ready: () => boolean, stableMs: number, signal: { cancelled: boolean }, intervalMs = 400): Promise<boolean> {
+  return new Promise((resolve) => {
+    let since = 0;
+    const tick = () => {
+      if (signal.cancelled) return resolve(false);
+      let ok = false;
+      try {
+        ok = ready();
+      } catch {}
+      if (!ok) since = 0;
+      else if (!since) since = Date.now();
+      else if (Date.now() - since >= stableMs) return resolve(true);
+      setTimeout(tick, intervalMs);
+    };
+    tick();
+  });
+}

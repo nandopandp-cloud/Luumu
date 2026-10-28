@@ -18,7 +18,7 @@ export const DEFAULT_APPEARANCE: TourAppearance = {
 
 export function defaultSettings(startUrl = ""): TourSettings {
   return {
-    trigger: { type: "first_access", route: null, delaySec: 1 },
+    trigger: { type: "first_access", route: null, delaySec: 1, waitReady: true },
     frequency: "until_dismissed",
     audience: { mode: "all", match: "all", rules: [] },
     targetHosts: [],

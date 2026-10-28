@@ -8,6 +8,7 @@ import { Field, Input, Select } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { CodeBlock } from "@/components/ui/CodeBlock";
 import { HostPicker } from "@/components/ui/HostPicker";
+import { Switch } from "@/components/ui/Switch";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils";
 import { FREQUENCY_LABEL } from "@/lib/tours/frequency";
@@ -128,6 +129,18 @@ Luumu.tours.start("${tourId}");`;
                 </Select>
               </Field>
             </div>
+          )}
+          {s.trigger.type !== "manual" && (
+            <label className="flex items-start justify-between gap-3 rounded-xl border border-line p-3">
+              <span>
+                <span className="block text-sm font-semibold">Esperar a tela ficar livre</span>
+                <span className="mt-0.5 block text-xs leading-snug text-fg-mut">
+                  Só começa quando o elemento do primeiro passo estiver visível e sem nada por cima (vídeo, pop-up, outra
+                  jornada) por 2 segundos seguidos. Se o usuário for levado para outra página antes, o tour espera ele voltar.
+                </span>
+              </span>
+              <Switch checked={s.trigger.waitReady} onChange={(v) => setTrigger({ waitReady: v })} label="Esperar a tela ficar livre" />
+            </label>
           )}
           <div className="rounded-xl bg-bg-sunken p-3.5">
             <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-fg-soft">

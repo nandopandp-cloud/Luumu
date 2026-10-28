@@ -127,6 +127,8 @@ export interface TourTrigger {
   event?: string; // quando type = event
   route?: string | null; // só inicia nesta rota (opcional)
   delaySec: number;
+  /** só inicia com a tela "assentada": rota certa, sem modal e o alvo do 1º passo visível e livre */
+  waitReady: boolean;
 }
 
 export type Frequency = "once" | "once_per_session" | "until_completed" | "until_dismissed" | "always";
