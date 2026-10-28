@@ -9,9 +9,7 @@
  *   pnpm exec tsx --tsconfig scripts/tsconfig.scripts.json scripts/compact-avatars.ts          # simula
  *   pnpm exec tsx --tsconfig scripts/tsconfig.scripts.json scripts/compact-avatars.ts --apply  # aplica
  */
-import { config } from "dotenv";
-config({ path: ".env.local" });
-
+import "./support/env";
 import { and, asc, eq, gt, or } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { avatarSvgParts, avatarSvgs } from "@/lib/db/schema";
