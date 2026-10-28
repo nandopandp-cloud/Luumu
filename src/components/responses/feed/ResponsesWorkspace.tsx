@@ -20,6 +20,8 @@ import { ResponseCard, type ResponseCardData } from "./ResponseCard";
 import { FeedSelection } from "./FeedSelection";
 import { getCurrentRole } from "@/lib/auth/current";
 import { ScoreDistributionCard, WordsCard } from "./SideCards";
+import { QuestionBreakdown } from "./QuestionBreakdown";
+import { getQuestionBreakdown } from "@/lib/db/question-breakdown";
 
 export interface WorkspaceParams {
   view?: string;
@@ -61,13 +63,19 @@ export async function ResponsesWorkspace({
   const view: FeedView = (FEED_VIEWS as readonly string[]).includes(params.view ?? "") ? (params.view as FeedView) : "all";
   const sort: FeedSort = (FEED_SORTS as readonly string[]).includes(params.sort ?? "") ? (params.sort as FeedSort) : "recent";
   const limit = Math.min(300, Math.max(PAGE, Number(params.limit) || PAGE));
-  const [feed, overview, distribution, words, role] = await Promise.all([
+  const surveyId = scope.surveyId;
+  const [feed, overview, distribution, words, role, breakdown] = await Promise.all([
     getResponseFeed(scope, { view, sort, limit }),
     getOverview(scope),
     getScoreDistribution(scope),
     getWordCloud(scope),
     getCurrentRole(),
+    surveyId ? getQuestionBreakdown({ ...scope, surveyId }) : Promise.resolve([]),
   ]);
+  // "Por pergunta" só faz sentido com mais de uma pergunta de nota/opção (ex.: os 10 itens do SUS);
+  // com uma só, é a mesma "Distribuição de notas" da lateral
+  const hasBreakdown = breakdown.length > 1;
+  const byQuestion = hasBreakdown && params.view === "questions";
   const { counts, prevCounts, mainScore, prevScore, positivePct, prevPositivePct } = overview;
   // minigráficos: série diária do período, com zero nos dias sem resposta
   const recent = overview.daily;
@@ -98,7 +106,12 @@ export async function ResponsesWorkspace({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <DataFilters surveys={surveyFilter?.options} defaultSurveyId={surveyFilter?.defaultSurveyId} defaultPeriod="all" />
+        {/* pesquisa específica: o recorte é ela inteira, sem período (a vigência já delimita) */}
+        {surveyFilter ? (
+          <DataFilters surveys={surveyFilter.options} defaultSurveyId={surveyFilter.defaultSurveyId} defaultPeriod="all" showPeriod={!surveyId} />
+        ) : (
+          <span />
+        )}
         <SortMenu value={sort} />
       </div>
 
@@ -145,8 +158,11 @@ export async function ResponsesWorkspace({
         />
       </div>
 
-      <ViewTabs value={view} counts={counts} />
+      <ViewTabs value={byQuestion ? "questions" : view} counts={counts} questions={hasBreakdown ? breakdown.length : undefined} />
 
+      {byQuestion ? (
+        <QuestionBreakdown stats={breakdown} />
+      ) : (
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="flex min-w-0 flex-col gap-3">
           <FeedSelection ids={cards.map((c) => c.id)} mode={view === "excluded" ? "restore" : "exclude"} enabled={role !== "viewer"}>
@@ -179,6 +195,7 @@ export async function ResponsesWorkspace({
           <WordsCard words={words} />
         </aside>
       </div>
+      )}
         </>
       )}
     </div>

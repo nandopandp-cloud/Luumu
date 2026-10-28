@@ -338,6 +338,7 @@ export async function updateSurvey(
  * `logic.showIf.questionUid` (que apontam para o `uid` de outra pergunta do array)
  * para o `id` real correspondente, senão a lógica condicional nunca casa com as
  * respostas gravadas (que são indexadas pelo `id` real).
+ * Devolve `{ uid temporário: id real }` das perguntas novas, para o builder adotar os ids.
  */
 export async function replaceQuestions(
   id: string,
@@ -345,9 +346,22 @@ export async function replaceQuestions(
   qs: { uid?: string; blockId: string; title: string; required: boolean; config?: unknown; logic?: unknown }[]
 ) {
   await assertOwned(id, scope);
-  await db.delete(questions).where(eq(questions.surveyId, id));
+  const removed = await db.delete(questions).where(eq(questions.surveyId, id)).returning({ id: questions.id });
+  /*
+    Pergunta que já existia mantém o id: as answers gravadas apontam para ele, e um id novo a
+    cada save (o autosave do builder salva a cada edição) deixava as respostas órfãs — sem
+    título no detalhe e fora da análise por pergunta. Só pergunta nova (uid temporário do
+    client, ou um uid que não é desta pesquisa) ganha id novo; o mapa volta para o builder.
+  */
+  const existing = new Set(removed.map((r) => r.id));
+  const created: Record<string, string> = {};
   if (qs.length) {
-    const realIds = qs.map(() => questionId());
+    const realIds = qs.map((q) => {
+      if (q.uid && existing.delete(q.uid)) return q.uid;
+      const fresh = questionId();
+      if (q.uid) created[q.uid] = fresh;
+      return fresh;
+    });
     const uidToRealId = new Map<string, string>();
     qs.forEach((q, i) => {
       if (q.uid) uidToRealId.set(q.uid, realIds[i]);
@@ -375,6 +389,7 @@ export async function replaceQuestions(
     );
   }
   await db.update(surveys).set({ updatedAt: new Date() }).where(eq(surveys.id, id));
+  return created;
 }
 
 export async function publishSurvey(id: string, scope: SurveyScope) {

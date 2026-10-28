@@ -61,11 +61,11 @@ export async function saveDraftAction(input: unknown) {
   // escopo = projeto ativo (já filtrado pelo escopo do membro), não o workspace inteiro
   const scope = { projectId: await getCurrentProjectId() };
   await updateSurvey(data.id, scope, { name: data.name, ...(data.type ? { type: data.type } : {}) });
-  await replaceQuestions(data.id, scope, data.questions);
+  const ids = await replaceQuestions(data.id, scope, data.questions);
   revalidatePath(`/surveys/${data.id}/builder`);
   revalidatePath("/surveys");
   revalidatePath("/dashboard");
-  return { ok: true as const, savedAt: Date.now() };
+  return { ok: true as const, savedAt: Date.now(), ids };
 }
 
 /* ---------- Configurações de disparo (settings) ---------- */

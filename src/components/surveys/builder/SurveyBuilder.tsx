@@ -199,7 +199,7 @@ export function SurveyBuilder({
   async function save(silent = false) {
     setSaveState("saving");
     try {
-      await saveDraftAction({
+      const { ids } = await saveDraftAction({
         id: surveyId,
         name,
         type,
@@ -209,6 +209,7 @@ export function SurveyBuilder({
         })),
       });
       dirty.current = false;
+      adoptIds(ids);
       setSaveState("saved");
       if (!silent) toast("success", "Rascunho salvo.");
       setTimeout(() => setSaveState("idle"), 1800);
@@ -216,6 +217,24 @@ export function SurveyBuilder({
       setSaveState("idle");
       toast("error", "Não foi possível salvar. Tente de novo.");
     }
+  }
+
+  /*
+    Perguntas novas ganham o id real no primeiro save: o builder passa a usá-lo como uid
+    (inclusive nas condições que apontam para elas), para os saves seguintes manterem o
+    mesmo id — é por ele que as respostas gravadas ficam ligadas à pergunta.
+  */
+  function adoptIds(ids: Record<string, string>) {
+    if (Object.keys(ids).length === 0) return;
+    const real = (uid: string) => ids[uid] ?? uid;
+    setQuestions((prev) =>
+      prev.map((q) => ({
+        ...q,
+        uid: real(q.uid),
+        logic: q.logic.showIf ? { ...q.logic, showIf: { ...q.logic.showIf, questionUid: real(q.logic.showIf.questionUid) } } : q.logic,
+      }))
+    );
+    setSelectedUid((uid) => (uid ? real(uid) : uid));
   }
 
   /* ----- autosave por debounce quando há mudança ----- */

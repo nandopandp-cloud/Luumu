@@ -4,6 +4,7 @@ import path from "node:path";
 // standalone embute as métricas de fonte (.afm); evita ENOENT em ambiente bundled (Next/Turbopack)
 import PDFDocument from "pdfkit/js/pdfkit.standalone.js";
 import type { ExportRow } from "@/lib/db/responses";
+import type { QuestionStat } from "@/lib/db/question-breakdown";
 
 const ROXO = "#6B2BD9";
 const TXT = "#1a1a2e";
@@ -162,8 +163,70 @@ export function drawPdfTable(doc: PDFKit.PDFDocument, t: PdfTable, layout: "port
   doc.y += 18;
 }
 
-/** Gera um PDF profissional (Luumu) com sumário + tabela de respostas. */
-export function toPdf(rows: ExportRow[], opts: { title: string; subtitle?: string; summary: PdfSummary }): Promise<Buffer> {
+const pctFmt = (n: number) => `${n.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
+
+/**
+ * "Respostas por pergunta": para cada pergunta de nota/opção, uma barra por nota com
+ * quantidade e percentual (o que o SUS exige: cada item tem leitura própria). A partir de doc.y.
+ */
+function drawQuestionBreakdown(doc: PDFKit.PDFDocument, stats: QuestionStat[]) {
+  const left = doc.page.margins.left;
+  const contentW = doc.page.width - left - doc.page.margins.right;
+  const limit = () => doc.page.height - doc.page.margins.bottom - 20;
+  const labelW = 120;
+  const valueW = 70;
+  const barW = contentW - labelW - valueW - 12;
+  const rowH = 15;
+
+  doc.fillColor(ROXO).font("Helvetica-Bold").fontSize(12).text("Respostas por pergunta", left, doc.y, { width: contentW });
+  doc.moveDown(0.5);
+
+  for (const s of stats) {
+    doc.font("Helvetica-Bold").fontSize(9.5);
+    const titleH = doc.heightOfString(`Pergunta ${s.number}: ${s.title}`, { width: contentW });
+    // a pergunta inteira (título + barras) fica na mesma página
+    if (doc.y + titleH + 14 + s.buckets.length * rowH > limit()) {
+      doc.addPage();
+      doc.y = doc.page.margins.top;
+    }
+    doc.fillColor(TXT).text(`Pergunta ${s.number}: ${s.title}`, left, doc.y, { width: contentW });
+    const meta = [`${s.answered} ${s.answered === 1 ? "resposta" : "respostas"}`, s.avg != null ? `média ${s.avg.toLocaleString("pt-BR")}` : null]
+      .filter(Boolean)
+      .join(" · ");
+    doc.font("Helvetica").fontSize(8).fillColor(MUT).text(meta, left, doc.y + 1, { width: contentW });
+    doc.y += 4;
+
+    s.buckets.forEach((b, j) => {
+      const y = doc.y;
+      const end = s.kind === "scale" ? (j === 0 ? s.minLabel : j === s.buckets.length - 1 ? s.maxLabel : undefined) : undefined;
+      doc.font("Helvetica").fontSize(8).fillColor(TXT).text(end ? `${b.label} (${end})` : b.label, left, y + 3, {
+        width: labelW - 6,
+        height: 10,
+        ellipsis: true,
+        lineBreak: false,
+      });
+      const x = left + labelW;
+      doc.roundedRect(x, y + 3, barW, 8, 3).fill(LAVANDA);
+      if (b.count) doc.roundedRect(x, y + 3, Math.max(3, (Math.min(100, b.pct) / 100) * barW), 8, 3).fill(ROXO);
+      doc.font("Helvetica-Bold").fontSize(8).fillColor(TXT).text(`${b.count} (${pctFmt(b.pct)})`, x + barW + 8, y + 3, {
+        width: valueW,
+        lineBreak: false,
+      });
+      doc.y = y + rowH;
+    });
+    doc.y += 12;
+  }
+  doc.y += 6;
+}
+
+/**
+ * Gera um PDF profissional (Luumu) com sumário + tabela de respostas. Na exportação de uma
+ * pesquisa, `byQuestion` acrescenta a distribuição de cada pergunta antes da tabela.
+ */
+export function toPdf(
+  rows: ExportRow[],
+  opts: { title: string; subtitle?: string; summary: PdfSummary; byQuestion?: QuestionStat[] }
+): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: "A4", margin: 40, bufferPages: true });
     const chunks: Buffer[] = [];
@@ -213,6 +276,13 @@ export function toPdf(rows: ExportRow[], opts: { title: string; subtitle?: strin
       doc.fillColor(ROXO).font("Helvetica-Bold").fontSize(22).text(c.value, x + 12, cardY + 24, { width: cardW - 24 });
     });
     doc.y = cardY + cardH + 22;
+
+    if (opts.byQuestion?.length) {
+      drawQuestionBreakdown(doc, opts.byQuestion);
+      // a tabela de respostas começa numa página nova, com o cabeçalho no topo
+      doc.addPage();
+      doc.y = doc.page.margins.top;
+    }
 
     // ---------- Tabela ----------
     const cols = [

@@ -30,6 +30,7 @@ export function DataFilters({
   defaultSurveyId,
   hosts,
   defaultPeriod = DEFAULT_PERIOD,
+  showPeriod = true,
 }: {
   surveys?: SurveyOption[];
   defaultSurveyId?: string;
@@ -37,6 +38,8 @@ export function DataFilters({
   hosts?: string[];
   /** período quando a URL não diz nada (deve ser o MESMO que o servidor usa nesta página) */
   defaultPeriod?: string;
+  /** false = sem seletor de período (ex.: respostas de uma pesquisa específica, que já tem vigência própria) */
+  showPeriod?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -129,6 +132,7 @@ export function DataFilters({
         </Select>
       )}
 
+      {showPeriod && (
       <div className="relative">
         <Select
           value={periodSelectValue}
@@ -189,6 +193,7 @@ export function DataFilters({
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }

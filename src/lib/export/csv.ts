@@ -10,9 +10,12 @@ function cell(v: string | number | null): string {
   return s;
 }
 
-/** Gera um CSV (UTF-8 com BOM p/ Excel) das respostas. */
-export function toCsv(rows: ExportRow[]): Buffer {
-  const lines = [HEADERS.join(",")];
+/**
+ * Gera um CSV (UTF-8 com BOM p/ Excel) das respostas. Com `questions` (exportação de uma
+ * pesquisa), soma uma coluna por pergunta com o que cada pessoa respondeu.
+ */
+export function toCsv(rows: ExportRow[], questions: string[] = []): Buffer {
+  const lines = [[...HEADERS, ...questions].map(cell).join(",")];
   for (const r of rows) {
     lines.push(
       [
@@ -25,6 +28,7 @@ export function toCsv(rows: ExportRow[]): Buffer {
         cell(r.score),
         cell(r.comment),
         cell(r.createdAt.toISOString()),
+        ...questions.map((_, i) => cell(r.answers?.[i] ?? null)),
       ].join(",")
     );
   }

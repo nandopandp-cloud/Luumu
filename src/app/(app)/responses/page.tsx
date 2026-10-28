@@ -26,13 +26,14 @@ export default async function ResponsesPage({
   const sp = await searchParams;
   const projectId = await getCurrentProjectId();
   const host = await selectedPlatform(projectId, sp.host);
-  const { from: dateFrom, to: dateTo } = periodToRange(sp.period ?? "all", sp.from, sp.to);
   // sem filtro na URL, abre em "Todas as pesquisas" e "Todo o período"
   const [{ surveyId, defaultSurveyId }, surveyOptions, hosts] = await Promise.all([
     resolveSurveyScope(projectId, sp.surveyId ?? "all", host),
     listSurveyOptions(projectId, host),
     listHosts(projectId),
   ]);
+  // com uma pesquisa escolhida o período sai de cena (o seletor some): vale ela inteira
+  const { from: dateFrom, to: dateTo } = surveyId ? {} : periodToRange(sp.period ?? "all", sp.from, sp.to);
 
   return (
     <div>

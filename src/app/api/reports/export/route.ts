@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth/session";
 import { getCurrentProject } from "@/lib/auth/current";
 import { listResponsesForExport, getStats } from "@/lib/db/responses";
 import { getSurvey } from "@/lib/db/surveys";
+import { getAnswerColumns, getQuestionBreakdown } from "@/lib/db/question-breakdown";
 import { toCsv } from "@/lib/export/csv";
 import { toXlsx } from "@/lib/export/xlsx";
 import { toPdf } from "@/lib/export/pdf";
@@ -46,19 +47,28 @@ export async function GET(req: Request) {
     scopeName = survey.name;
   }
 
-  const scope = { projectId: project.id, surveyId, dateFrom, dateTo, host };
+  // pesquisa específica: todas as respostas dela (sem período) e o detalhe pergunta a pergunta
+  const scope = surveyId ? { projectId: project.id, surveyId, host } : { projectId: project.id, dateFrom, dateTo, host };
   const rows = await listResponsesForExport(scope);
+  const [answerCols, stats] = surveyId
+    ? await Promise.all([
+        getAnswerColumns(project.id, surveyId, rows.map((r) => r.id)),
+        getQuestionBreakdown({ ...scope, surveyId }),
+      ])
+    : [null, []];
+  if (answerCols) for (const r of rows) r.answers = answerCols.values.get(r.id) ?? [];
+  const questionCols = answerCols?.columns ?? [];
 
   const dateTag = new Date().toISOString().slice(0, 10);
   const base = `luumu-${slugify(scopeName)}-${dateTag}`;
 
   if (format === "csv") {
-    const buf = toCsv(rows);
+    const buf = toCsv(rows, questionCols);
     return fileResponse(buf, `${base}.csv`, "text/csv; charset=utf-8");
   }
 
   if (format === "xlsx") {
-    const buf = await toXlsx(rows, scopeName);
+    const buf = await toXlsx(rows, scopeName, answerCols ? { columns: questionCols, stats } : undefined);
     return fileResponse(
       buf,
       `${base}.xlsx`,
@@ -67,10 +77,11 @@ export async function GET(req: Request) {
   }
 
   if (format === "pdf") {
-    const stats = await getStats(scope);
+    const summary = await getStats(scope);
     const buf = await toPdf(rows, {
       title: `Relatório de respostas: ${scopeName}`,
-      summary: { total: stats.total, avgScore: stats.avgScore, positivePct: stats.positivePct },
+      summary: { total: summary.total, avgScore: summary.avgScore, positivePct: summary.positivePct },
+      byQuestion: stats,
     });
     return fileResponse(buf, `${base}.pdf`, "application/pdf");
   }

@@ -11,6 +11,7 @@ import {
   ChevronDown,
   Clock,
   Frown,
+  ListChecks,
   Meh,
   MessageSquareText,
   MessagesSquare,
@@ -130,8 +131,11 @@ const VIEWS: { value: FeedView; label: string; icon: React.ReactNode; tone: stri
   { value: "excluded", label: "Desconsideradas", icon: <Ban className="size-4" />, tone: "text-erro" },
 ];
 
-/** Abas do feed com a contagem de cada uma (no recorte dos filtros). */
-export function ViewTabs({ value, counts }: { value: FeedView; counts: ViewCounts }) {
+/**
+ * Abas do feed com a contagem de cada uma (no recorte dos filtros). Com `questions` (pesquisa
+ * específica com várias perguntas de nota/opção), soma a aba "Por pergunta" (?view=questions).
+ */
+export function ViewTabs({ value, counts, questions }: { value: FeedView | "questions"; counts: ViewCounts; questions?: number }) {
   const href = useHref();
   const n: Record<FeedView, number> = {
     all: counts.all,
@@ -141,6 +145,11 @@ export function ViewTabs({ value, counts }: { value: FeedView; counts: ViewCount
     neutral: counts.neutral,
     excluded: counts.excluded,
   };
+  const tab = (on: boolean) =>
+    cn(
+      "inline-flex items-center gap-2 rounded-xl border px-3.5 py-2 text-sm font-semibold transition",
+      on ? "border-accent bg-surface-brand text-accent" : "border-line bg-bg-elev text-fg-soft hover:border-line-strong"
+    );
   return (
     <nav className="flex flex-wrap gap-2" aria-label="Filtrar respostas">
       {/* "Desconsideradas" só aparece quando há alguma (ou quando já se está nela) */}
@@ -152,10 +161,7 @@ export function ViewTabs({ value, counts }: { value: FeedView; counts: ViewCount
             href={href({ view: v.value === "all" ? null : v.value })}
             scroll={false}
             aria-current={on ? "page" : undefined}
-            className={cn(
-              "inline-flex items-center gap-2 rounded-xl border px-3.5 py-2 text-sm font-semibold transition",
-              on ? "border-accent bg-surface-brand text-accent" : "border-line bg-bg-elev text-fg-soft hover:border-line-strong"
-            )}
+            className={tab(on)}
           >
             <span className={on ? "text-accent" : v.tone}>{v.icon}</span>
             {v.label}
@@ -163,6 +169,20 @@ export function ViewTabs({ value, counts }: { value: FeedView; counts: ViewCount
           </Link>
         );
       })}
+      {questions != null && (
+        <Link
+          href={href({ view: "questions" })}
+          scroll={false}
+          aria-current={value === "questions" ? "page" : undefined}
+          className={tab(value === "questions")}
+        >
+          <span className="text-accent">
+            <ListChecks className="size-4" />
+          </span>
+          Por pergunta
+          <span className={cn("font-mono text-xs", value === "questions" ? "text-accent" : "text-fg-mut")}>({questions})</span>
+        </Link>
+      )}
     </nav>
   );
 }

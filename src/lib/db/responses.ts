@@ -291,6 +291,8 @@ export interface ExportRow {
   score: number | null;
   comment: string;
   createdAt: Date;
+  /** exportação de uma pesquisa: a resposta de cada pergunta, na ordem das colunas de pergunta */
+  answers?: (string | number | null)[];
 }
 
 /**
