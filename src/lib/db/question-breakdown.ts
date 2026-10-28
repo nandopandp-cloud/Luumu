@@ -3,7 +3,7 @@ import { and, asc, count, eq, inArray } from "drizzle-orm";
 import { db } from "./client";
 import { answers, questions, responses, surveys } from "@/lib/db/schema";
 import { scopeWhere, type Scope } from "./responses";
-import { blockKind, scoreBlocks, type QuestionConfig } from "@/lib/surveys/builder";
+import { blockKind, isMessageBlock, scoreBlocks, type QuestionConfig } from "@/lib/surveys/builder";
 import { defaultScaleForBlock } from "@/lib/surveys/scoring";
 
 /*
@@ -150,7 +150,8 @@ export async function getAnswerColumns(
   surveyId: string,
   responseIds: string[]
 ): Promise<{ columns: string[]; values: Map<string, (string | number | null)[]> }> {
-  const qs = await surveyQuestions(projectId, surveyId);
+  // saudação não tem resposta: não vira coluna
+  const qs = (await surveyQuestions(projectId, surveyId)).filter((q) => !isMessageBlock(q.blockId));
   const values = new Map<string, (string | number | null)[]>();
   if (qs.length === 0 || responseIds.length === 0) return { columns: qs.map(columnName), values };
 

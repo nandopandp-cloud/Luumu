@@ -3,7 +3,7 @@
 import { Select } from "@/components/ui/Select";
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { scoreBlocks, type BuilderQuestion } from "@/lib/surveys/builder";
+import { isMessageBlock, scoreBlocks, type BuilderQuestion } from "@/lib/surveys/builder";
 
 export type Answers = Record<string, unknown>;
 
@@ -35,6 +35,9 @@ export function QuestionField({
   q: BuilderQuestion; value: unknown; onChange: (v: unknown) => void;
 }) {
   const cfg = q.config ?? {};
+
+  // saudação: só o texto (título) e o botão de seguir, sem campo de resposta
+  if (isMessageBlock(q.blockId)) return null;
 
   if (["nps", "ces", "scale", "rating", "csat"].includes(q.blockId)) {
     const min = cfg.min ?? (q.blockId === "nps" ? 0 : 1);

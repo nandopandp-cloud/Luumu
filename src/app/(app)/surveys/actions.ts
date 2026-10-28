@@ -17,7 +17,7 @@ import {
 } from "@/lib/db/surveys";
 import { submitResponse } from "@/lib/db/responses";
 import { deriveSentiment } from "@/lib/surveys/sentiment";
-import { normalizeAppearance, isPlaceholderMissing, type QuestionConfig } from "@/lib/surveys/builder";
+import { normalizeAppearance, isMessageBlock, isPlaceholderMissing, type QuestionConfig } from "@/lib/surveys/builder";
 import { isWithinSchedule, normalizeDate } from "@/lib/surveys/schedule";
 import { normalizeHost } from "@/lib/platform/hosts";
 import { normalizeSchoolYears } from "@/lib/surveys/school-years";
@@ -117,7 +117,8 @@ export async function publishSurveyAction(id: string) {
   const data = await getSurveyWithQuestions(id, { projectId });
   if (!data) return { ok: false as const, error: "Pesquisa não encontrada." };
   if (!data.survey.name.trim()) return { ok: false as const, error: "Dê um nome à pesquisa antes de publicar." };
-  if (data.questions.length === 0)
+  // a saudação sozinha não é pesquisa: precisa de ao menos uma pergunta que peça resposta
+  if (!data.questions.some((q) => !isMessageBlock(q.blockId)))
     return { ok: false as const, error: "Adicione ao menos uma pergunta antes de publicar." };
   const noPlaceholder = data.questions.findIndex((q) => isPlaceholderMissing(q.blockId, q.config as QuestionConfig));
   if (noPlaceholder !== -1)

@@ -5,7 +5,7 @@ import { Switch } from "@/components/ui/Switch";
 import { Input, Select } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
-import { blockKind, isPlaceholderMissing, type BuilderQuestion } from "@/lib/surveys/builder";
+import { blockKind, isMessageBlock, isPlaceholderMissing, type BuilderQuestion } from "@/lib/surveys/builder";
 
 export function QuestionSettings({
   question,
@@ -24,13 +24,14 @@ export function QuestionSettings({
   const setConfig = (patch: Partial<typeof cfg>) => onChange({ config: { ...cfg, ...patch } });
 
   // perguntas anteriores que podem servir de gatilho para lógica condicional
-  const priors = allQuestions.slice(0, index);
+  // (saudação não tem resposta, então não serve de condição)
+  const priors = allQuestions.slice(0, index).filter((p) => !isMessageBlock(p.blockId));
 
   return (
     <div className="flex flex-col gap-4">
       {/* Título */}
       <label className="flex flex-col gap-1.5">
-        <span className="text-sm font-semibold text-fg-soft">Pergunta</span>
+        <span className="text-sm font-semibold text-fg-soft">{kind === "message" ? "Texto da saudação" : "Pergunta"}</span>
         <textarea
           value={question.title}
           onChange={(e) => onChange({ title: e.target.value })}
@@ -39,11 +40,17 @@ export function QuestionSettings({
         />
       </label>
 
-      {/* Obrigatória */}
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-semibold text-fg-soft">Obrigatória</span>
-        <Switch checked={question.required} onChange={(v) => onChange({ required: v })} label="Obrigatória" />
-      </div>
+      {/* Obrigatória (a saudação não pede resposta: só exibe o texto e o botão Próxima) */}
+      {kind === "message" ? (
+        <p className="text-xs text-fg-mut">
+          A saudação não pede resposta: mostra este texto e o botão para seguir para a pesquisa.
+        </p>
+      ) : (
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-semibold text-fg-soft">Obrigatória</span>
+          <Switch checked={question.required} onChange={(v) => onChange({ required: v })} label="Obrigatória" />
+        </div>
+      )}
 
       {/* Controles por tipo */}
       {kind === "options" && (
@@ -171,9 +178,9 @@ export function QuestionSettings({
               }
               className="py-2"
             >
-              {priors.map((p, i) => (
+              {priors.map((p) => (
                 <option key={p.uid} value={p.uid}>
-                  {String(i + 1).padStart(2, "0")} · {p.title.slice(0, 32)}
+                  {String(allQuestions.indexOf(p) + 1).padStart(2, "0")} · {p.title.slice(0, 32)}
                 </option>
               ))}
             </Select>

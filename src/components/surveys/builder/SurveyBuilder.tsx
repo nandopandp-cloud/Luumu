@@ -22,14 +22,14 @@ import { CSS } from "@dnd-kit/utilities";
 import {
   GripVertical, Trash2, CopyPlus, Plus, Eye, Settings2, Check, Loader2,
   Star, Smile, Hash, Type, AlignLeft, ListChecks, CheckSquare, ChevronDown,
-  Calendar, Upload, Gauge, Link2,
+  Calendar, Upload, Gauge, Link2, HandHeart,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Select } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
-import { builderBlocks, defaultConfig, type BuilderQuestion } from "@/lib/surveys/builder";
+import { builderBlocks, defaultConfig, defaultTitle, type BuilderQuestion } from "@/lib/surveys/builder";
 import { surveyTemplates } from "@/lib/surveys/templates";
 
 import { registerPrePublish } from "@/components/surveys/PublishButton";
@@ -41,6 +41,7 @@ const statusTone = {
 } as const;
 
 const blockIcon: Record<string, React.ReactNode> = {
+  greeting: <HandHeart className="size-4" />,
   rating: <Gauge className="size-4" />, emoji: <Smile className="size-4" />, stars: <Star className="size-4" />,
   scale: <Hash className="size-4" />, nps: <Gauge className="size-4" />, csat: <Smile className="size-4" />,
   ces: <Gauge className="size-4" />, short: <Type className="size-4" />, long: <AlignLeft className="size-4" />,
@@ -266,7 +267,7 @@ export function SurveyBuilder({
       const block = builderBlocks.find((b) => b.id === blockId);
       const uid = newUid();
       const nq: BuilderQuestion = {
-        uid, blockId, title: `Nova pergunta: ${block?.label}`, required: false,
+        uid, blockId, title: defaultTitle(blockId, block?.label ?? ""), required: false,
         config: defaultConfig(blockId), logic: {},
       };
       setQuestions((prev) => {

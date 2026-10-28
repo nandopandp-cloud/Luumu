@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { X, Send, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LuumuLogo, Mascot } from "@/components/ui/Mascot";
-import type { Appearance, BuilderQuestion } from "@/lib/surveys/builder";
+import { isMessageBlock, type Appearance, type BuilderQuestion } from "@/lib/surveys/builder";
 import { QuestionField, isVisible, type Answers } from "./fields";
 
 /**
@@ -73,13 +73,16 @@ export function SurveyWidget({
         <div className={cn("px-4", isBar ? "pb-3" : "pb-4 pt-1")}>
           <div className={cn(isBar && "flex items-center gap-4")}>
             <div className={cn(isBar ? "flex-1" : "")}>
-              <h3 className="font-display text-[15px] font-bold leading-snug">
+              <h3 className="whitespace-pre-line font-display text-[15px] font-bold leading-snug">
                 {current.title}
-                {current.required && <span className="ml-1 text-erro">*</span>}
+                {current.required && !isMessageBlock(current.blockId) && <span className="ml-1 text-erro">*</span>}
               </h3>
-              <div className="mt-3">
-                <WidgetField q={current} value={answers[current.uid]} onChange={(v) => set(current.uid, v)} />
-              </div>
+              {/* saudação: só o texto e o botão Próxima */}
+              {!isMessageBlock(current.blockId) && (
+                <div className="mt-3">
+                  <WidgetField q={current} value={answers[current.uid]} onChange={(v) => set(current.uid, v)} />
+                </div>
+              )}
             </div>
             <button
               onClick={next}

@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { Loader2, Send } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Mascot } from "@/components/ui/Mascot";
-import { scoreBlocks, type BuilderQuestion } from "@/lib/surveys/builder";
+import { isMessageBlock, scoreBlocks, type BuilderQuestion } from "@/lib/surveys/builder";
 import { submitResponseAction } from "@/app/(app)/surveys/actions";
 import { detectDevice } from "@/lib/surveys/device";
 import { QuestionField, isVisible, normalize, type Answers } from "./fields";
@@ -33,7 +33,7 @@ export function SurveyRenderer({
 
   async function submit() {
     // valida obrigatórias visíveis
-    const missing = visible.find((q) => q.required && (answers[q.uid] == null || answers[q.uid] === ""));
+    const missing = visible.find((q) => q.required && !isMessageBlock(q.blockId) && (answers[q.uid] == null || answers[q.uid] === ""));
     if (missing) {
       setError("Responda todas as perguntas obrigatórias.");
       return;
@@ -50,7 +50,8 @@ export function SurveyRenderer({
     try {
       await submitResponseAction({
         surveyId,
-        answers: visible.map((q) => ({ questionId: q.uid, value: normalize(q, answers[q.uid]) })),
+        // saudação não tem resposta: não vira answer
+        answers: visible.filter((q) => !isMessageBlock(q.blockId)).map((q) => ({ questionId: q.uid, value: normalize(q, answers[q.uid]) })),
         score,
         scoreBlockId: scoreQ?.blockId ?? null,
         scoreMin: scoreQ?.config?.min ?? null,
@@ -76,18 +77,26 @@ export function SurveyRenderer({
     );
   }
 
+  // numeração só das perguntas: a saudação é texto de abertura, não conta
+  let n = 0;
   return (
     <div className="flex flex-col gap-6">
-      {visible.map((q, i) => (
-        <div key={q.uid} className="flex flex-col gap-3">
-          <label className="font-display text-lg font-bold leading-snug">
-            <span className="mr-2 font-mono text-sm text-fg-mut">{String(i + 1).padStart(2, "0")}</span>
+      {visible.map((q) =>
+        isMessageBlock(q.blockId) ? (
+          <p key={q.uid} className="whitespace-pre-line text-base leading-relaxed text-fg-soft">
             {q.title}
-            {q.required && <span className="ml-1 text-erro">*</span>}
-          </label>
-          <QuestionField q={q} value={answers[q.uid]} onChange={(v) => set(q.uid, v)} />
-        </div>
-      ))}
+          </p>
+        ) : (
+          <div key={q.uid} className="flex flex-col gap-3">
+            <label className="font-display text-lg font-bold leading-snug">
+              <span className="mr-2 font-mono text-sm text-fg-mut">{String(++n).padStart(2, "0")}</span>
+              {q.title}
+              {q.required && <span className="ml-1 text-erro">*</span>}
+            </label>
+            <QuestionField q={q} value={answers[q.uid]} onChange={(v) => set(q.uid, v)} />
+          </div>
+        )
+      )}
 
       {error && <p className="text-sm font-medium text-erro">{error}</p>}
 

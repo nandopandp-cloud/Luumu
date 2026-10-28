@@ -70,6 +70,9 @@ interface SurveyData {
 }
 
 const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
+/** Blocos que só exibem texto (Saudação): sem campo, sem resposta gravada, nunca obrigatórios. */
+const MESSAGE_BLOCKS = ["greeting"];
+const isMessage = (q: Question) => MESSAGE_BLOCKS.indexOf(q.blockId) >= 0;
 
 (function () {
   const w = window as unknown as { Luumu?: unknown; __luumuLoaded?: boolean };
@@ -252,7 +255,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
     .x { background: none; border: 0; cursor: pointer; color: ${mut}; padding: 4px; border-radius: 8px; line-height: 0; }
     .x:hover { background: ${sunken}; }
     .bd { padding: 6px 16px 16px; }
-    .q { font-size: 15px; font-weight: 700; line-height: 1.35; margin: 4px 0 12px; }
+    .q { font-size: 15px; font-weight: 700; line-height: 1.35; margin: 4px 0 12px; white-space: pre-line; }
     .req { color: #EF4444; }
     .opts { display: flex; flex-direction: column; gap: 8px; }
     .opt { text-align: left; border: 1px solid ${line}; background: ${bg}; color: ${fg}; border-radius: 12px;
@@ -392,7 +395,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
             key: activeKey,
             surveyId: survey.id,
             channel: "SDK",
-            answers: vis.map((q) => ({ questionId: q.uid, value: normalize(q, answers[q.uid]) })),
+            answers: vis.filter((q) => !isMessage(q)).map((q) => ({ questionId: q.uid, value: normalize(q, answers[q.uid]) })),
             score,
             scoreBlockId,
             scoreMin,
@@ -446,13 +449,16 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
       const isLast = step >= vis.length - 1;
 
       const qEl = el("div", { class: "q" });
-      qEl.innerHTML = q.title + (q.required ? ' <span class="req">*</span>' : "");
+      qEl.innerHTML = q.title + (q.required && !isMessage(q) ? ' <span class="req">*</span>' : "");
       bd.append(qEl);
 
-      bd.append(field(q, answers[q.uid], (v) => {
-        answers[q.uid] = v;
-        render();
-      }, onChangeSilent));
+      // saudação: só o texto e o botão Próxima
+      if (!isMessage(q)) {
+        bd.append(field(q, answers[q.uid], (v) => {
+          answers[q.uid] = v;
+          render();
+        }, onChangeSilent));
+      }
 
       const foot = el("div", { class: "foot" });
       const prog = el("div", { class: "prog" });
@@ -461,7 +467,7 @@ const SCORE_BLOCKS = ["rating", "stars", "scale", "nps", "csat", "ces"];
       }
       const btn = el("button", { class: "btn" }, isLast ? "Enviar" : "Próxima");
       btn.onclick = () => {
-        if (q.required && (answers[q.uid] == null || answers[q.uid] === "")) return;
+        if (q.required && !isMessage(q) && (answers[q.uid] == null || answers[q.uid] === "")) return;
         if (isLast) {
           submit();
           done = true;

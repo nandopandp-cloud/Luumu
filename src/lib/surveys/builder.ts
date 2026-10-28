@@ -92,7 +92,8 @@ export interface BuilderQuestion {
 }
 
 /** Categoriza cada bloco para saber quais controles exibir no painel. */
-export const blockKind: Record<string, "scale" | "options" | "text" | "simple"> = {
+export const blockKind: Record<string, "scale" | "options" | "text" | "simple" | "message"> = {
+  greeting: "message",
   rating: "scale",
   emoji: "simple",
   stars: "scale",
@@ -108,6 +109,18 @@ export const blockKind: Record<string, "scale" | "options" | "text" | "simple"> 
   date: "simple",
   file: "simple",
 };
+
+/**
+ * Blocos que só exibem um texto (ex.: a Saudação antes da pesquisa): não pedem nem gravam
+ * resposta, nunca são obrigatórios e ficam fora de relatórios, exportações e condições.
+ */
+export const isMessageBlock = (blockId: string) => blockKind[blockId] === "message";
+
+/** Texto inicial de cada bloco novo arrastado para a pesquisa. */
+export function defaultTitle(blockId: string, label: string): string {
+  if (blockId === "greeting") return "Olá! Vamos começar uma pesquisa bem rapidinho?";
+  return `Nova pergunta: ${label}`;
+}
 
 /** Blocos que produzem uma "nota" numérica (para score/sentimento). */
 export const scoreBlocks = new Set(["rating", "stars", "scale", "nps", "csat", "ces"]);
@@ -136,6 +149,7 @@ export function defaultConfig(blockId: string): QuestionConfig {
 
 /** Blocos disponíveis no builder drag-and-drop. */
 export const builderBlocks = [
+  { id: "greeting", label: "Saudação", hint: "Texto de abertura" },
   { id: "rating", label: "Avaliação", hint: "1–5 / estrelas" },
   { id: "emoji", label: "Emoji", hint: "Escala de emojis" },
   { id: "stars", label: "Estrelas", hint: "★★★★★" },
