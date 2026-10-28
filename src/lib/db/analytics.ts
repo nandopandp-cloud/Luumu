@@ -1,11 +1,12 @@
 import "server-only";
-import { and, desc, eq, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import { db } from "./client";
-import { analyticsPageviews, analyticsSessions, analyticsSettings, analyticsUsers, analyticsViews, avatarSvgs } from "@/lib/db/schema";
+import { analyticsPageviews, analyticsSessions, analyticsSettings, analyticsUsers, analyticsViews, avatarSvgParts, avatarSvgs } from "@/lib/db/schema";
 import { analyticsViewId } from "./ids";
 import { hostList } from "@/lib/platform/hosts";
 import { sanitizeSvg, svgHash } from "@/lib/analytics/svg-avatar";
+import { joinSvgParts, partHashes, splitSvgParts } from "@/lib/analytics/svg-parts";
 import {
   classifyChannel,
   frequencyOf,
@@ -86,7 +87,9 @@ export const avatarSvgPath = (projectId: string, hash: string) => `/api/v1/avata
 /*
   Avatar desenhado em SVG embutido: o desenho chega só no 1º envio de cada navegador. Confere que a
   impressão bate com o conteúdo (ninguém grava um desenho sob a impressão de outro), limpa e guarda
-  uma cópia por desenho. Falha aqui (ex.: sem a migração 0026) não derruba a visita: fica sem foto.
+  em peças (lib/analytics/svg-parts.ts): a receita do desenho + os traçados que ainda não existem
+  no projeto, no mesmo lote. Sem a migração 0040 (tabela de peças) guarda o desenho inteiro, como
+  antes. Falha aqui (ex.: sem a migração 0026) não derruba a visita: fica sem foto.
 */
 async function storeAvatarSvg(projectId: string, p: AnalyticsPayload): Promise<string | null> {
   if (!p.avsvgh) return null;
@@ -94,13 +97,39 @@ async function storeAvatarSvg(projectId: string, p: AnalyticsPayload): Promise<s
     if (svgHash(p.avsvg) !== p.avsvgh) return null;
     const clean = sanitizeSvg(p.avsvg);
     if (!clean) return null;
+    const hash = p.avsvgh;
+    const { recipe, parts } = splitSvgParts(clean);
     try {
-      await db.insert(avatarSvgs).values({ projectId, hash: p.avsvgh, svg: clean }).onConflictDoNothing();
+      await db.batch([
+        db.insert(avatarSvgs).values({ projectId, hash, svg: recipe }).onConflictDoNothing(),
+        ...(parts.length ? [db.insert(avatarSvgParts).values(parts.map((x) => ({ projectId, ...x }))).onConflictDoNothing()] : []),
+      ]);
     } catch {
-      return null;
+      try {
+        await db.insert(avatarSvgs).values({ projectId, hash, svg: clean }).onConflictDoNothing();
+      } catch {
+        return null;
+      }
     }
   }
   return avatarSvgPath(projectId, p.avsvgh);
+}
+
+/** Avatar desenhado pronto para servir (remontado das peças). null se não existe ou falta peça. */
+export async function getAvatarSvg(projectId: string, hash: string): Promise<string | null> {
+  const [row] = await db
+    .select({ svg: avatarSvgs.svg })
+    .from(avatarSvgs)
+    .where(and(eq(avatarSvgs.projectId, projectId), eq(avatarSvgs.hash, hash)))
+    .limit(1);
+  if (!row) return null;
+  const hashes = partHashes(row.svg);
+  if (!hashes.length) return row.svg; // guardado inteiro (antes da migração 0040)
+  const parts = await db
+    .select({ hash: avatarSvgParts.hash, body: avatarSvgParts.body })
+    .from(avatarSvgParts)
+    .where(and(eq(avatarSvgParts.projectId, projectId), inArray(avatarSvgParts.hash, hashes)));
+  return joinSvgParts(row.svg, new Map(parts.map((x) => [x.hash, x.body])));
 }
 
 /**

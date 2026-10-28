@@ -143,7 +143,7 @@ luumu/
 │   │   │                             frequência, render do card, token, sdk-version.ts (gerado)
 │   │   ├── heatmaps/                 core.ts (limites, compactação), draw.ts (render)
 │   │   ├── analytics/                core, derive (métricas), selectors, identity-filter,
-│   │   │                             svg-avatar, export
+│   │   │                             svg-avatar, svg-parts (avatar em peças), export
 │   │   ├── insights/                 análise de temas, perguntas (regra + IA), contexto da IA
 │   │   ├── product-report/           acesso, coleta, indicadores, modelo, render HTML/PDF/e-mail
 │   │   ├── search/                   busca global
@@ -173,6 +173,7 @@ luumu/
 │   ├── build-sdk.mjs                 compila src/sdk → public/sdk*.js (roda no prebuild)
 │   ├── seed.ts                       popula um workspace demo
 │   ├── prune-events.ts               remove duplicatas do catálogo de eventos (ids em URL)
+│   ├── compact-avatars.ts            converte avatares desenhados antigos para peças (0040)
 │   ├── test-report-email.ts          envia um e-mail de relatório de teste
 │   ├── tsconfig.scripts.json         tsconfig de scripts e testes (alias @/, stub server-only)
 │   └── support/                      stub de server-only

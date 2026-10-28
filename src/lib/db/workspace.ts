@@ -1,10 +1,10 @@
 import "server-only";
-import { and, count, eq, gte, sql } from "drizzle-orm";
+import { and, count, eq, gte, lt, sql } from "drizzle-orm";
 import { monthStart, planOf, type PlanId } from "@/lib/billing/plans";
 import { startOfTodayBR } from "@/lib/utils/period";
 import { db } from "./client";
 import { sharedCache } from "./shared-cache";
-import { workspaces, surveys, responses, memberships, events } from "@/lib/db/schema";
+import { workspaces, surveys, responses, memberships, events, workspaceDailyEvents } from "@/lib/db/schema";
 
 export type WorkspaceRow = typeof workspaces.$inferSelect;
 
@@ -36,14 +36,15 @@ export interface WorkspaceUsage {
  * Analytics nos projetos da workspace. O catálogo de tipos de evento tem teto e para de crescer
  * (era o número "fixo" do painel); sem a tabela do Analytics, cai para o tamanho do catálogo.
  *
- * Somar `cardinality(events)` exige ler do heap TODAS as telas do mês (a coluna não está em
- * índice nenhum) — e isto roda a cada carregamento do app e a cada atualização do medidor. No
- * fim do mês eram milhões de linhas por consulta, o que mantinha a compute do Neon escalada.
- * Os dias já encerrados não mudam mais, então a soma deles fica no cache compartilhado entre
- * instâncias (a data de hoje está na chave: uma leitura por workspace por dia — o cache em
- * memória de cada instância refazia os ~5 s de leitura a cada instância nova). O dia de hoje
- * fica 5 min no mesmo cache: o medidor é informativo (sem limite) e a leitura de hoje também
- * passa de 1 s nos dias de pico.
+ * Somar `cardinality(events)` exige ler do heap as telas (a coluna não está em índice nenhum), e
+ * isto roda a cada carregamento do app e a cada atualização do medidor. Os dias encerrados ficam
+ * em workspace_daily_events: cada dia é somado UMA vez, lendo só aquele dia (índice BRIN de
+ * created_at, migração 0040; sem ele o Postgres lê a tabela inteira mesmo para um dia). Antes
+ * a soma deles ficava no cache do Next, mas a chave do `unstable_cache` inclui o texto da função
+ * compilada e muda a cada deploy: em 10/2026 a leitura do mês (varredura sequencial da tabela
+ * inteira, ~1,7 GB) rodava ~12×/dia, e cada uma subia o working set e a compute do Neon por até
+ * uma hora. A parte aberta (hoje, e ontem até 2 h depois da virada) fica 5 min no cache
+ * compartilhado: o medidor é informativo (sem limite).
  */
 async function sumTrackedEvents(workspaceId: string, from: string, to?: string): Promise<number> {
   const r = (await db.execute(sql`
@@ -54,18 +55,54 @@ async function sumTrackedEvents(workspaceId: string, from: string, to?: string):
   return Number((r.rows ?? (r as unknown as { n: string }[]))[0]?.n) || 0;
 }
 
-const closedDaysTrackedEvents = sharedCache(sumTrackedEvents, "tracked-events-closed-days", 86_400);
-const todayTrackedEvents = sharedCache(sumTrackedEvents, "tracked-events-today", 300);
+const openTrackedEvents = sharedCache(sumTrackedEvents, "tracked-events-today", 300);
+
+const DAY_MS = 86_400_000;
+/** Telas chegam até algum tempo depois da virada (aba fechada depois da meia-noite): ontem só é guardado depois disto. */
+const SETTLE_MS = 2 * 3_600_000;
+/** Data (AAAA-MM-DD) de uma meia-noite de Brasília. */
+const brDay = (midnight: Date) => new Date(midnight.getTime() - 3 * 3_600_000).toISOString().slice(0, 10);
+
+/** Eventos de [from, to), meias-noites de Brasília: soma dos dias guardados; os que faltam são lidos e guardados. */
+async function closedDaysTrackedEvents(workspaceId: string, from: Date, to: Date): Promise<number> {
+  const days: string[] = [];
+  for (let t = from.getTime(); t < to.getTime(); t += DAY_MS) days.push(brDay(new Date(t)));
+  if (!days.length) return 0;
+  const saved = await db
+    .select({ day: workspaceDailyEvents.day, events: workspaceDailyEvents.events })
+    .from(workspaceDailyEvents)
+    .where(and(eq(workspaceDailyEvents.workspaceId, workspaceId), gte(workspaceDailyEvents.day, days[0]), lt(workspaceDailyEvents.day, brDay(to))));
+  const byDay = new Map(saved.map((r) => [r.day, r.events]));
+  const missing = days.filter((d) => !byDay.has(d));
+  if (missing.length) {
+    // normalmente só ontem; o 1º uso lê o mês até aqui uma única vez
+    const r = (await db.execute(sql`
+      select to_char(p.created_at at time zone 'America/Sao_Paulo', 'YYYY-MM-DD') d, sum(cardinality(p.events))::bigint n
+        from analytics_pageviews p join projects pr on pr.id = p.project_id
+       where pr.workspace_id = ${workspaceId}
+         and p.created_at >= ${new Date(`${missing[0]}T00:00:00-03:00`).toISOString()}::timestamptz
+         and p.created_at < ${to.toISOString()}::timestamptz
+       group by 1`)) as unknown as { rows?: { d: string; n: string }[] };
+    const read = new Map((r.rows ?? (r as unknown as { d: string; n: string }[])).map((x) => [x.d, Number(x.n) || 0]));
+    // dia sem nenhuma tela também é guardado (zero), senão seria relido a cada vez
+    const fresh = missing.map((day) => ({ workspaceId, day, events: read.get(day) ?? 0 }));
+    await db.insert(workspaceDailyEvents).values(fresh).onConflictDoNothing();
+    for (const x of fresh) byDay.set(x.day, x.events);
+  }
+  return days.reduce((a, d) => a + (byDay.get(d) ?? 0), 0);
+}
 
 async function trackedEventsThisMonth(workspaceId: string, since: Date): Promise<number> {
   try {
     const today = startOfTodayBR();
-    if (today <= since) return await todayTrackedEvents(workspaceId, since.toISOString());
-    const [closed, todayN] = await Promise.all([
-      closedDaysTrackedEvents(workspaceId, since.toISOString(), today.toISOString()),
-      todayTrackedEvents(workspaceId, today.toISOString()),
+    const settled = Date.now() - today.getTime() >= SETTLE_MS ? today : new Date(today.getTime() - DAY_MS);
+    const until = settled > since ? settled : since;
+    const [closed, open] = await Promise.all([
+      // sem a migração 0040 (tabela diária) soma direto, como antes
+      closedDaysTrackedEvents(workspaceId, since, until).catch(() => sumTrackedEvents(workspaceId, since.toISOString(), until.toISOString())),
+      openTrackedEvents(workspaceId, until.toISOString()),
     ]);
-    return closed + todayN;
+    return closed + open;
   } catch {
     const [{ n } = { n: 0 }] = await db.select({ n: count() }).from(events).where(eq(events.workspaceId, workspaceId));
     return Number(n) || 0;

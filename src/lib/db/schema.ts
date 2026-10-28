@@ -4,6 +4,7 @@ import {
   text,
   integer,
   boolean,
+  date,
   timestamp,
   jsonb,
   real,
@@ -645,7 +646,11 @@ export const identityCaptureRules = pgTable(
   (t) => [primaryKey({ columns: [t.projectId, t.host] })]
 );
 
-/** Avatar desenhado em SVG embutido (sem endereço): uma cópia por desenho e projeto. */
+/**
+ * Avatar desenhado em SVG embutido (sem endereço): um por desenho e projeto. `svg` é a receita
+ * (lib/analytics/svg-parts.ts) que aponta para as peças em avatar_svg_parts; desenhos gravados
+ * antes da migração 0040 ainda podem estar inteiros (sem marca de peça).
+ */
 export const avatarSvgs = pgTable(
   "avatar_svgs",
   {
@@ -653,6 +658,17 @@ export const avatarSvgs = pgTable(
     hash: text("hash").notNull(),
     svg: text("svg").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.projectId, t.hash] })]
+);
+
+/** Peça de avatar desenhado (traçado), guardada uma vez por projeto e usada por muitos desenhos. */
+export const avatarSvgParts = pgTable(
+  "avatar_svg_parts",
+  {
+    projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    hash: text("hash").notNull(),
+    body: text("body").notNull(),
   },
   (t) => [primaryKey({ columns: [t.projectId, t.hash] })]
 );
@@ -730,7 +746,25 @@ export const analyticsPageviews = pgTable(
     events: text("events").array().notNull().default([]),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
   },
-  (t) => [index("analytics_pv_project_idx").on(t.projectId, t.createdAt)]
+  (t) => [
+    index("analytics_pv_project_idx").on(t.projectId, t.createdAt),
+    // recorte por data lê só as páginas do período (as telas chegam em ordem de tempo; migração 0040)
+    index("analytics_pv_created_brin").using("brin", t.createdAt).with({ pages_per_range: 32, autosummarize: true }),
+  ]
+);
+
+/**
+ * Eventos rastreados por dia JÁ ENCERRADO (horário de Brasília), por workspace: o medidor do mês
+ * soma estas linhas em vez de reler o mês inteiro de analytics_pageviews (lib/db/workspace.ts).
+ */
+export const workspaceDailyEvents = pgTable(
+  "workspace_daily_events",
+  {
+    workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+    day: date("day", { mode: "string" }).notNull(),
+    events: integer("events").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.workspaceId, t.day] })]
 );
 
 /** Visões salvas do Analytics (aba + filtros + blocos), pessoais ou do time. */

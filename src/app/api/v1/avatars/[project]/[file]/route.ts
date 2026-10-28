@@ -1,6 +1,4 @@
-import { and, eq } from "drizzle-orm";
-import { db } from "@/lib/db/client";
-import { avatarSvgs } from "@/lib/db/schema";
+import { getAvatarSvg } from "@/lib/db/analytics";
 
 /*
   GET /api/v1/avatars/<projeto>/<impressão>.svg — avatar desenhado em SVG embutido, copiado pelo
@@ -19,12 +17,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
   const { project, file } = await params;
   const hash = /^([0-9a-f]{16})\.svg$/.exec(file)?.[1];
   if (!hash || !/^[A-Za-z0-9_-]{1,64}$/.test(project)) return new Response("Não encontrado.", { status: 404 });
-  const [row] = await db
-    .select({ svg: avatarSvgs.svg })
-    .from(avatarSvgs)
-    .where(and(eq(avatarSvgs.projectId, project), eq(avatarSvgs.hash, hash)))
-    .limit(1)
-    .catch(() => []);
-  if (!row) return new Response("Não encontrado.", { status: 404, headers: { "Cache-Control": "public, s-maxage=60" } });
-  return new Response(row.svg, { headers: HEADERS });
+  const svg = await getAvatarSvg(project, hash).catch(() => null);
+  if (!svg) return new Response("Não encontrado.", { status: 404, headers: { "Cache-Control": "public, s-maxage=60" } });
+  return new Response(svg, { headers: HEADERS });
 }
