@@ -10,8 +10,9 @@ import {
   Check,
   ChevronDown,
   Clock,
+  BarChart3,
   Frown,
-  ListChecks,
+  LayoutGrid,
   Meh,
   MessageSquareText,
   MessagesSquare,
@@ -20,6 +21,7 @@ import {
   TextQuote,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { SegmentedControl } from "@/components/ui/Tabs";
 import type { FeedSort, FeedView, ViewCounts } from "@/lib/db/response-feed";
 
 export const SORT_OPTIONS: { value: FeedSort; label: string; icon: React.ReactNode }[] = [
@@ -132,10 +134,34 @@ const VIEWS: { value: FeedView; label: string; icon: React.ReactNode; tone: stri
 ];
 
 /**
- * Abas do feed com a contagem de cada uma (no recorte dos filtros). Com `questions` (pesquisa
- * específica com várias perguntas de nota/opção), soma a aba "Por pergunta" (?view=questions).
+ * "Cards | Gráfico" ao lado do filtro (pesquisa com várias perguntas de nota/opção, ex.: SUS):
+ * troca os cards de métricas pelo gráfico pergunta a pergunta (?display=chart).
  */
-export function ViewTabs({ value, counts, questions }: { value: FeedView | "questions"; counts: ViewCounts; questions?: number }) {
+export function DisplayToggle({ value }: { value: "cards" | "chart" }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
+  return (
+    <SegmentedControl<"cards" | "chart">
+      value={value}
+      onChange={(v) => {
+        // sem o useHref: trocar a visão não mexe na paginação do feed
+        const next = new URLSearchParams(params.toString());
+        if (v === "chart") next.set("display", "chart");
+        else next.delete("display");
+        const qs = next.toString();
+        router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+      }}
+      options={[
+        { value: "cards", label: "Cards", icon: <LayoutGrid className="size-4" /> },
+        { value: "chart", label: "Gráfico", icon: <BarChart3 className="size-4" /> },
+      ]}
+    />
+  );
+}
+
+/** Abas do feed com a contagem de cada uma (no recorte dos filtros). */
+export function ViewTabs({ value, counts }: { value: FeedView; counts: ViewCounts }) {
   const href = useHref();
   const n: Record<FeedView, number> = {
     all: counts.all,
@@ -169,20 +195,6 @@ export function ViewTabs({ value, counts, questions }: { value: FeedView | "ques
           </Link>
         );
       })}
-      {questions != null && (
-        <Link
-          href={href({ view: "questions" })}
-          scroll={false}
-          aria-current={value === "questions" ? "page" : undefined}
-          className={tab(value === "questions")}
-        >
-          <span className="text-accent">
-            <ListChecks className="size-4" />
-          </span>
-          Por pergunta
-          <span className={cn("font-mono text-xs", value === "questions" ? "text-accent" : "text-fg-mut")}>({questions})</span>
-        </Link>
-      )}
     </nav>
   );
 }

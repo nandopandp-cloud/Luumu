@@ -16,7 +16,7 @@ export default async function SurveyResponsesPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ host?: string; view?: string; sort?: string; limit?: string }>;
+  searchParams: Promise<{ host?: string; view?: string; display?: string; sort?: string; limit?: string }>;
 }) {
   const [{ id }, sp] = await Promise.all([params, searchParams]);
   // escopo por projeto ativo (e não só por workspace): impede abrir por URL direta
@@ -44,7 +44,7 @@ export default async function SurveyResponsesPage({
       <ResponsesWorkspace
         // sem filtro de período: a pesquisa escolhida já é o recorte (todas as respostas dela)
         scope={{ projectId: survey.projectId, surveyId: id, host }}
-        params={{ view: sp.view, sort: sp.sort, limit: sp.limit }}
+        params={{ view: sp.view, display: sp.display, sort: sp.sort, limit: sp.limit }}
         hosts={hosts}
         hrefBase={`/surveys/${id}/responses`}
       />

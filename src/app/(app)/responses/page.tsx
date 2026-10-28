@@ -19,6 +19,7 @@ export default async function ResponsesPage({
     to?: string;
     host?: string;
     view?: string;
+    display?: string;
     sort?: string;
     limit?: string;
   }>;
@@ -45,7 +46,7 @@ export default async function ResponsesPage({
       />
       <ResponsesWorkspace
         scope={{ projectId, surveyId, dateFrom, dateTo, host }}
-        params={{ view: sp.view, sort: sp.sort, limit: sp.limit }}
+        params={{ view: sp.view, display: sp.display, sort: sp.sort, limit: sp.limit }}
         hosts={hosts}
         surveyFilter={{ options: surveyOptions, defaultSurveyId }}
         hrefBase="/responses"

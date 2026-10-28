@@ -15,16 +15,18 @@ import { timeAgo } from "@/lib/utils";
 import { isDeviceKind } from "@/lib/surveys/device";
 import type { WordCloudItem } from "@/lib/surveys/wordcloud";
 import { InsightCard, pctDelta, scoreDelta } from "@/components/ui/InsightCard";
-import { SortMenu, ViewTabs } from "./FeedToolbar";
+import { DisplayToggle, SortMenu, ViewTabs } from "./FeedToolbar";
 import { ResponseCard, type ResponseCardData } from "./ResponseCard";
 import { FeedSelection } from "./FeedSelection";
 import { getCurrentRole } from "@/lib/auth/current";
 import { ScoreDistributionCard, WordsCard } from "./SideCards";
-import { QuestionBreakdown } from "./QuestionBreakdown";
+import { QuestionChart } from "./QuestionChart";
 import { getQuestionBreakdown } from "@/lib/db/question-breakdown";
 
 export interface WorkspaceParams {
   view?: string;
+  /** "chart" = gráfico pergunta a pergunta no lugar dos cards de métricas */
+  display?: string;
   sort?: string;
   limit?: string;
 }
@@ -72,10 +74,10 @@ export async function ResponsesWorkspace({
     getCurrentRole(),
     surveyId ? getQuestionBreakdown({ ...scope, surveyId }) : Promise.resolve([]),
   ]);
-  // "Por pergunta" só faz sentido com mais de uma pergunta de nota/opção (ex.: os 10 itens do SUS);
-  // com uma só, é a mesma "Distribuição de notas" da lateral
+  // o gráfico pergunta a pergunta só faz sentido com mais de uma pergunta de nota/opção (ex.: os
+  // 10 itens do SUS); com uma só, é a mesma "Distribuição de notas" da lateral
   const hasBreakdown = breakdown.length > 1;
-  const byQuestion = hasBreakdown && params.view === "questions";
+  const chart = hasBreakdown && params.display === "chart";
   const { counts, prevCounts, mainScore, prevScore, positivePct, prevPositivePct } = overview;
   // minigráficos: série diária do período, com zero nos dias sem resposta
   const recent = overview.daily;
@@ -107,11 +109,12 @@ export async function ResponsesWorkspace({
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         {/* pesquisa específica: o recorte é ela inteira, sem período (a vigência já delimita) */}
-        {surveyFilter ? (
-          <DataFilters surveys={surveyFilter.options} defaultSurveyId={surveyFilter.defaultSurveyId} defaultPeriod="all" showPeriod={!surveyId} />
-        ) : (
-          <span />
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {surveyFilter && (
+            <DataFilters surveys={surveyFilter.options} defaultSurveyId={surveyFilter.defaultSurveyId} defaultPeriod="all" showPeriod={!surveyId} />
+          )}
+          {hasBreakdown && <DisplayToggle value={chart ? "chart" : "cards"} />}
+        </div>
         <SortMenu value={sort} />
       </div>
 
@@ -121,6 +124,9 @@ export async function ResponsesWorkspace({
       ) : (
         <>
 
+      {chart ? (
+        <QuestionChart key={surveyId} stats={breakdown} />
+      ) : (
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <InsightCard
           label="Total de respostas"
@@ -157,12 +163,10 @@ export async function ResponsesWorkspace({
           delta={pctDelta(counts.comments, prevCounts?.comments)}
         />
       </div>
+      )}
 
-      <ViewTabs value={byQuestion ? "questions" : view} counts={counts} questions={hasBreakdown ? breakdown.length : undefined} />
+      <ViewTabs value={view} counts={counts} />
 
-      {byQuestion ? (
-        <QuestionBreakdown stats={breakdown} />
-      ) : (
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="flex min-w-0 flex-col gap-3">
           <FeedSelection ids={cards.map((c) => c.id)} mode={view === "excluded" ? "restore" : "exclude"} enabled={role !== "viewer"}>
@@ -195,7 +199,6 @@ export async function ResponsesWorkspace({
           <WordsCard words={words} />
         </aside>
       </div>
-      )}
         </>
       )}
     </div>
