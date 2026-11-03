@@ -4,6 +4,8 @@ import type { BatchItem } from "drizzle-orm/batch";
 import { db } from "./client";
 import { analyticsPageviews, analyticsSessions, analyticsSettings, analyticsUsers, analyticsViews, avatarSvgParts, avatarSvgs } from "@/lib/db/schema";
 import { analyticsViewId } from "./ids";
+import { sharedCache } from "./shared-cache";
+import { periodToRange, startOfTodayBR } from "@/lib/utils/period";
 import { hostList } from "@/lib/platform/hosts";
 import { sanitizeSvg, svgHash } from "@/lib/analytics/svg-avatar";
 import { joinSvgParts, partHashes, splitSvgParts } from "@/lib/analytics/svg-parts";
@@ -404,7 +406,15 @@ async function totals(s: AnalyticsScope, p: AnalyticsScope) {
   return o as Record<"users" | "users_prev" | "sessions" | "sessions_prev" | "ms" | "ms_prev" | "pv" | "pv_prev" | "identified" | "mau" | "mau_prev", number>;
 }
 
-/** MAU móvel por dia (semanal em períodos longos, para não pesar). */
+/*
+  MAU móvel por dia (semanal em períodos longos, para não pesar).
+
+  Um dia de uso d deixa a pessoa "ativa no mês" de d a d+29. Contar, para cada dia, quem tinha
+  uso nos 29 dias anteriores refazia a leitura das sessões uma vez POR DIA da série (12 s em 30
+  dias no maior projeto). Aqui cada dia de uso vira um intervalo [d, próximo dia de uso ou d+30):
+  os intervalos da mesma pessoa não se sobrepõem, então somar +1 no início e −1 no fim e acumular
+  dá o número de pessoas distintas ativas em cada dia, numa passada só.
+*/
 async function mauSeries(s: AnalyticsScope) {
   const step = spanDays(s) > 45 ? 7 : 1;
   const r = rows<{ d: string; mau: number }>(
@@ -412,10 +422,14 @@ async function mauSeries(s: AnalyticsScope) {
       with du as (
         select distinct (s.started_at at time zone ${TZ})::date d, s.anon_id
           from analytics_sessions s where ${sf(s, new Date(s.from.getTime() - 29 * 86_400_000), s.to)}
+      ), iv as (
+        select d s, least(d + 30, lead(d) over (partition by anon_id order by d)) e from du
+      ), cum as (
+        select d, sum(sum(c)) over (order by d) mau from (select s d, 1 c from iv union all select e, -1 from iv) x group by d
       ), days as (
         select generate_series((${iso(s.from)}::timestamptz at time zone ${TZ})::date, ((${iso(s.to)}::timestamptz - interval '1 second') at time zone ${TZ})::date, ${`${step} days`}::interval)::date d
       )
-      select to_char(days.d, 'YYYY-MM-DD') d, (select count(distinct du.anon_id) from du where du.d between days.d - 29 and days.d)::int mau
+      select to_char(days.d, 'YYYY-MM-DD') d, coalesce((select cum.mau from cum where cum.d <= days.d order by cum.d desc limit 1), 0)::int mau
         from days order by 1`)
   );
   return r.map((x) => ({ d: x.d, mau: n(x.mau) }));
@@ -724,45 +738,136 @@ export interface AnalyticsData {
   deviceTrend?: Awaited<ReturnType<typeof deviceTrend>>;
 }
 
-/** Busca só os datasets pedidos, em paralelo. */
-export async function getAnalytics(s: AnalyticsScope, st: AnalyticsSettings, want: Set<Dataset>, opts: { pagesLimit?: number; eventsLimit?: number } = {}) {
+interface DatasetOpts {
+  pagesLimit?: number;
+  eventsLimit?: number;
+  /** eventos da tendência (os principais da lista de eventos) */
+  trendEvents?: string[];
+}
+
+/** Calcula um dataset (eventTrend recebe a lista de eventos pronta em opts.trendEvents). */
+function runDataset(k: Dataset, s: AnalyticsScope, st: AnalyticsSettings, opts: DatasetOpts): Promise<unknown> {
   const p = prevScope(s);
+  switch (k) {
+    case "daily": return dailySessions(s, p);
+    case "totals": return totals(s, p);
+    case "mau": return mauSeries(s);
+    case "configured": return configured(s, p, st);
+    case "funnel": return engagementFunnel(s, st);
+    case "pages": return topPages(s, opts.pagesLimit ?? 10);
+    case "devices": return devices(s);
+    case "retention": return retention(s);
+    case "events": return topEvents(s, opts.eventsLimit ?? 10);
+    case "eventTrend": return eventTrend(s, opts.trendEvents ?? []);
+    case "newUsers": return newUsers(s, p);
+    case "outcomes": return newUserOutcomes(s, st);
+    case "outcomesPrev": return newUserOutcomes(p, st);
+    case "channels": return channelSessions(s);
+    case "entry": return entryPages(s);
+    case "exit": return exitPages(s);
+    case "campaigns": return campaigns(s);
+    case "recurrent": return recurrent(s, p);
+    case "frequency": return frequency(s);
+    case "hours": return hours(s);
+    case "techs": return techs(s);
+    case "deviceTrend": return deviceTrend(s);
+  }
+}
+
+/** Quantos eventos entram na tendência (os primeiros da lista de eventos). */
+const TREND_EVENTS = 6;
+
+/**
+ * Busca os datasets pedidos em paralelo. `fetch` calcula um dataset; a tendência de eventos
+ * depende da lista de eventos, então espera por ela.
+ */
+async function collect(want: Set<Dataset>, opts: DatasetOpts, fetch: (k: Dataset, opts: DatasetOpts) => Promise<unknown>): Promise<AnalyticsData> {
   const tasks: Partial<Record<Dataset, Promise<unknown>>> = {};
-  const add = <K extends Dataset>(k: K, f: () => Promise<unknown>) => {
-    if (want.has(k)) tasks[k] = f();
-  };
-  add("daily", () => dailySessions(s, p));
-  add("totals", () => totals(s, p));
-  add("mau", () => mauSeries(s));
-  add("configured", () => configured(s, p, st));
-  add("funnel", () => engagementFunnel(s, st));
-  add("pages", () => topPages(s, opts.pagesLimit ?? 10));
-  add("devices", () => devices(s));
-  add("retention", () => retention(s));
-  add("newUsers", () => newUsers(s, p));
-  add("outcomes", () => newUserOutcomes(s, st));
-  add("outcomesPrev", () => newUserOutcomes(p, st));
-  add("channels", () => channelSessions(s));
-  add("entry", () => entryPages(s));
-  add("exit", () => exitPages(s));
-  add("campaigns", () => campaigns(s));
-  add("recurrent", () => recurrent(s, p));
-  add("frequency", () => frequency(s));
-  add("hours", () => hours(s));
-  add("techs", () => techs(s));
-  add("deviceTrend", () => deviceTrend(s));
-  // eventos + tendência dos principais (a tendência depende da lista)
+  for (const k of want) if (k !== "events" && k !== "eventTrend") tasks[k] = fetch(k, opts);
   if (want.has("events") || want.has("eventTrend")) {
-    tasks.events = topEvents(s, opts.eventsLimit ?? 10).then(async (ev) => {
-      if (want.has("eventTrend")) out.eventTrend = await eventTrend(s, ev.slice(0, 6).map((e) => e.name));
-      return ev;
-    });
+    const ev = fetch("events", opts) as Promise<Awaited<ReturnType<typeof topEvents>>>;
+    if (want.has("events")) tasks.events = ev;
+    if (want.has("eventTrend")) tasks.eventTrend = ev.then((list) => fetch("eventTrend", { ...opts, trendEvents: list.slice(0, TREND_EVENTS).map((e) => e.name) }));
   }
   const out: AnalyticsData = {};
   const keys = Object.keys(tasks) as Dataset[];
   const vals = await Promise.all(keys.map((k) => tasks[k]));
   keys.forEach((k, i) => ((out as Record<string, unknown>)[k] = vals[i]));
   return out;
+}
+
+/** Busca só os datasets pedidos, em paralelo, direto no banco (exportação, relatórios). */
+export async function getAnalytics(s: AnalyticsScope, st: AnalyticsSettings, want: Set<Dataset>, opts: { pagesLimit?: number; eventsLimit?: number } = {}) {
+  return collect(want, opts, (k, o) => runDataset(k, s, st, o));
+}
+
+/* ---- leitura do painel, com cache ---- */
+
+/** Recorte como a URL do painel o descreve: período relativo ("30d") ou datas do "custom". */
+export interface PeriodScope {
+  projectId: string;
+  period: string;
+  from?: string;
+  to?: string;
+  host?: string;
+  device?: string;
+}
+
+/** Datas do recorte agora (sem início = 12 meses até o fim). */
+export function resolvePeriod(p: PeriodScope): AnalyticsScope {
+  const range = periodToRange(p.period, p.from, p.to);
+  const to = range.to ?? new Date();
+  const from = range.from ?? new Date(to.getTime() - 365 * 86_400_000);
+  return { projectId: p.projectId, from, to, host: p.host, device: p.device };
+}
+
+/** Quanto tempo um dataset do painel vale antes de ser recalculado (em segundo plano). */
+export const ANALYTICS_CACHE_SECONDS = 600;
+
+/*
+  No maior projeto (4 mi de telas em 30 dias) as consultas de telas e eventos leem ~2 GB e levam
+  de 5 a 30 s; a aba Visão geral pede várias delas a cada clique. O cache é por dataset (abas
+  diferentes reaproveitam o que têm em comum) e compartilhado entre instâncias (sharedCache).
+
+  A chave usa o período como a URL o descreve ("30d"), não as datas: com o instante atual na
+  chave, todo acesso seria um dado novo e o cache nunca acertaria. Para os períodos relativos
+  entra também o dia de hoje (em Brasília), para "Hoje" não atravessar a meia-noite. Passado o
+  prazo, quem abre recebe o valor guardado e o recálculo roda em segundo plano.
+
+  `extra` leva só o que muda o resultado daquele dataset (eventos configurados, limite da lista),
+  para as abas compartilharem o que é igual.
+*/
+const cachedDataset = sharedCache(
+  async (k: string, projectId: string, period: string, from: string | undefined, to: string | undefined, host: string | undefined, device: string | undefined, _day: string, extra: string) => {
+    void _day;
+    const { st, opts } = JSON.parse(extra) as { st: AnalyticsSettings; opts: DatasetOpts };
+    return runDataset(k as Dataset, resolvePeriod({ projectId, period, from, to, host, device }), { ...EMPTY, ...st }, opts);
+  },
+  "analytics-dataset-v1",
+  ANALYTICS_CACHE_SECONDS
+);
+
+/** Só o que cada dataset usa das configurações e das opções (o resto não entra na chave). */
+function datasetKey(k: Dataset, st: AnalyticsSettings, opts: DatasetOpts): string {
+  const pick = (...keys: (keyof AnalyticsSettings)[]) => Object.fromEntries(keys.map((x) => [x, st[x]]));
+  const extra =
+    k === "configured" ? { st: pick("northStarEvent", "activationEvent", "taskStartEvent", "taskDoneEvent") }
+    : k === "funnel" ? { st: pick("taskStartEvent", "taskDoneEvent") }
+    : k === "outcomes" || k === "outcomesPrev" ? { st: pick("activationEvent") }
+    : k === "pages" ? { opts: { pagesLimit: opts.pagesLimit ?? 10 } }
+    : k === "events" ? { opts: { eventsLimit: opts.eventsLimit ?? 10 } }
+    : k === "eventTrend" ? { opts: { trendEvents: opts.trendEvents ?? [] } }
+    : {};
+  return JSON.stringify({ st: {}, opts: {}, ...extra });
+}
+
+/** O mesmo que getAnalytics, para o painel: cada dataset vem do cache (ver cachedDataset). */
+export async function getAnalyticsCached(p: PeriodScope, st: AnalyticsSettings, want: Set<Dataset>, opts: { pagesLimit?: number; eventsLimit?: number } = {}) {
+  const custom = p.period === "custom";
+  const day = custom ? "" : startOfTodayBR().toISOString();
+  return collect(want, opts, (k, o) =>
+    cachedDataset(k, p.projectId, p.period, custom ? p.from : undefined, custom ? p.to : undefined, p.host, p.device, day, datasetKey(k, st, o))
+  );
 }
 
 /* ---------- visões salvas ---------- */

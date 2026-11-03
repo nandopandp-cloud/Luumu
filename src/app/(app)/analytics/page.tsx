@@ -2,13 +2,13 @@ import { AnalyticsShell } from "@/components/analytics/AnalyticsShell";
 import { savedPlatform } from "@/lib/platform/selected";
 import { AnalyticsUnavailable, EnableAnalytics, WaitingAnalytics } from "@/components/analytics/States";
 import { canManageWorkspace, getCurrentProject, getCurrentRole, requireUser } from "@/lib/auth/current";
-import { collectingSince, getAnalytics, getAnalyticsSettings, hasAnalyticsData, listAnalyticsUsers, listViews, USER_SEGMENTS, USER_SORTS, type AnalyticsSettings, type UserSegment, type UserSort } from "@/lib/db/analytics";
+import { collectingSince, getAnalyticsCached, getAnalyticsSettings, hasAnalyticsData, listAnalyticsUsers, listViews, resolvePeriod, USER_SEGMENTS, type PeriodScope, USER_SORTS, type AnalyticsSettings, type UserSegment, type UserSort } from "@/lib/db/analytics";
 import type { UsersData } from "@/components/analytics/UsersView";
 import { listHosts } from "@/lib/db/hosts";
 import { parseViewConfig, viewHref, type ViewConfig } from "@/lib/analytics/core";
 import { datasetsFor, defaultSpan, TAB_LAYOUT, type Block } from "@/lib/analytics/derive";
 import { normalizeHosts } from "@/lib/platform/hosts";
-import { DEFAULT_PERIOD, periodToRange } from "@/lib/utils/period";
+import { DEFAULT_PERIOD } from "@/lib/utils/period";
 
 export const dynamic = "force-dynamic";
 
@@ -30,11 +30,19 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
     return <AnalyticsUnavailable />;
   }
 
-  const [canManage, role, hasData] = await Promise.all([canManageWorkspace(), getCurrentRole(), hasAnalyticsData(projectId)]);
+  // tudo leve e independente: uma rodada só (o que não for usado nos avisos abaixo é descartado)
+  const [canManage, role, hasData, views, hosts, since, platform] = await Promise.all([
+    canManageWorkspace(),
+    getCurrentRole(),
+    hasAnalyticsData(projectId),
+    listViews(projectId, session.userId),
+    listHosts(projectId),
+    collectingSince(projectId),
+    savedPlatform(projectId),
+  ]);
   if (!settings.enabled && !hasData) return <EnableAnalytics canManage={canManage} />;
   if (!hasData) return <WaitingAnalytics canManage={canManage} />;
 
-  const [views, hosts, since, platform] = await Promise.all([listViews(projectId, session.userId), listHosts(projectId), collectingSince(projectId), savedPlatform(projectId)]);
   const saved = sp.view ? views.find((v) => v.id === sp.view) ?? null : null;
 
   // a URL manda (é ela que os filtros alteram); a visão salva completa o que faltar
@@ -53,11 +61,9 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
   const blocks: Block[] =
     config.tab === "custom" ? (config.widgets ?? []).map((id) => ({ id, span: config.spans?.[id] ?? defaultSpan(id) })) : config.tab === "users" ? [] : TAB_LAYOUT[config.tab];
 
-  const range = periodToRange(config.period ?? DEFAULT_PERIOD, config.from, config.to);
-  const to = range.to ?? new Date();
-  const from = range.from ?? new Date(to.getTime() - 365 * 86_400_000);
+  const period: PeriodScope = { projectId, period: config.period ?? DEFAULT_PERIOD, from: config.from, to: config.to, host: config.host, device: config.device };
   const data = blocks.length
-    ? await getAnalytics({ projectId, from, to, host: config.host, device: config.device }, settings, datasetsFor(blocks.map((b) => b.id)), {
+    ? await getAnalyticsCached(period, settings, datasetsFor(blocks.map((b) => b.id)), {
         pagesLimit: config.tab === "pages" ? 50 : config.tab === "custom" ? 10 : 6,
         eventsLimit: config.tab === "events" ? 40 : config.tab === "custom" ? 10 : 6,
       })
@@ -66,9 +72,9 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
   // aba Usuários: a lista (busca/segmento/ordem/página na URL) + os números do topo
   let users: UsersData | null = null;
   if (config.tab === "users") {
-    const scope = { projectId, from, to, host: config.host, device: config.device };
+    const scope = resolvePeriod(period);
     let list: Awaited<ReturnType<typeof listAnalyticsUsers>>;
-    let kpi: Awaited<ReturnType<typeof getAnalytics>>;
+    let kpi: Awaited<ReturnType<typeof getAnalyticsCached>>;
     try {
       [list, kpi] = await Promise.all([
         listAnalyticsUsers(scope, {
@@ -78,7 +84,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
           dir: sp.dir === "asc" ? "asc" : "desc",
           page: Math.max(1, Number(sp.pg) || 1),
         }),
-        getAnalytics(scope, settings, new Set(["totals", "newUsers"])),
+        getAnalyticsCached(period, settings, new Set(["totals", "newUsers"])),
       ]);
     } catch (e) {
       // sem a 0022 as colunas de e-mail/nome/avatar não existem: avisa qual migração falta em vez de quebrar
