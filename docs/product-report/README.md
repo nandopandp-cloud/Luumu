@@ -78,12 +78,14 @@ São os mesmos cálculos das telas da Luumu, sem fórmula paralela:
 |---|---|
 | Aderência (%) | KPI "Aderência (DAU/MAU)" do Analytics: DAU médio da quinzena ÷ MAU (30 dias até o fim da quinzena) |
 | Tempo de uso (min) | "Tempo médio de uso" do Analytics: duração média das sessões da quinzena |
-| CSAT (%) | Score das pesquisas do tipo CSAT do projeto (`src/lib/surveys/scoring.ts`, % top-box). Com várias pesquisas CSAT na quinzena, vale a de mais respostas, como no painel |
+| CSAT (%) | Média simples das notas das **2 pesquisas CSAT mais recentes da quinzena** (as pesquisas são semanais). Cada nota é o score da pesquisa (`src/lib/surveys/scoring.ts`, % top-box) só com as respostas da quinzena; "mais recente" = a que recebeu a última resposta mais tarde. Com uma pesquisa só, vale a nota dela, com aviso (`src/lib/product-report/csat.ts`) |
 
 A North Star segue a planilha "North Star" (`src/lib/product-report/indicators.ts`):
 
-- consolidado de cada componente = média das plataformas (o CSAT usa só Exploradores e
-  Educadores, porque o GenieX não tem CSAT);
+- consolidado de cada componente = média das plataformas. O CSAT da GenieX entra a partir da
+  **Q2 de outubro/2026** (`GENIEX_CSAT_FROM` em `indicators.ts`): dali em diante o CSAT consolidado
+  é (Educadores + Exploradores + GenieX) ÷ 3, e a tabela da GenieX ganha a linha de CSAT. As
+  quinzenas anteriores continuam como na planilha, (Educadores + Exploradores) ÷ 2;
 - resultado = consolidado ÷ meta × peso (pesos 30/40/30, editáveis em Fontes de dados);
 - North Star = soma dos três resultados, **sem teto**, como na planilha;
 - se faltar o dado de uma plataforma, o consolidado e a North Star ficam vazios (não é feita

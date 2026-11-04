@@ -16,6 +16,7 @@ import {
   NORTH_STAR,
   PLATFORM_INDICATORS,
   PLATFORMS,
+  platformIndicatorsFor,
   platformLabel,
   unitOf,
   type GoalKey,
@@ -242,10 +243,10 @@ function pointFor(period: PeriodId, sync: SyncSnapshot | undefined, byPeriod: Ma
     return v;
   };
   const platformValues: PlatformValues = Object.fromEntries(Object.entries(resolved).map(([k, v]) => [k, v.value]));
-  const ns = computeNorthStar(platformValues, targets, weights, overrides);
+  const ns = computeNorthStar(platformValues, targets, weights, overrides, period);
   // o mesmo cálculo sem nenhum ajuste manual: é o "automático" mostrado ao editar
   const autoPlatform: PlatformValues = Object.fromEntries(Object.entries(resolved).map(([k, v]) => [k, v.auto]));
-  const auto = flatten(computeNorthStar(autoPlatform, targets, weights), autoPlatform);
+  const auto = flatten(computeNorthStar(autoPlatform, targets, weights, {}, period), autoPlatform);
   return { resolved, ns, values: flatten(ns, platformValues), auto, overrides, targets };
 }
 
@@ -317,7 +318,8 @@ export function buildReportModel(input: {
     ...PLATFORMS.map((p) => ({
       key: p.key,
       title: p.label,
-      rows: PLATFORM_INDICATORS.filter((i) => i.platform === p.key).map((i) => platformRow(i.key)),
+      // só os indicadores que existem nesta quinzena (ex.: CSAT da GenieX desde GENIEX_CSAT_FROM)
+      rows: platformIndicatorsFor(period).filter((i) => i.platform === p.key).map((i) => platformRow(i.key)),
     })),
   ];
 
@@ -382,7 +384,7 @@ function buildAlerts(a: {
 
   if (!a.sync) {
     // quinzena histórica toda coberta pela planilha/valores informados: só registra a origem
-    const allInformed = PLATFORM_INDICATORS.every(({ key }) => a.resolved[key].value !== null);
+    const allInformed = platformIndicatorsFor(a.period).every(({ key }) => a.resolved[key].value !== null);
     out.push(
       allInformed
         ? { tone: "info", text: "Todos os números desta quinzena vêm de valores informados (planilha ou manual), não da Luumu." }
@@ -398,7 +400,7 @@ function buildAlerts(a: {
     if (a.sync && a.sync.projects[p.key] === null) out.push({ tone: "warn", text: `${p.label}: nenhum projeto da Luumu vinculado. Configure em "Fontes de dados".` });
   }
 
-  for (const { key, platform, metric } of PLATFORM_INDICATORS) {
+  for (const { key, platform, metric } of platformIndicatorsFor(a.period)) {
     const r = a.resolved[key];
     const name = `${platformLabel(platform)} · ${METRIC_META[metric].label}`;
     for (const w of r.warnings) out.push({ tone: "warn", text: `${name}: ${w}` });

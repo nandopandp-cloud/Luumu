@@ -1,11 +1,12 @@
 import "server-only";
 import { collectingSince, getAnalytics, getAnalyticsSettings } from "@/lib/db/analytics";
-import { getMainScore, getStats, type Scope } from "@/lib/db/responses";
+import { getScoresBySurvey, type Scope } from "@/lib/db/responses";
 import { listProjects } from "@/lib/db/projects";
 import { insertRun, getProductReportSettings } from "@/lib/db/product-report";
 import { kpis } from "@/lib/analytics/derive";
 import { PLATFORMS, type Metric, type PlatformIndicatorKey, type PlatformKey } from "./indicators";
 import { periodRange, type PeriodId } from "./period";
+import { csatFromSurveys } from "./csat";
 import type { CollectedValue, SyncSnapshot } from "./model";
 
 /*
@@ -13,7 +14,8 @@ import type { CollectedValue, SyncSnapshot } from "./model";
   das telas da Luumu (nada de fórmula paralela):
     - Aderência: KPI "Aderência (DAU/MAU)" do Analytics (lib/analytics/derive.ts → stickiness)
     - Tempo de uso: "Tempo médio de uso" do Analytics (média de duração das sessões)
-    - CSAT: score das pesquisas do tipo CSAT do projeto (lib/surveys/scoring.ts, % top-box)
+    - CSAT: média das notas das 2 pesquisas CSAT mais recentes da quinzena (csat.ts); cada nota é
+      o score da pesquisa (lib/surveys/scoring.ts, % top-box) só com as respostas da quinzena
   Só leitura. O resultado vira uma execução "sync" em product_report_runs.
 */
 
@@ -41,9 +43,8 @@ async function collectAnalytics(projectId: string, from: Date, to: Date): Promis
 async function collectCsat(projectId: string, from: Date, to: Date): Promise<CollectedValue> {
   // respostas: o fim é inclusivo em scopeWhere; a quinzena termina 1 ms antes da seguinte
   const scope: Scope = { projectId, dateFrom: from, dateTo: new Date(to.getTime() - 1), surveyType: "CSAT" };
-  const [score, stats] = await Promise.all([getMainScore(scope), getStats(scope)]);
-  if (!score || score.value === null) return { value: null, warnings: ["nenhuma resposta de pesquisa CSAT na quinzena"] };
-  return { value: score.value, detail: `${stats.total} respostas${score.surveyName ? ` · ${score.surveyName}` : ""}` };
+  const c = csatFromSurveys(await getScoresBySurvey(scope));
+  return { value: c.value, detail: c.detail, warnings: c.warnings };
 }
 
 /** Mensagem curta e sem dado de consulta (o erro do driver traz SQL e parâmetros). */

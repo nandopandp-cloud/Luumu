@@ -131,8 +131,20 @@ export async function getStats(scope: Scope) {
  * quebrar a metodologia de ambas — então o card mostra a metodologia PREDOMINANTE
  * (a que tem mais respostas no escopo atual), com o nome da pesquisa de origem.
  */
-export async function getMainScore(scope: Scope): Promise<(ScoreResult & { surveyName: string | null }) | null> {
-  // pergunta de score de cada survey do escopo (a primeira, na ordem do builder)
+export interface SurveyScore extends ScoreResult {
+  surveyId: string;
+  surveyName: string;
+  /** respostas com nota no escopo */
+  answered: number;
+  /** resposta mais recente no escopo (ms) */
+  lastAt: number;
+}
+
+/**
+ * Nota de cada pesquisa do escopo, calculada só com as respostas do escopo e com a metodologia da
+ * própria pesquisa (primeira pergunta de nota, na ordem do builder: a mesma regra do widget/SDK).
+ */
+export async function getScoresBySurvey(scope: Scope): Promise<SurveyScore[]> {
   const surveyIds = scope.surveyId
     ? [scope.surveyId]
     : (
@@ -141,7 +153,7 @@ export async function getMainScore(scope: Scope): Promise<(ScoreResult & { surve
           .from(surveys)
           .where(and(eq(surveys.projectId, scope.projectId), scope.surveyType ? eq(surveys.type, scope.surveyType) : undefined))
       ).map((s) => s.id);
-  if (surveyIds.length === 0) return null;
+  if (surveyIds.length === 0) return [];
 
   const [scoreQuestions, rows] = await Promise.all([
     db
@@ -150,37 +162,41 @@ export async function getMainScore(scope: Scope): Promise<(ScoreResult & { surve
       .where(and(inArray(questions.surveyId, surveyIds), inArray(questions.blockId, SCORE_BLOCK_IDS)))
       .orderBy(asc(questions.order)),
     db
-      .select({ surveyId: responses.surveyId, surveyName: surveys.name, score: responses.score })
+      .select({ surveyId: responses.surveyId, surveyName: surveys.name, score: responses.score, createdAt: responses.createdAt })
       .from(responses)
       .innerJoin(surveys, eq(responses.surveyId, surveys.id))
       .where(and(scopeWhere(scope), sql`${responses.score} is not null`)),
   ]);
 
-  // primeira pergunta de nota de cada survey (mesma regra usada no widget/SDK pra decidir o score da resposta)
   const scoreQuestionBySurvey = new Map<string, { blockId: string; config: unknown }>();
   for (const q of scoreQuestions) {
     if (!scoreQuestionBySurvey.has(q.surveyId)) scoreQuestionBySurvey.set(q.surveyId, q);
   }
 
-  const scoresBySurvey = new Map<string, { name: string; scores: number[] }>();
+  const bySurvey = new Map<string, { name: string; scores: number[]; lastAt: number }>();
   for (const r of rows) {
     if (r.score == null) continue;
-    const entry = scoresBySurvey.get(r.surveyId) ?? { name: r.surveyName, scores: [] };
+    const entry = bySurvey.get(r.surveyId) ?? { name: r.surveyName, scores: [], lastAt: 0 };
     entry.scores.push(r.score);
-    scoresBySurvey.set(r.surveyId, entry);
+    entry.lastAt = Math.max(entry.lastAt, r.createdAt.getTime());
+    bySurvey.set(r.surveyId, entry);
   }
-  if (scoresBySurvey.size === 0) return null;
 
+  return Array.from(bySurvey.entries()).map(([surveyId, e]) => {
+    const q = scoreQuestionBySurvey.get(surveyId);
+    const cfg = (q?.config as { min?: number; max?: number }) ?? {};
+    const defaults = defaultScaleForBlock(q?.blockId);
+    const result = computeScore(e.scores, methodologyForBlock(q?.blockId), { min: cfg.min ?? defaults.min, max: cfg.max ?? defaults.max });
+    return { ...result, surveyId, surveyName: e.name, answered: e.scores.length, lastAt: e.lastAt };
+  });
+}
+
+export async function getMainScore(scope: Scope): Promise<(ScoreResult & { surveyName: string | null }) | null> {
+  const all = await getScoresBySurvey(scope);
+  if (all.length === 0) return null;
   // metodologia predominante: a survey com mais respostas no escopo
-  const [topSurveyId, top] = Array.from(scoresBySurvey.entries()).sort((a, b) => b[1].scores.length - a[1].scores.length)[0];
-  const scoreQuestion = scoreQuestionBySurvey.get(topSurveyId);
-  const methodology = methodologyForBlock(scoreQuestion?.blockId);
-  const cfg = (scoreQuestion?.config as { min?: number; max?: number }) ?? {};
-  const defaults = defaultScaleForBlock(scoreQuestion?.blockId);
-  const scale = { min: cfg.min ?? defaults.min, max: cfg.max ?? defaults.max };
-
-  const result = computeScore(top.scores, methodology, scale);
-  return { ...result, surveyName: scope.surveyId ? null : top.name };
+  const top = [...all].sort((a, b) => b.answered - a.answered)[0];
+  return { ...top, surveyName: scope.surveyId ? null : top.surveyName };
 }
 
 /**

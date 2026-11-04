@@ -2,9 +2,10 @@
  * Catálogo de indicadores do Report Quinzenal e a fórmula da North Star, exatamente como na
  * planilha "North Star" do time de Produto:
  *
- *   - por plataforma: CSAT (%), Aderência (%) e Tempo de uso (min). GenieX não tem CSAT.
- *   - consolidado de cada componente = média simples das plataformas que o medem
- *     (Aderência e Tempo: as 3; CSAT: Educadores e Exploradores).
+ *   - por plataforma: CSAT (%), Aderência (%) e Tempo de uso (min).
+ *   - consolidado de cada componente = média simples das plataformas que o medem: as 3. O CSAT da
+ *     GenieX entra a partir de GENIEX_CSAT_FROM; antes disso, o CSAT consolidado era a média de
+ *     Educadores e Exploradores (o histórico continua assim).
  *   - normalizado = consolidado ÷ meta; resultado = normalizado × peso (pesos 30/40/30).
  *   - North Star = soma dos 3 resultados. Sem teto: passar da meta num componente compensa
  *     outro (a planilha não limita, ex.: aderência 57,6% com meta 50% vale 46,05 de 40).
@@ -12,17 +13,19 @@
  * Puro (sem banco): usado pela tela, pela exportação e pelos testes.
  */
 
+import type { PeriodId } from "./period";
+
 export const METRICS = ["csat", "adherence", "usage"] as const;
 export type Metric = (typeof METRICS)[number];
 
 export const METRIC_META: Record<Metric, { label: string; unit: "%" | "min"; source: string }> = {
-  csat: { label: "CSAT", unit: "%", source: "Luumu · pesquisas CSAT do projeto (% top-box, igual ao painel)" },
+  csat: { label: "CSAT", unit: "%", source: "Luumu · média das 2 últimas pesquisas CSAT da quinzena (% top-box, igual ao painel)" },
   adherence: { label: "Aderência", unit: "%", source: "Luumu · Analytics (DAU médio ÷ MAU)" },
   usage: { label: "Tempo de uso", unit: "min", source: "Luumu · Analytics (tempo médio por sessão)" },
 };
 
 export const PLATFORMS = [
-  { key: "geniex", label: "GenieX", metrics: ["adherence", "usage"] },
+  { key: "geniex", label: "GenieX", metrics: ["csat", "adherence", "usage"] },
   { key: "exploradores", label: "Exploradores", metrics: ["csat", "adherence", "usage"] },
   { key: "educadores", label: "Educadores", metrics: ["csat", "adherence", "usage"] },
 ] as const satisfies readonly { key: string; label: string; metrics: readonly Metric[] }[];
@@ -47,14 +50,30 @@ export const PLATFORM_INDICATORS: { key: PlatformIndicatorKey; platform: Platfor
 
 export const GOAL_KEYS: GoalKey[] = [NORTH_STAR, ...METRICS.map((m) => `ns.${m}` as ComponentKey), ...PLATFORM_INDICATORS.map((i) => i.key)];
 
+/**
+ * Quinzena em que o CSAT da GenieX passou a entrar no report (Q2 de outubro/2026, a primeira sem
+ * versão final quando a mudança foi feita). Antes dela a GenieX não tem linha de CSAT e o CSAT
+ * consolidado é (Educadores + Exploradores) ÷ 2, como na planilha; a partir dela,
+ * (Educadores + Exploradores + GenieX) ÷ 3.
+ */
+export const GENIEX_CSAT_FROM: PeriodId = "2026-10-2";
+
+const MEASURED_FROM: Partial<Record<PlatformIndicatorKey, PeriodId>> = { "geniex.csat": GENIEX_CSAT_FROM };
+
+/** O indicador existe no report desta quinzena? (sem quinzena: todos) */
+export const measuredIn = (key: PlatformIndicatorKey, period?: PeriodId) => !period || !MEASURED_FROM[key] || period >= MEASURED_FROM[key]!;
+
+/** Indicadores das plataformas numa quinzena, na ordem das tabelas. */
+export const platformIndicatorsFor = (period?: PeriodId) => PLATFORM_INDICATORS.filter((i) => measuredIn(i.key, period));
+
 export const isGoalKey = (k: string): k is GoalKey => (GOAL_KEYS as string[]).includes(k);
 export const isPlatformIndicatorKey = (k: string): k is PlatformIndicatorKey => PLATFORM_INDICATORS.some((i) => i.key === k);
 
 export const platformLabel = (k: PlatformKey) => PLATFORMS.find((p) => p.key === k)!.label;
 
-/** Plataformas que entram no consolidado de um componente. */
-export const platformsFor = (m: Metric): PlatformKey[] =>
-  PLATFORMS.filter((p) => (p.metrics as readonly Metric[]).includes(m)).map((p) => p.key);
+/** Plataformas que entram no consolidado de um componente (na quinzena, se informada). */
+export const platformsFor = (m: Metric, period?: PeriodId): PlatformKey[] =>
+  PLATFORMS.filter((p) => (p.metrics as readonly Metric[]).includes(m) && measuredIn(`${p.key}.${m}`, period)).map((p) => p.key);
 
 export type Weights = Record<Metric, number>;
 /** Pesos da planilha (somam 100: North Star "na meta" = 100). */
@@ -86,8 +105,12 @@ const num = (v: number | null | undefined): v is number => typeof v === "number"
  * Média só com todas as plataformas presentes: média parcial mudaria o significado do número
  * (ex.: CSAT só de Exploradores) sem ninguém perceber. Faltando uma, o consolidado fica vazio.
  */
-export function consolidate(values: PlatformValues, metric: Metric): { value: number | null; missing: PlatformKey[]; platforms: NorthStarComponent["platforms"] } {
-  const platforms = platformsFor(metric).map((platform) => ({ platform, value: values[`${platform}.${metric}`] ?? null }));
+export function consolidate(
+  values: PlatformValues,
+  metric: Metric,
+  period?: PeriodId
+): { value: number | null; missing: PlatformKey[]; platforms: NorthStarComponent["platforms"] } {
+  const platforms = platformsFor(metric, period).map((platform) => ({ platform, value: values[`${platform}.${metric}`] ?? null }));
   const missing = platforms.filter((p) => !num(p.value)).map((p) => p.platform);
   const value = missing.length ? null : platforms.reduce((a, p) => a + (p.value as number), 0) / platforms.length;
   return { value, missing, platforms };
@@ -96,9 +119,16 @@ export function consolidate(values: PlatformValues, metric: Metric): { value: nu
 /** Ajustes manuais acima das plataformas: o consolidado de um componente ou a própria North Star. */
 export type NorthStarOverrides = Partial<Record<ComponentKey | typeof NORTH_STAR, number>>;
 
-export function computeNorthStar(values: PlatformValues, targets: Targets, weights: Weights = DEFAULT_WEIGHTS, overrides: NorthStarOverrides = {}): NorthStarResult {
+export function computeNorthStar(
+  values: PlatformValues,
+  targets: Targets,
+  weights: Weights = DEFAULT_WEIGHTS,
+  overrides: NorthStarOverrides = {},
+  /** quinzena: decide quais plataformas entram em cada consolidado (ver GENIEX_CSAT_FROM) */
+  period?: PeriodId
+): NorthStarResult {
   const components = METRICS.map((metric): NorthStarComponent => {
-    const c = consolidate(values, metric);
+    const c = consolidate(values, metric, period);
     // consolidado ajustado à mão substitui a média (e entra na North Star como tal)
     const value = num(overrides[`ns.${metric}`]) ? (overrides[`ns.${metric}`] as number) : c.value;
     const target = targets[`ns.${metric}`] ?? null;

@@ -9,7 +9,8 @@
  *   NorthStar (+ média anual).
  * Quinzena sem dado quebra a linha (não liga pontos distantes nem inventa valor).
  */
-import { formatCompact, PLATFORMS, type GoalKey, type PlatformKey } from "./indicators";
+import { formatCompact, GENIEX_CSAT_FROM, PLATFORMS, type GoalKey, type PlatformKey } from "./indicators";
+import { periodShortLabel, shiftPeriod } from "./period";
 import type { ReportModel } from "./model";
 import { escapeHtml } from "./html";
 
@@ -115,7 +116,7 @@ export function buildCharts(m: ReportModel): ChartSpec[] {
       tag: "CSAT Médio das Plataformas",
       tagColor: "#7C3AED",
       title: `CSAT Médio das Plataformas - ${m.title}`,
-      info: "Média do CSAT de Exploradores e Educadores (o GenieX não tem CSAT).",
+      info: `Média do CSAT de Exploradores, Educadores e GenieX (cada um = média das 2 últimas pesquisas CSAT da quinzena). Até a ${periodShortLabel(shiftPeriod(GENIEX_CSAT_FROM, -1))}, só Exploradores e Educadores.`,
       unit: "%",
       ticks,
       values: csat,
