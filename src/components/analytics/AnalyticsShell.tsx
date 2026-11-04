@@ -14,6 +14,7 @@ import { useToast } from "@/components/ui/Toast";
 import { TAB_META, TABS, eventLabel, viewHref, type ViewConfig } from "@/lib/analytics/core";
 import { defaultSpan, TAB_LAYOUT, type Block } from "@/lib/analytics/derive";
 import type { AnalyticsData, SavedView } from "@/lib/db/analytics";
+import type { Freshness } from "@/lib/db/analytics-panel";
 import { listMetricEventsAction, saveMetricsAction, updateViewAction } from "@/app/(app)/analytics/actions";
 import { Widget, type WidgetCtx } from "./Widgets";
 import { ToggleCollection } from "./States";
@@ -73,6 +74,7 @@ export function AnalyticsShell({
   enabled,
   since,
   users = null,
+  freshness = null,
 }: {
   config: ViewConfig;
   blocks: Block[];
@@ -89,6 +91,8 @@ export function AnalyticsShell({
   since: string | null;
   /** aba Usuários */
   users?: UsersData | null;
+  /** de quando são os números mostrados (resultados prontos; null = calculados agora) */
+  freshness?: Freshness | null;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -205,6 +209,8 @@ export function AnalyticsShell({
           <Plus className="size-4" /> Nova visão
         </Button>
         <div className="ml-auto flex flex-wrap items-center gap-2">
+          {/* key: cada filtro/aba recomeça as tentativas */}
+          {freshness && <FreshnessNote key={sp.toString()} freshness={freshness} />}
           <DataFilters />
           <CollectionPill enabled={enabled} canManage={canManage} since={since} />
         </div>
@@ -445,3 +451,37 @@ function CollectionPill({ enabled, canManage, since }: { enabled: boolean; canMa
   );
 }
 
+
+/*
+  De quando são os números. O painel mostra o último resultado pronto na hora; se ele venceu, o
+  servidor recalcula depois da resposta e esta nota pede a página de novo até chegar o novo
+  (router.refresh mantém a tela, sem o carregador).
+*/
+const REFRESH_AFTER_MS = 6_000;
+const REFRESH_TRIES = 8;
+
+function FreshnessNote({ freshness }: { freshness: Freshness }) {
+  const router = useRouter();
+  const [tries, setTries] = useState(0);
+  const waiting = freshness.stale && tries < REFRESH_TRIES;
+
+  useEffect(() => {
+    if (!waiting) return;
+    const t = setTimeout(() => {
+      setTries((n) => n + 1);
+      router.refresh();
+    }, REFRESH_AFTER_MS);
+    return () => clearTimeout(t);
+  }, [waiting, freshness.at, tries, router]);
+
+  const at = new Date(freshness.at);
+  const tz = "America/Sao_Paulo";
+  const sameDay = at.toLocaleDateString("pt-BR", { timeZone: tz }) === new Date().toLocaleDateString("pt-BR", { timeZone: tz });
+  const when = `${sameDay ? "" : `${at.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", timeZone: tz })} `}às ${at.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: tz })}`;
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs text-fg-mut" title="Os números ficam prontos de antemão e são recalculados periodicamente.">
+      {waiting && <Loader2 className="size-3.5 animate-spin" aria-hidden />}
+      {waiting ? `Atualizando · dados ${when}` : `Atualizado ${when}`}
+    </span>
+  );
+}

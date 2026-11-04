@@ -783,6 +783,24 @@ export const analyticsSessionDays = pgTable(
   ]
 );
 
+/**
+ * Resultados prontos dos blocos do painel de Analytics (lib/db/analytics-panel.ts): o painel
+ * mostra o último resultado na hora e recalcula em segundo plano quando ele passa do prazo. A
+ * chave descreve o bloco e o recorte (JSON). Migração 0042.
+ */
+export const analyticsResults = pgTable(
+  "analytics_results",
+  {
+    projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    key: text("key").notNull(),
+    value: jsonb("value").notNull(),
+    computedAt: timestamp("computed_at", { withTimezone: true }).notNull(),
+    accessedAt: timestamp("accessed_at", { withTimezone: true }).notNull().defaultNow(),
+    refreshingAt: timestamp("refreshing_at", { withTimezone: true }),
+  },
+  (t) => [primaryKey({ columns: [t.projectId, t.key] })]
+);
+
 /** Dias já resumidos em analytics_session_days (para todos os projetos). */
 export const analyticsRollupDays = pgTable("analytics_rollup_days", {
   day: date("day", { mode: "string" }).primaryKey(),

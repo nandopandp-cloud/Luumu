@@ -2,9 +2,10 @@ import { AnalyticsShell } from "@/components/analytics/AnalyticsShell";
 import { savedPlatform } from "@/lib/platform/selected";
 import { AnalyticsUnavailable, EnableAnalytics, WaitingAnalytics } from "@/components/analytics/States";
 import { canManageWorkspace, getCurrentProject, getCurrentRole, requireUser } from "@/lib/auth/current";
-import { collectingSince, getAnalyticsCached, getAnalyticsSettings, hasAnalyticsData, listAnalyticsUsers, listViews, resolvePeriod, USER_SEGMENTS, type PeriodScope, USER_SORTS, type AnalyticsSettings, type UserSegment, type UserSort } from "@/lib/db/analytics";
+import { collectingSince, getAnalyticsSettings, hasAnalyticsData, listViews, USER_SEGMENTS, type PeriodScope, USER_SORTS, type AnalyticsSettings, type UserSegment, type UserSort } from "@/lib/db/analytics";
 import type { UsersData } from "@/components/analytics/UsersView";
 import { listHosts } from "@/lib/db/hosts";
+import { getAnalyticsPanel, listAnalyticsUsersPanel, type Freshness } from "@/lib/db/analytics-panel";
 import { parseViewConfig, viewHref, type ViewConfig } from "@/lib/analytics/core";
 import { datasetsFor, defaultSpan, TAB_LAYOUT, type Block } from "@/lib/analytics/derive";
 import { normalizeHosts } from "@/lib/platform/hosts";
@@ -62,30 +63,36 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
     config.tab === "custom" ? (config.widgets ?? []).map((id) => ({ id, span: config.spans?.[id] ?? defaultSpan(id) })) : config.tab === "users" ? [] : TAB_LAYOUT[config.tab];
 
   const period: PeriodScope = { projectId, period: config.period ?? DEFAULT_PERIOD, from: config.from, to: config.to, host: config.host, device: config.device };
-  const data = blocks.length
-    ? await getAnalyticsCached(period, settings, datasetsFor(blocks.map((b) => b.id)), {
+  // resultados prontos (lib/db/analytics-panel.ts): mostra na hora e recalcula em segundo plano
+  const { data, freshness: dataFreshness } = blocks.length
+    ? await getAnalyticsPanel(period, settings, datasetsFor(blocks.map((b) => b.id)), {
         pagesLimit: config.tab === "pages" ? 50 : config.tab === "custom" ? 10 : 6,
         eventsLimit: config.tab === "events" ? 40 : config.tab === "custom" ? 10 : 6,
       })
-    : {};
+    : { data: {}, freshness: null as Freshness | null };
+  let freshness = dataFreshness;
 
   // aba Usuários: a lista (busca/segmento/ordem/página na URL) + os números do topo
   let users: UsersData | null = null;
   if (config.tab === "users") {
-    const scope = resolvePeriod(period);
-    let list: Awaited<ReturnType<typeof listAnalyticsUsers>>;
-    let kpi: Awaited<ReturnType<typeof getAnalyticsCached>>;
+    let list: Awaited<ReturnType<typeof listAnalyticsUsersPanel>>["list"];
+    let kpi: Awaited<ReturnType<typeof getAnalyticsPanel>>["data"];
     try {
-      [list, kpi] = await Promise.all([
-        listAnalyticsUsers(scope, {
+      const [l, k] = await Promise.all([
+        listAnalyticsUsersPanel(period, settings, {
           q: sp.q,
           segment: (USER_SEGMENTS as readonly string[]).includes(sp.seg ?? "") ? (sp.seg as UserSegment) : "all",
           sort: (USER_SORTS as readonly string[]).includes(sp.sort ?? "") ? (sp.sort as UserSort) : "recent",
           dir: sp.dir === "asc" ? "asc" : "desc",
           page: Math.max(1, Number(sp.pg) || 1),
         }),
-        getAnalyticsCached(period, settings, new Set(["totals", "newUsers"])),
+        getAnalyticsPanel(period, settings, new Set(["totals", "newUsers"])),
       ]);
+      list = l.list;
+      kpi = k.data;
+      // o mais antigo dos dois; recalculando se qualquer um estiver
+      const fs = [l.freshness, k.freshness].filter((x): x is Freshness => !!x);
+      freshness = fs.length ? { at: fs.map((x) => x.at).sort()[0], stale: fs.some((x) => x.stale) } : null;
     } catch (e) {
       // sem a 0022 as colunas de e-mail/nome/avatar não existem: avisa qual migração falta em vez de quebrar
       console.error("[analytics] aba Usuários", e);
@@ -112,6 +119,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
       canConfigure={role === "owner" || role === "admin" || role === "editor"}
       enabled={settings.enabled}
       since={since}
+      freshness={freshness}
     />
   );
 }

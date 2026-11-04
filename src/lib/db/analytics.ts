@@ -746,7 +746,7 @@ export interface AnalyticsData {
   deviceTrend?: Awaited<ReturnType<typeof deviceTrend>>;
 }
 
-interface DatasetOpts {
+export interface DatasetOpts {
   pagesLimit?: number;
   eventsLimit?: number;
   /** eventos da tendência (os principais da lista de eventos) */
@@ -754,7 +754,7 @@ interface DatasetOpts {
 }
 
 /** Calcula um dataset (eventTrend recebe a lista de eventos pronta em opts.trendEvents). */
-function runDataset(k: Dataset, s: AnalyticsScope, st: AnalyticsSettings, opts: DatasetOpts): Promise<unknown> {
+export function runDataset(k: Dataset, s: AnalyticsScope, st: AnalyticsSettings, opts: DatasetOpts): Promise<unknown> {
   const p = prevScope(s);
   switch (k) {
     case "daily": return dailySessions(s, p);
@@ -783,7 +783,7 @@ function runDataset(k: Dataset, s: AnalyticsScope, st: AnalyticsSettings, opts: 
 }
 
 /** Quantos eventos entram na tendência (os primeiros da lista de eventos). */
-const TREND_EVENTS = 6;
+export const TREND_EVENTS = 6;
 
 /**
  * Busca os datasets pedidos em paralelo. `fetch` calcula um dataset; a tendência de eventos
@@ -869,8 +869,11 @@ function datasetKey(k: Dataset, st: AnalyticsSettings, opts: DatasetOpts): strin
   return JSON.stringify({ st: {}, opts: {}, ...extra });
 }
 
-/** O mesmo que getAnalytics, para o painel: cada dataset vem do cache (ver cachedDataset). */
-export async function getAnalyticsCached(p: PeriodScope, st: AnalyticsSettings, want: Set<Dataset>, opts: { pagesLimit?: number; eventsLimit?: number } = {}) {
+/**
+ * O mesmo que getAnalytics, com o cache do Next (ver cachedDataset). É o caminho do painel quando
+ * a tabela de resultados prontos (migração 0042) não existe: ver lib/db/analytics-panel.ts.
+ */
+export async function getAnalyticsSharedCached(p: PeriodScope, st: AnalyticsSettings, want: Set<Dataset>, opts: { pagesLimit?: number; eventsLimit?: number } = {}) {
   const custom = p.period === "custom";
   const day = custom ? "" : startOfTodayBR().toISOString();
   return collect(want, opts, (k, o) =>
