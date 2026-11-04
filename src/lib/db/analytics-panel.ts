@@ -131,7 +131,7 @@ function later(fn: () => Promise<unknown>) {
 /** Do mais leve ao mais pesado (medido no maior projeto): o que é barato aparece primeiro. */
 const COST_ORDER: Id[] = [
   "usersList", "daily", "totals", "devices", "channels", "entry", "exit", "campaigns", "frequency", "hours", "techs", "deviceTrend",
-  "newUsers", "recurrent", "mau", "pages", "configured", "funnel", "retention", "outcomes", "outcomesPrev", "events", "eventTrend",
+  "newUsers", "recurrent", "mau", "wau", "pages", "configured", "funnel", "retention", "outcomes", "outcomesPrev", "events", "eventTrend",
 ];
 const byCost = (a: Id, b: Id) => COST_ORDER.indexOf(a) - COST_ORDER.indexOf(b);
 

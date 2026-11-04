@@ -276,7 +276,7 @@ export const WIDGETS = {
   kpi_new_users: "Novos usuários",
   kpi_session_time: "Tempo médio de uso",
   kpi_sessions_per_user: "Sessões por usuário",
-  kpi_stickiness: "Aderência (DAU/MAU)",
+  kpi_stickiness: "Aderência",
   kpi_north_star: "North Star",
   kpi_task_success: "Task Success",
   kpi_activation: "Taxa de ativação",

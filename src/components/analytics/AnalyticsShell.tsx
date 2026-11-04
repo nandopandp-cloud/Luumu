@@ -59,6 +59,7 @@ export interface Settings {
   activationEvent: string | null;
   taskStartEvent: string | null;
   taskDoneEvent: string | null;
+  adherenceBase: "daily" | "weekly";
 }
 
 export function AnalyticsShell({
@@ -363,9 +364,9 @@ function MetricsDialog({ settings, onClose }: { settings: Settings; onClose: () 
   const [busy, start] = useTransition();
   const router = useRouter();
   const toast = useToast();
-  const opts = Array.from(new Set([...(events ?? []), ...Object.values(settings).filter((x): x is string => !!x)]));
+  const opts = Array.from(new Set([...(events ?? []), ...[settings.northStarEvent, settings.activationEvent, settings.taskStartEvent, settings.taskDoneEvent].filter((x): x is string => !!x)]));
 
-  const field = (k: keyof Settings, label: string, hint: string) => (
+  const field = (k: Exclude<keyof Settings, "adherenceBase">, label: string, hint: string) => (
     <label className="flex flex-col gap-1.5">
       <span className="text-sm font-semibold text-fg-soft">{label}</span>
       <Select value={v[k] ?? ""} onChange={(e) => setV({ ...v, [k]: e.target.value || null })} aria-label={label} className="py-2 text-sm">
@@ -423,6 +424,14 @@ function MetricsDialog({ settings, onClose }: { settings: Settings; onClose: () 
           {field("activationEvent", "Evento de ativação", "Quando um novo usuário “pega” o produto. Sem ele, conta qualquer ação nos primeiros 7 dias.")}
           {field("taskStartEvent", "Início da tarefa principal", "Usado no Task Success e no funil de engajamento.")}
           {field("taskDoneEvent", "Conclusão da tarefa principal", "Task Success = concluíram ÷ iniciaram.")}
+          <label className="flex flex-col gap-1.5">
+            <span className="text-sm font-semibold text-fg-soft">Base da Aderência</span>
+            <Select value={v.adherenceBase} onChange={(e) => setV({ ...v, adherenceBase: e.target.value === "weekly" ? "weekly" : "daily" })} aria-label="Base da Aderência" className="py-2 text-sm">
+              <option value="daily">Diária (DAU ÷ MAU)</option>
+              <option value="weekly">Semanal (WAU ÷ MAU)</option>
+            </Select>
+            <span className="text-xs text-fg-mut">Semanal para produtos que não se espera usar todo dia. Vale para o card e o Report Quinzenal.</span>
+          </label>
         </div>
       )}
     </Dialog>

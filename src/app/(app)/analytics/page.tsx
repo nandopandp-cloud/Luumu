@@ -120,7 +120,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
       currentView={saved}
       dirty={!!saved && !same(saved.config, config)}
       hosts={hosts}
-      settings={{ northStarEvent: settings.northStarEvent, activationEvent: settings.activationEvent, taskStartEvent: settings.taskStartEvent, taskDoneEvent: settings.taskDoneEvent }}
+      settings={{ northStarEvent: settings.northStarEvent, activationEvent: settings.activationEvent, taskStartEvent: settings.taskStartEvent, taskDoneEvent: settings.taskDoneEvent, adherenceBase: settings.adherenceBase }}
       canManage={canManage}
       canConfigure={role === "owner" || role === "admin" || role === "editor"}
       enabled={settings.enabled}

@@ -12,7 +12,8 @@ import type { CollectedValue, SyncSnapshot } from "./model";
 /*
   Busca os indicadores de uma quinzena nos projetos de cada plataforma, com as MESMAS consultas
   das telas da Luumu (nada de fórmula paralela):
-    - Aderência: KPI "Aderência (DAU/MAU)" do Analytics (lib/analytics/derive.ts → stickiness)
+    - Aderência: KPI de Aderência do Analytics (lib/analytics/derive.ts → stickiness), na base
+      configurada no projeto: DAU médio ÷ MAU ou WAU médio ÷ MAU
     - Tempo de uso: "Tempo médio de uso" do Analytics (média de duração das sessões)
     - CSAT: média das notas das 2 pesquisas CSAT mais recentes da quinzena (csat.ts); cada nota é
       o score da pesquisa (lib/surveys/scoring.ts, % top-box) só com as respostas da quinzena
@@ -23,7 +24,7 @@ const fmtDay = (iso: string) => new Date(iso).toLocaleDateString("pt-BR", { time
 
 async function collectAnalytics(projectId: string, from: Date, to: Date): Promise<Partial<Record<Metric, CollectedValue>>> {
   const [st, since] = await Promise.all([getAnalyticsSettings(projectId), collectingSince(projectId)]);
-  const d = await getAnalytics({ projectId, from, to }, st, new Set(["daily", "totals"]));
+  const d = await getAnalytics({ projectId, from, to }, st, new Set(["daily", "totals", "wau"]));
   const t = d.totals;
   const warnings: string[] = [];
   if (!st.enabled) warnings.push("coleta de analytics desligada no projeto");
@@ -33,9 +34,10 @@ async function collectAnalytics(projectId: string, from: Date, to: Date): Promis
     const none = { value: null, warnings: [...warnings, "nenhuma sessão registrada na quinzena"] };
     return { adherence: none, usage: none };
   }
-  const stickiness = kpis(d).stickiness.value;
+  const stickiness = kpis(d, st.adherenceBase).stickiness.value;
+  const base = st.adherenceBase === "weekly" ? `WAU ${Math.round(d.wau?.wau ?? 0)}` : `${t.users} usuários ativos`;
   return {
-    adherence: { value: stickiness === null ? null : stickiness * 100, detail: `${t.users} usuários ativos · MAU ${t.mau}`, warnings },
+    adherence: { value: stickiness === null ? null : stickiness * 100, detail: `${base} · MAU ${t.mau}`, warnings },
     usage: { value: t.ms / 60_000, detail: `${t.sessions} sessões`, warnings },
   };
 }

@@ -67,7 +67,7 @@ export const CATALOG: Record<WidgetId, { category: CategoryId; description: stri
   acquisition_funnel: { category: "users", description: "Da visita à primeira resposta de pesquisa.", icon: Filter },
 
   kpi_session_time: { category: "engagement", description: "Tempo ativo médio por sessão.", icon: Clock },
-  kpi_stickiness: { category: "engagement", description: "DAU ÷ MAU: quanto o público volta todo dia.", icon: Heart },
+  kpi_stickiness: { category: "engagement", description: "DAU ou WAU ÷ MAU: quanto do público mensal volta (base diária ou semanal, nas métricas do produto).", icon: Heart },
   session_time: { category: "engagement", description: "Tempo de sessão com a evolução diária.", icon: Timer },
   features: { category: "engagement", description: "Ações mais usadas pelo alcance entre ativos.", icon: Sparkles },
 

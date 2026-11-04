@@ -62,6 +62,7 @@ import {
 } from "@/lib/analytics/core";
 import {
   acquisitionKpis,
+  adherenceLabel,
   campaignTable,
   channelSeries,
   channelShares,
@@ -88,7 +89,7 @@ export interface WidgetCtx {
   canConfigure: boolean;
   /** KPIs em faixa cheia (5–6 por linha): versão compacta */
   dense?: boolean;
-  settings: { northStarEvent: string | null; activationEvent: string | null; taskStartEvent: string | null; taskDoneEvent: string | null };
+  settings: { northStarEvent: string | null; activationEvent: string | null; taskStartEvent: string | null; taskDoneEvent: string | null; adherenceBase: "daily" | "weekly" };
   /** datasets ainda sendo calculados (o bloco que depende deles mostra "Calculando…") */
   pending?: ReadonlySet<string>;
 }
@@ -252,7 +253,11 @@ function KpiCard({ id, k, fmt, ctx }: { id: WidgetId; k: Kpi | null; fmt: (v: nu
   const Icon = m.icon;
   if (id === "kpi_north_star" && !k) return <SetupKpi label="North Star" icon={Target} text="Escolha o evento que representa o valor principal do seu produto." ctx={ctx} />;
   if (id === "kpi_task_success" && !k) return <SetupKpi label="Task Success" icon={CheckCircle2} text="Escolha os eventos de início e de conclusão da tarefa principal." ctx={ctx} />;
-  const label = id === "kpi_north_star" && ctx.settings.northStarEvent ? `North Star · ${eventLabel(ctx.settings.northStarEvent)}` : WIDGETS[id];
+  const label =
+    id === "kpi_north_star" && ctx.settings.northStarEvent ? `North Star · ${eventLabel(ctx.settings.northStarEvent)}`
+    : id === "kpi_stickiness" ? adherenceLabel(ctx.settings.adherenceBase)
+    : WIDGETS[id];
+  const hint = id === "kpi_stickiness" && ctx.settings.adherenceBase === "weekly" ? "WAU médio ÷ MAU: quanto do público mensal volta toda semana." : m.hint;
   return (
     <InsightCard
       label={label}
@@ -261,7 +266,7 @@ function KpiCard({ id, k, fmt, ctx }: { id: WidgetId; k: Kpi | null; fmt: (v: nu
       icon={<Icon className="size-5" />}
       series={k?.series ?? []}
       delta={k?.delta ? { value: k.delta.value, unit: k.delta.unit } : null}
-      hint={m.hint}
+      hint={hint}
       dense={ctx.dense}
     />
   );
@@ -271,7 +276,7 @@ function KpiCard({ id, k, fmt, ctx }: { id: WidgetId; k: Kpi | null; fmt: (v: nu
 
 export function Widget({ id, ctx }: { id: WidgetId; ctx: WidgetCtx }) {
   const d = ctx.data;
-  const K = useMemo(() => kpis(d), [d]);
+  const K = useMemo(() => kpis(d, ctx.settings.adherenceBase), [d, ctx.settings.adherenceBase]);
   const A = useMemo(() => acquisitionKpis(d), [d]);
   const active = d.configured?.active ?? d.totals?.users ?? 0;
 

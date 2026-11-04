@@ -70,7 +70,7 @@ export async function GET(req: Request) {
   } else {
     const widgets = config.tab === "custom" ? (config.widgets ?? []) : TAB_LAYOUT[config.tab].map((b) => b.id);
     const data = await getAnalytics(scope, settings, datasetsFor(widgets), { pagesLimit: 100, eventsLimit: 100 });
-    tables = analyticsTables(data, widgets);
+    tables = analyticsTables(data, widgets, settings.adherenceBase);
   }
 
   const name = saved?.name ?? `Analytics: ${TAB_META[config.tab].label}`;

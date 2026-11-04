@@ -20,7 +20,7 @@ export type Metric = (typeof METRICS)[number];
 
 export const METRIC_META: Record<Metric, { label: string; unit: "%" | "min"; source: string }> = {
   csat: { label: "CSAT", unit: "%", source: "Luumu · média das 2 últimas pesquisas CSAT da quinzena (% top-box, igual ao painel)" },
-  adherence: { label: "Aderência", unit: "%", source: "Luumu · Analytics (DAU médio ÷ MAU)" },
+  adherence: { label: "Aderência", unit: "%", source: "Luumu · Analytics (DAU ou WAU médio ÷ MAU, conforme a base do projeto)" },
   usage: { label: "Tempo de uso", unit: "min", source: "Luumu · Analytics (tempo médio por sessão)" },
 };
 

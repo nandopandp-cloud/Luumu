@@ -31,9 +31,10 @@ const metricsSchema = z.object({
   activationEvent: eventName,
   taskStartEvent: eventName,
   taskDoneEvent: eventName,
+  adherenceBase: z.enum(["daily", "weekly"]).default("daily"),
 });
 
-/** North Star, ativação e tarefa (início/conclusão) = eventos do produto. Editores ou acima. */
+/** North Star, ativação e tarefa (início/conclusão) = eventos do produto; base da Aderência. Editores ou acima. */
 export async function saveMetricsAction(input: unknown): Promise<Result> {
   const session = await requireUser();
   const role = await getCurrentRole();

@@ -612,6 +612,8 @@ export const analyticsSettings = pgTable("analytics_settings", {
   activationEvent: text("activation_event"),
   taskStartEvent: text("task_start_event"),
   taskDoneEvent: text("task_done_event"),
+  // base da Aderência: "daily" (DAU/MAU) | "weekly" (WAU/MAU) — migração 0043
+  adherenceBase: text("adherence_base").notNull().default("daily"),
   updatedBy: text("updated_by").references(() => users.id, { onDelete: "set null" }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

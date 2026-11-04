@@ -3,7 +3,7 @@
   composições das abas e quais consultas cada bloco exige. PURO e testado.
 */
 import { CHANNELS, pctChange, type AnalyticsTab, type Channel, type WidgetId } from "./core";
-import type { AnalyticsData, Dataset } from "@/lib/db/analytics";
+import type { AdherenceBase, AnalyticsData, Dataset } from "@/lib/db/analytics";
 
 /* ---------- composição das abas ---------- */
 
@@ -60,7 +60,7 @@ export const WIDGET_DATASETS: Record<WidgetId, Dataset[]> = {
   kpi_new_users: ["newUsers"],
   kpi_session_time: ["totals", "daily"],
   kpi_sessions_per_user: ["totals", "daily"],
-  kpi_stickiness: ["daily", "totals"],
+  kpi_stickiness: ["daily", "totals", "wau"],
   kpi_north_star: ["configured"],
   kpi_task_success: ["configured"],
   kpi_activation: ["outcomes", "outcomesPrev", "newUsers"],
@@ -118,7 +118,11 @@ const pc = (cur: number, prev: number | null | undefined) => {
 };
 const ratio = (a: number | undefined, b: number | undefined) => (a !== undefined && b ? a / b : null);
 
-export function kpis(d: AnalyticsData) {
+/** Nome do card de Aderência conforme a base configurada no projeto. */
+export const adherenceLabel = (base: AdherenceBase = "daily") => (base === "weekly" ? "Aderência (WAU/MAU)" : "Aderência (DAU/MAU)");
+
+/** Aderência: DAU médio ÷ MAU ("daily", padrão) ou WAU médio ÷ MAU ("weekly", produto de uso semanal). */
+export function kpis(d: AnalyticsData, adherenceBase: AdherenceBase = "daily") {
   const cur = d.daily?.cur ?? [];
   const prev = d.daily?.prev ?? [];
   const t = d.totals;
@@ -140,8 +144,11 @@ export function kpis(d: AnalyticsData) {
       series: cur.map((x) => (x.sessions ? x.pv / x.sessions : 0)),
     } as Kpi,
     stickiness: (() => {
-      const v = t?.mau ? dau / t.mau : null;
-      const p = t?.mau_prev && dauPrev !== null ? dauPrev / t.mau_prev : null;
+      const weekly = adherenceBase === "weekly";
+      const num = weekly ? (d.wau ? d.wau.wau : null) : dau;
+      const numPrev = weekly ? (d.wau?.wau_prev ?? null) : dauPrev;
+      const v = t?.mau && num !== null ? num / t.mau : null;
+      const p = t?.mau_prev && numPrev !== null ? numPrev / t.mau_prev : null;
       return { value: v, delta: pp(v, p), series: [] } as Kpi;
     })(),
     northStar: (() => {

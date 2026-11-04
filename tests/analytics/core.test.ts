@@ -124,6 +124,19 @@ test("KPIs: médias, variações e métricas não configuradas", () => {
   assert.equal(k.sessionsPerUser.value, 2);
 });
 
+test("Aderência semanal: WAU médio ÷ MAU, variação em p.p.", () => {
+  const d = {
+    daily: { cur: [{ d: "2026-10-01", users: 10, sessions: 20, ms: 60000, pv: 40 }], prev: [] },
+    totals: { users: 25, users_prev: 10, sessions: 50, sessions_prev: 10, ms: 90000, ms_prev: 60000, pv: 100, pv_prev: 10, identified: 5, mau: 100, mau_prev: 50 },
+    wau: { wau: 40, wau_prev: 25 },
+  };
+  const k = kpis(d as never, "weekly");
+  assert.equal(k.stickiness.value, 0.4);
+  assert.deepEqual(k.stickiness.delta, { value: -10, unit: "p.p." }); // 40/100 vs 25/50
+  assert.equal(kpis(d as never).stickiness.value, 0.1); // padrão continua DAU/MAU
+  assert.equal(kpis({ ...d, wau: undefined } as never, "weekly").stickiness.value, null); // sem o dado, sem valor
+});
+
 test("aquisição: ativação e canais somando os novos", () => {
   const d = {
     newUsers: { byDay: [{ d: "2026-10-01", channel: "organic", users: 3 }, { d: "2026-10-02", channel: "ads", users: 1 }], cur: 4, prev: 2 },

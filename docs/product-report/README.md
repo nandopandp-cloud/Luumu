@@ -76,7 +76,7 @@ São os mesmos cálculos das telas da Luumu, sem fórmula paralela:
 
 | Indicador | Fonte na Luumu |
 |---|---|
-| Aderência (%) | KPI "Aderência (DAU/MAU)" do Analytics: DAU médio da quinzena ÷ MAU (30 dias até o fim da quinzena) |
+| Aderência (%) | KPI de Aderência do Analytics, na base escolhida em **Métricas do produto**: DAU médio da quinzena ÷ MAU (diária, padrão) ou WAU médio ÷ MAU (semanal, ex.: Educadores). MAU = 30 dias até o fim da quinzena |
 | Tempo de uso (min) | "Tempo médio de uso" do Analytics: duração média das sessões da quinzena |
 | CSAT (%) | Média simples das notas das **2 pesquisas CSAT mais recentes da quinzena** (as pesquisas são semanais). Cada nota é o score da pesquisa (`src/lib/surveys/scoring.ts`, % top-box) só com as respostas da quinzena; "mais recente" = a que recebeu a última resposta mais tarde. Com uma pesquisa só, vale a nota dela, com aviso (`src/lib/product-report/csat.ts`) |
 

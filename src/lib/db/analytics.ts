@@ -36,26 +36,53 @@ const TZ = sql.raw(`'America/Sao_Paulo'`);
 
 /* ---------- configuração ---------- */
 
+export type AdherenceBase = "daily" | "weekly";
+
 export interface AnalyticsSettings {
   enabled: boolean;
   northStarEvent: string | null;
   activationEvent: string | null;
   taskStartEvent: string | null;
   taskDoneEvent: string | null;
+  /** base da Aderência: "daily" = DAU médio ÷ MAU; "weekly" = WAU médio ÷ MAU (uso semanal esperado) */
+  adherenceBase: AdherenceBase;
 }
 
 const settingsCache = new Map<string, { v: AnalyticsSettings; exp: number }>();
-const EMPTY: AnalyticsSettings = { enabled: false, northStarEvent: null, activationEvent: null, taskStartEvent: null, taskDoneEvent: null };
+const EMPTY: AnalyticsSettings = { enabled: false, northStarEvent: null, activationEvent: null, taskStartEvent: null, taskDoneEvent: null, adherenceBase: "daily" };
 
 export async function getAnalyticsSettings(projectId: string, fresh = false): Promise<AnalyticsSettings> {
   const hit = settingsCache.get(projectId);
   if (!fresh && hit && hit.exp > Date.now()) return hit.v;
-  const [row] = await db.select().from(analyticsSettings).where(eq(analyticsSettings.projectId, projectId)).limit(1);
-  const v: AnalyticsSettings = row
-    ? { enabled: row.enabled, northStarEvent: row.northStarEvent, activationEvent: row.activationEvent, taskStartEvent: row.taskStartEvent, taskDoneEvent: row.taskDoneEvent }
-    : EMPTY;
+  const v: AnalyticsSettings = await readSettingsRow(projectId);
   settingsCache.set(projectId, { v, exp: Date.now() + 60_000 });
   return v;
+}
+
+/** Sem a coluna adherence_base (migração 0043 não aplicada), lê o resto e usa DAU/MAU. */
+async function readSettingsRow(projectId: string): Promise<AnalyticsSettings> {
+  const where = eq(analyticsSettings.projectId, projectId);
+  let row: { enabled: boolean; northStarEvent: string | null; activationEvent: string | null; taskStartEvent: string | null; taskDoneEvent: string | null; adherenceBase?: string } | undefined;
+  try {
+    [row] = await db.select().from(analyticsSettings).where(where).limit(1);
+  } catch {
+    const t = analyticsSettings;
+    [row] = await db
+      .select({ enabled: t.enabled, northStarEvent: t.northStarEvent, activationEvent: t.activationEvent, taskStartEvent: t.taskStartEvent, taskDoneEvent: t.taskDoneEvent })
+      .from(t)
+      .where(where)
+      .limit(1);
+  }
+  return row
+    ? {
+        enabled: row.enabled,
+        northStarEvent: row.northStarEvent,
+        activationEvent: row.activationEvent,
+        taskStartEvent: row.taskStartEvent,
+        taskDoneEvent: row.taskDoneEvent,
+        adherenceBase: row.adherenceBase === "weekly" ? "weekly" : "daily",
+      }
+    : EMPTY;
 }
 
 export async function saveAnalyticsSettings(projectId: string, userId: string, patch: Partial<AnalyticsSettings>) {
@@ -436,6 +463,37 @@ async function mauSeries(s: AnalyticsScope) {
   return r.map((x) => ({ d: x.d, mau: n(x.mau) }));
 }
 
+/*
+  WAU médio do período (e do anterior): para cada dia, quantas pessoas tiveram uso nos 7 dias que
+  terminam nele; a média desses números. Como no MAU, cada dia de uso vira um intervalo
+  [d, próximo dia de uso ou d+7) que não se sobrepõe a outro da mesma pessoa, então a soma das
+  sobreposições de todos os intervalos com o período = soma do WAU de cada dia, numa passada só.
+  Dias sem 7 dias de histórico (início da coleta) ficam de fora: o WAU deles sai baixo por falta
+  de dado, não de uso. Se o período inteiro é assim, entram todos.
+*/
+async function wauAvg(s: AnalyticsScope, p: AnalyticsScope) {
+  const [r] = rows<{ wau: number | null; wau_prev: number | null }>(
+    await db.execute(sql`
+      with du as (
+        select distinct (s.started_at at time zone ${TZ})::date d, s.anon_id
+          from analytics_sessions s where ${sf(s, new Date(p.from.getTime() - 6 * 86_400_000), s.to)}
+      ), iv as (
+        select d a, least(d + 7, lead(d) over (partition by anon_id order by d)) b from du
+      ), k as (
+        select (${iso(s.from)}::timestamptz at time zone ${TZ})::date f,
+               (((${iso(s.to)}::timestamptz - interval '1 second') at time zone ${TZ})::date + 1) t1,
+               (${iso(p.from)}::timestamptz at time zone ${TZ})::date pf,
+               (select min(d) from du) + 6 full_from
+      ), w as (
+        select f, t1, case when full_from < t1 then greatest(f, full_from) else f end cf, greatest(pf, full_from) cpf from k
+      )
+      select coalesce(sum(greatest(0, least(iv.b, w.t1) - greatest(iv.a, w.cf))) filter (where iv.a is not null), 0)::float8 / nullif(w.t1 - w.cf, 0) wau,
+             case when w.cpf < w.f then coalesce(sum(greatest(0, least(iv.b, w.f) - greatest(iv.a, w.cpf))) filter (where iv.a is not null), 0)::float8 / (w.f - w.cpf) end wau_prev
+        from w left join iv on true group by w.f, w.t1, w.cf, w.cpf`)
+  );
+  return { wau: r?.wau == null ? 0 : Number(r.wau), wau_prev: r?.wau_prev == null ? null : Number(r.wau_prev) };
+}
+
 /** Usuários que fizeram cada evento configurado (período e anterior). */
 async function configured(s: AnalyticsScope, p: AnalyticsScope, st: AnalyticsSettings) {
   const ev = (name: string | null, col: string) =>
@@ -699,6 +757,7 @@ export const DATASETS = [
   "daily",
   "totals",
   "mau",
+  "wau",
   "configured",
   "funnel",
   "pages",
@@ -725,6 +784,7 @@ export interface AnalyticsData {
   daily?: Awaited<ReturnType<typeof dailySessions>>;
   totals?: Awaited<ReturnType<typeof totals>>;
   mau?: Awaited<ReturnType<typeof mauSeries>>;
+  wau?: Awaited<ReturnType<typeof wauAvg>>;
   configured?: Awaited<ReturnType<typeof configured>>;
   funnel?: Awaited<ReturnType<typeof engagementFunnel>>;
   pages?: Awaited<ReturnType<typeof topPages>>;
@@ -760,6 +820,7 @@ export function runDataset(k: Dataset, s: AnalyticsScope, st: AnalyticsSettings,
     case "daily": return dailySessions(s, p);
     case "totals": return totals(s, p);
     case "mau": return mauSeries(s);
+    case "wau": return wauAvg(s, p);
     case "configured": return configured(s, p, st);
     case "funnel": return engagementFunnel(s, st);
     case "pages": return topPages(s, opts.pagesLimit ?? 10);

@@ -3,8 +3,8 @@
   só; cada consulta dos blocos da visão vira uma tabela com colunas em português. PURO e testado.
 */
 import { CHANNEL_LABEL, WIDGETS, type Channel, type WidgetId } from "./core";
-import { acquisitionKpis, kpis, type Kpi } from "./derive";
-import type { AnalyticsData, UserRow } from "@/lib/db/analytics";
+import { acquisitionKpis, adherenceLabel, kpis, type Kpi } from "./derive";
+import type { AdherenceBase, AnalyticsData, UserRow } from "@/lib/db/analytics";
 
 export interface ExportTable {
   title: string;
@@ -37,8 +37,8 @@ const dev = (d: string) => DEVICE[d] ?? d;
 const FREQ: Record<string, string> = { daily: "Diário", weekly: "Semanal", monthly: "Mensal", sporadic: "Esporádico" };
 
 /** KPIs da visão: valor formatado e variação contra o período anterior. */
-function kpiTable(d: AnalyticsData, widgets: WidgetId[]): ExportTable | null {
-  const k = kpis(d);
+function kpiTable(d: AnalyticsData, widgets: WidgetId[], adherenceBase: AdherenceBase): ExportTable | null {
+  const k = kpis(d, adherenceBase);
   const a = acquisitionKpis(d);
   const r = d.retention;
   const map: Partial<Record<WidgetId, [string | number | null, string | null]>> = {
@@ -58,14 +58,14 @@ function kpiTable(d: AnalyticsData, widgets: WidgetId[]): ExportTable | null {
     kpi_d7: [pct(r?.d7), null],
     kpi_d30: [pct(r?.d30), null],
   };
-  const rows = widgets.filter((w) => w in map).map((w) => [WIDGETS[w], ...map[w]!]);
+  const rows = widgets.filter((w) => w in map).map((w) => [w === "kpi_stickiness" ? adherenceLabel(adherenceBase) : WIDGETS[w], ...map[w]!]);
   return rows.length ? { title: "Indicadores", columns: ["Indicador", "Valor", "Variação vs. período anterior"], rows } : null;
 }
 
 /** Tabelas da visão, na ordem dos blocos, sem repetir a mesma consulta. */
-export function analyticsTables(d: AnalyticsData, widgets: WidgetId[]): ExportTable[] {
+export function analyticsTables(d: AnalyticsData, widgets: WidgetId[], adherenceBase: AdherenceBase = "daily"): ExportTable[] {
   const out: ExportTable[] = [];
-  const kt = kpiTable(d, widgets);
+  const kt = kpiTable(d, widgets, adherenceBase);
   if (kt) out.push(kt);
   const done = new Set<string>();
   const add = (key: string, t: () => ExportTable | null) => {
