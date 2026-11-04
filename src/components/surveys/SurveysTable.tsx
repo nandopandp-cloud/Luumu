@@ -57,7 +57,8 @@ export function SurveysTable({
   /** plataformas escolhidas no seletor do header (a lista vem filtrada nelas) */
   initialHosts?: string[];
 }) {
-  const [filter, setFilter] = useState<Filter>("todas");
+  // abre em "Ativas"; "Todas" é a última aba
+  const [filter, setFilter] = useState<Filter>("ativa");
   // "" = todas as plataformas
   // uma plataforma no header: o seletor da tabela abre nela; várias: a lista vem filtrada nelas
   const [q, setQ] = useState("");
@@ -162,12 +163,12 @@ export function SurveysTable({
           value={filter}
           onChange={setFilter}
           options={[
-            { value: "todas", label: "Todas" },
             { value: "ativa", label: "Ativas" },
             { value: "agendada", label: "Agendadas" },
             { value: "rascunho", label: "Rascunhos" },
             { value: "pausada", label: "Pausadas" },
             { value: "encerrada", label: "Arquivadas" },
+            { value: "todas", label: "Todas" },
           ]}
         />
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
