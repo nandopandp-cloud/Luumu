@@ -12,6 +12,8 @@ import { normalizeHosts } from "@/lib/platform/hosts";
 import { DEFAULT_PERIOD } from "@/lib/utils/period";
 
 export const dynamic = "force-dynamic";
+// os cálculos que faltam rodam depois da resposta (after), um de cada vez
+export const maxDuration = 300;
 
 type SP = { tab?: string; view?: string; period?: string; from?: string; to?: string; host?: string; device?: string; w?: string; q?: string; seg?: string; sort?: string; dir?: string; pg?: string };
 
@@ -92,16 +94,20 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
       kpi = k.data;
       // o mais antigo dos dois; recalculando se qualquer um estiver
       const fs = [l.freshness, k.freshness].filter((x): x is Freshness => !!x);
-      freshness = fs.length ? { at: fs.map((x) => x.at).sort()[0], stale: fs.some((x) => x.stale) } : null;
+      const ats = fs.map((x) => x.at).filter((x): x is string => !!x).sort();
+      freshness = fs.length ? { at: ats[0] ?? null, stale: fs.some((x) => x.stale), pending: fs.flatMap((x) => x.pending) } : null;
     } catch (e) {
       // sem a 0022 as colunas de e-mail/nome/avatar não existem: avisa qual migração falta em vez de quebrar
       console.error("[analytics] aba Usuários", e);
       return <AnalyticsUnavailable migration="0022_analytics_users_avatar.sql" />;
     }
-    users = {
-      ...list,
-      kpis: { active: kpi.totals?.users ?? 0, identified: kpi.totals?.identified ?? 0, newUsers: kpi.newUsers?.cur ?? 0, activePrev: kpi.totals?.users_prev || null },
-    };
+    // lista ainda sendo calculada: a aba mostra "Calculando…" e pergunta de novo
+    users = list
+      ? {
+          ...list,
+          kpis: { active: kpi.totals?.users ?? 0, identified: kpi.totals?.identified ?? 0, newUsers: kpi.newUsers?.cur ?? 0, activePrev: kpi.totals?.users_prev || null },
+        }
+      : null;
   }
 
   return (

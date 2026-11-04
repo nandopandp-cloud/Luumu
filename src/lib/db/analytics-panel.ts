@@ -15,20 +15,23 @@ import {
   type Dataset,
   type PeriodScope,
 } from "./analytics";
-import { claimRefresh, pruneResults, readResults, recentResultKeys, touchResults, writeResult } from "./analytics-results";
+import { claimResults, pruneResults, readResults, recentResultKeys, releaseResult, touchResults, writeResult } from "./analytics-results";
 import { rollupAnalyticsDays } from "./analytics-rollup";
 import { brDay } from "@/lib/analytics/rollup-range";
 import { datasetsFor, TAB_LAYOUT } from "@/lib/analytics/derive";
 import { startOfTodayBR } from "@/lib/utils/period";
 
 /*
-  O painel de Analytics nunca espera um cálculo que já foi feito.
+  O painel de Analytics nunca espera um cálculo.
 
-  Cada bloco (dataset) de cada recorte tem um resultado guardado em analytics_results. Ao abrir:
+  Cada bloco (dataset) de cada recorte tem um resultado guardado em analytics_results. Ao abrir,
+  a página responde na hora com o que existe:
    - resultado dentro do prazo → mostra;
-   - resultado vencido → mostra o que tem e recalcula DEPOIS da resposta (after), e a tela se
-     atualiza sozinha quando o novo fica pronto (AnalyticsShell);
-   - sem resultado → calcula na hora (só a primeira vez de um recorte novo).
+   - resultado vencido → mostra o que tem e recalcula DEPOIS da resposta (after);
+   - sem resultado → o bloco aparece como "Calculando…" e é calculado depois da resposta.
+  Os cálculos rodam um de cada vez, do mais leve ao mais pesado, e a tela (AnalyticsShell)
+  pergunta de novo a cada poucos segundos, preenchendo bloco a bloco. Em seguida são adiantadas
+  as outras abas do mesmo recorte e Hoje/7/30 dias da mesma plataforma (prefetch).
   O cron da madrugada (warmAnalyticsResults) recalcula, uma consulta por vez, o que foi aberto
   nos últimos 7 dias e Hoje/7/30 dias de cada projeto ativo, então a primeira abertura do dia
   também é instantânea. Os resultados ficam no banco: sobrevivem a deploys (o cache do Next não,
@@ -125,31 +128,79 @@ function later(fn: () => Promise<unknown>) {
   }
 }
 
-/** Calcula na ordem certa (a tendência de eventos por último) e guarda cada resultado. */
-async function computeAll(projectId: string, specs: Map<Id, Spec>, ids: Id[], st: AnalyticsSettings, have: Map<Id, unknown>, store: (k: Id, v: unknown) => Promise<unknown>) {
-  const first = ids.filter((k) => k !== "eventTrend");
-  await Promise.all(
-    first.map(async (k) => {
-      const v = await compute(projectId, specs.get(k)!, st, have);
-      have.set(k, v);
-      await store(k, v);
-    })
-  );
-  if (ids.includes("eventTrend")) {
-    const v = await compute(projectId, specs.get("eventTrend")!, st, have);
-    have.set("eventTrend", v);
-    await store("eventTrend", v);
+/** Do mais leve ao mais pesado (medido no maior projeto): o que é barato aparece primeiro. */
+const COST_ORDER: Id[] = [
+  "usersList", "daily", "totals", "devices", "channels", "entry", "exit", "campaigns", "frequency", "hours", "techs", "deviceTrend",
+  "newUsers", "recurrent", "mau", "pages", "configured", "funnel", "retention", "outcomes", "outcomesPrev", "events", "eventTrend",
+];
+const byCost = (a: Id, b: Id) => COST_ORDER.indexOf(a) - COST_ORDER.indexOf(b);
+
+interface Item {
+  k: Id;
+  spec: Spec;
+  key: string;
+}
+
+/**
+ * Trava e calcula os itens, UM DE CADA VEZ e do mais leve ao mais pesado, guardando cada um assim
+ * que fica pronto (a tela, que pergunta de novo a cada 2 s, vai preenchendo bloco a bloco). Um de
+ * cada vez: várias consultas pesadas juntas saturam a compute e atrasam todas.
+ */
+async function computeClaimed(projectId: string, st: AnalyticsSettings, items: Item[], have: Map<Id, unknown>) {
+  if (!items.length) return;
+  const claimed = await claimResults(projectId, items.map((i) => i.key));
+  for (const it of [...items].sort((a, b) => byCost(a.k, b.k))) {
+    if (!claimed.has(it.key)) continue;
+    try {
+      const v = await compute(projectId, it.spec, st, have);
+      have.set(it.k, v);
+      await writeResult(projectId, it.key, v);
+    } catch (e) {
+      console.error("[analytics] cálculo", it.key, e);
+      await releaseResult(projectId, it.key).catch(() => {});
+    }
+  }
+}
+
+/**
+ * Depois do que foi pedido, adianta o que a pessoa provavelmente abre em seguida: as outras abas
+ * do mesmo recorte e Hoje/7/30 dias da mesma plataforma. Só o que ainda não existe (o que existe e
+ * venceu é recalculado quando alguém abre).
+ */
+async function prefetch(p: PeriodScope, st: AnalyticsSettings) {
+  const scopes: [PeriodScope, readonly Id[]][] = [[p, DATASETS]];
+  for (const period of SEED_PERIODS) {
+    if (period !== p.period) scopes.push([{ projectId: p.projectId, period, host: p.host, device: p.device }, SEED_FIRST]);
+  }
+  for (const [scope, ids] of scopes) {
+    const items: Item[] = ids.map((k) => {
+      const spec = specOf(k, scope, st);
+      return { k, spec, key: keyOf(spec) };
+    });
+    const stored = (await readResults(scope.projectId, items.map((i) => i.key))) ?? new Map();
+    const have = new Map<Id, unknown>();
+    const todo = items.filter((i) => {
+      const e = stored.get(i.key);
+      if (e && e.at > 0) have.set(i.k, e.value);
+      return !(e && e.at > 0);
+    });
+    await computeClaimed(scope.projectId, st, todo, have);
   }
 }
 
 export interface Freshness {
-  /** quando foi calculado o resultado mais antigo mostrado (ISO) */
-  at: string;
+  /** quando foi calculado o resultado mais antigo mostrado (ISO); null = nenhum pronto ainda */
+  at: string | null;
   /** algum resultado mostrado está vencido e está sendo recalculado */
   stale: boolean;
+  /** blocos ainda sem resultado, sendo calculados agora */
+  pending: string[];
 }
 
-/** Lê os resultados, calcula o que falta e agenda o recálculo do que venceu. */
+/**
+ * Lê os resultados e responde NA HORA com o que existe. O que falta e o que venceu é calculado
+ * depois da resposta (after); a tela mostra "Calculando…" nesses blocos e pergunta de novo.
+ */
 async function readThrough(p: PeriodScope, st: AnalyticsSettings, specs: Map<Id, Spec>): Promise<{ have: Map<Id, unknown>; freshness: Freshness } | null> {
   const keys = new Map([...specs].map(([k, s]) => [k, keyOf(s)]));
   const stored = await readResults(p.projectId, [...keys.values()]);
@@ -160,38 +211,25 @@ async function readThrough(p: PeriodScope, st: AnalyticsSettings, specs: Map<Id,
   const have = new Map<Id, unknown>();
   const stale: Id[] = [];
   const missing: Id[] = [];
-  let oldest = now;
+  let oldest: number | null = null;
   for (const [k, key] of keys) {
     const e = stored.get(key);
-    if (e && now - e.at <= pol.maxStale) {
+    // at = 0: linha reservada por um cálculo em andamento, ainda sem resultado
+    if (e && e.at > 0 && now - e.at <= pol.maxStale) {
       have.set(k, e.value);
-      oldest = Math.min(oldest, e.at);
+      oldest = Math.min(oldest ?? e.at, e.at);
       if (now - e.at > pol.fresh) stale.push(k);
     } else missing.push(k);
   }
 
-  if (missing.length) {
-    const fresh: [Id, unknown][] = [];
-    await computeAll(p.projectId, specs, missing, st, have, async (k, v) => void fresh.push([k, v]));
-    later(() => Promise.all(fresh.map(([k, v]) => writeResult(p.projectId, keys.get(k)!, v))));
-  }
-
-  const seen = [...keys].filter(([k]) => !missing.includes(k)).map(([, key]) => key);
   later(async () => {
-    await touchResults(p.projectId, seen);
-    if (!stale.length) return;
-    const claimed = await claimRefresh(p.projectId, stale.map((k) => keys.get(k)!));
-    const mine = stale.filter((k) => claimed.has(keys.get(k)!));
-    // um de cada vez: o recálculo não deve disputar a compute com quem está navegando
-    const next = new Map(have);
-    for (const k of [...mine.filter((x) => x !== "eventTrend"), ...mine.filter((x) => x === "eventTrend")]) {
-      const v = await compute(p.projectId, specs.get(k)!, st, next);
-      next.set(k, v);
-      await writeResult(p.projectId, keys.get(k)!, v);
-    }
+    await touchResults(p.projectId, [...keys.values()]);
+    const items = [...missing, ...stale].map((k) => ({ k, spec: specs.get(k)!, key: keys.get(k)! }));
+    await computeClaimed(p.projectId, st, items, new Map(have));
+    await prefetch(p, st);
   });
 
-  return { have, freshness: { at: new Date(oldest).toISOString(), stale: stale.length > 0 } };
+  return { have, freshness: { at: oldest === null ? null : new Date(oldest).toISOString(), stale: stale.length > 0, pending: missing } };
 }
 
 /** Datasets do painel (mesmo formato de getAnalytics), servidos dos resultados prontos. */
@@ -220,7 +258,7 @@ export async function listAnalyticsUsersPanel(p: PeriodScope, st: AnalyticsSetti
   const norm = { q: (opts.q ?? "").trim().toLowerCase(), segment: opts.segment ?? "all", sort: opts.sort ?? "recent", dir: opts.dir ?? "desc", page: opts.page ?? 1 };
   const r = await readThrough(p, st, new Map<Id, Spec>([["usersList", specOf("usersList", p, st, norm)]]));
   if (!r) return { list: await listAnalyticsUsers(resolvePeriod(p), opts), freshness: null };
-  return { list: r.have.get("usersList") as Awaited<ReturnType<typeof listAnalyticsUsers>>, freshness: r.freshness };
+  return { list: r.have.get("usersList") as Awaited<ReturnType<typeof listAnalyticsUsers>> | undefined, freshness: r.freshness };
 }
 
 /* ---------- cron ---------- */
@@ -258,12 +296,17 @@ export async function warmAnalyticsResults(budgetMs = 200_000) {
     m.set(keyOf(s), s);
     round.set(projectId, m);
   };
+  const openedScopes: [string, Spec][] = [];
   for (const r of recent) {
     const s = parseKey(r.key);
-    if (s && s.period !== "custom") add(rounds[0], r.projectId, s);
+    if (!s || s.period === "custom") continue;
+    add(rounds[0], r.projectId, s);
+    openedScopes.push([r.projectId, s]);
   }
   for (const { project_id } of active) for (const period of SEED_PERIODS) for (const k of SEED_FIRST) add(rounds[0], project_id, { k, period });
   for (const { project_id } of active) for (const period of SEED_PERIODS) for (const k of SEED_LATER) add(rounds[1], project_id, { k, period });
+  // as outras abas de cada recorte aberto (plataforma/dispositivo/período), para a troca de aba
+  for (const [projectId, s] of openedScopes) for (const k of DATASETS) add(rounds[1], projectId, { ...s, k, extra: undefined });
 
   let computed = 0;
   let skipped = 0;

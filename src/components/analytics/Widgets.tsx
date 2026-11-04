@@ -72,8 +72,10 @@ import {
   retentionCurve,
   retentionMatrix,
   weekly,
+  WIDGET_DATASETS,
   type Kpi,
 } from "@/lib/analytics/derive";
+import { Skeleton } from "@/components/ui/Skeleton";
 import type { AnalyticsData } from "@/lib/db/analytics";
 
 /* ---------- contexto ---------- */
@@ -87,6 +89,8 @@ export interface WidgetCtx {
   /** KPIs em faixa cheia (5–6 por linha): versão compacta */
   dense?: boolean;
   settings: { northStarEvent: string | null; activationEvent: string | null; taskStartEvent: string | null; taskDoneEvent: string | null };
+  /** datasets ainda sendo calculados (o bloco que depende deles mostra "Calculando…") */
+  pending?: ReadonlySet<string>;
 }
 
 const axis = { fontSize: 11, fill: "var(--text-mut)", fontFamily: "var(--font-mono)" };
@@ -148,6 +152,24 @@ export function Panel({
       </div>
       <div className="flex min-h-0 flex-1 flex-col">{children}</div>
     </section>
+  );
+}
+
+/** Bloco cujo resultado ainda está sendo calculado (a tela pergunta de novo sozinha). */
+function PendingWidget({ id }: { id: WidgetId }) {
+  if (id.startsWith("kpi_")) {
+    return (
+      <div className="flex h-full min-h-[118px] flex-col justify-between rounded-2xl border border-line bg-bg-elev p-4 shadow-[var(--shadow-sm)]">
+        <span className="text-[13px] font-semibold text-fg-mut">{WIDGETS[id]}</span>
+        <Skeleton className="h-7 w-24" />
+        <span className="text-xs text-fg-mut">Calculando…</span>
+      </div>
+    );
+  }
+  return (
+    <Panel title={WIDGETS[id]} subtitle="Calculando…">
+      <Skeleton className="h-52 w-full" />
+    </Panel>
   );
 }
 
@@ -252,6 +274,8 @@ export function Widget({ id, ctx }: { id: WidgetId; ctx: WidgetCtx }) {
   const K = useMemo(() => kpis(d), [d]);
   const A = useMemo(() => acquisitionKpis(d), [d]);
   const active = d.configured?.active ?? d.totals?.users ?? 0;
+
+  if (ctx.pending?.size && WIDGET_DATASETS[id]?.some((k) => ctx.pending!.has(k))) return <PendingWidget id={id} />;
 
   switch (id) {
     case "kpi_dau":

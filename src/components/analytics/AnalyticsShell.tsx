@@ -21,6 +21,7 @@ import { ToggleCollection } from "./States";
 import { UsersView, type UsersData } from "./UsersView";
 import { CustomGrid, ViewEditor, type EditStart } from "./ViewEditor";
 import { ManageViewsDialog, usePopover, ViewsMenu } from "./ViewsMenu";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 const SPAN: Record<number, string> = {
   2: "xl:col-span-2",
@@ -101,8 +102,10 @@ export function AnalyticsShell({
   const [editing, setEditing] = useState<EditStart | null>(null);
   const meta = TAB_META[config.tab];
 
+  const pending = useMemo(() => new Set(freshness?.pending ?? []), [freshness?.pending]);
   const ctx: WidgetCtx = {
     dense: false,
+    pending,
     data,
     multiHost: hosts.length > 1 && !config.host,
     onConfigure: () => setDialog("metrics"),
@@ -238,6 +241,13 @@ export function AnalyticsShell({
       {/* blocos */}
       {config.tab === "users" && users ? (
         <UsersView data={users} />
+      ) : config.tab === "users" ? (
+        <div className="flex flex-col gap-3 rounded-2xl border border-line bg-bg-elev p-5">
+          <span className="text-sm text-fg-mut">Calculando a lista de usuários…</span>
+          {Array.from({ length: 6 }, (_, i) => (
+            <Skeleton key={i} className="h-10 w-full" />
+          ))}
+        </div>
       ) : config.tab === "custom" && !blocks.length ? (
         <button
           type="button"
@@ -457,31 +467,38 @@ function CollectionPill({ enabled, canManage, since }: { enabled: boolean; canMa
   servidor recalcula depois da resposta e esta nota pede a página de novo até chegar o novo
   (router.refresh mantém a tela, sem o carregador).
 */
-const REFRESH_AFTER_MS = 6_000;
-const REFRESH_TRIES = 8;
+/** Blocos calculando: pergunta a cada 2 s (até ~3 min); só vencidos: a cada 6 s (até ~1 min). */
+const POLL_PENDING_MS = 2_000;
+const POLL_STALE_MS = 6_000;
+const MAX_TRIES = 90;
 
 function FreshnessNote({ freshness }: { freshness: Freshness }) {
   const router = useRouter();
   const [tries, setTries] = useState(0);
-  const waiting = freshness.stale && tries < REFRESH_TRIES;
+  const pending = freshness.pending.length > 0;
+  const waiting = (pending || freshness.stale) && tries < (pending ? MAX_TRIES : 10);
 
   useEffect(() => {
     if (!waiting) return;
-    const t = setTimeout(() => {
-      setTries((n) => n + 1);
-      router.refresh();
-    }, REFRESH_AFTER_MS);
+    const t = setTimeout(
+      () => {
+        setTries((n) => n + 1);
+        router.refresh();
+      },
+      pending ? POLL_PENDING_MS : POLL_STALE_MS
+    );
     return () => clearTimeout(t);
-  }, [waiting, freshness.at, tries, router]);
+  }, [waiting, pending, freshness.at, freshness.pending.length, tries, router]);
 
-  const at = new Date(freshness.at);
   const tz = "America/Sao_Paulo";
-  const sameDay = at.toLocaleDateString("pt-BR", { timeZone: tz }) === new Date().toLocaleDateString("pt-BR", { timeZone: tz });
-  const when = `${sameDay ? "" : `${at.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", timeZone: tz })} `}às ${at.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: tz })}`;
+  const at = freshness.at ? new Date(freshness.at) : null;
+  const sameDay = at && at.toLocaleDateString("pt-BR", { timeZone: tz }) === new Date().toLocaleDateString("pt-BR", { timeZone: tz });
+  const when = at ? `${sameDay ? "" : `${at.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", timeZone: tz })} `}às ${at.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: tz })}` : "";
+  const text = pending ? "Calculando…" : waiting ? `Atualizando · dados ${when}` : `Atualizado ${when}`;
   return (
     <span className="inline-flex items-center gap-1.5 text-xs text-fg-mut" title="Os números ficam prontos de antemão e são recalculados periodicamente.">
       {waiting && <Loader2 className="size-3.5 animate-spin" aria-hidden />}
-      {waiting ? `Atualizando · dados ${when}` : `Atualizado ${when}`}
+      {text}
     </span>
   );
 }

@@ -45,19 +45,27 @@ export async function writeResult(projectId: string, key: string, value: unknown
 }
 
 /**
- * Trava o recálculo das chaves para esta instância: devolve só as que ninguém está recalculando
- * (ou cuja trava passou de 5 min). Evita que várias abas abertas refaçam a mesma consulta.
+ * Trava o cálculo das chaves para esta instância e devolve as que conseguiu: as que ninguém está
+ * calculando (ou cuja trava passou de 5 min). Chave sem linha ainda ganha uma linha reservada
+ * (value null, computed_at = 1970) que a leitura trata como "sem resultado". Evita que várias
+ * abas abertas refaçam a mesma consulta.
  */
-export async function claimRefresh(projectId: string, keys: string[]): Promise<Set<string>> {
+export async function claimResults(projectId: string, keys: string[]): Promise<Set<string>> {
   if (!keys.length) return new Set();
   const r = rows<{ key: string }>(
     await db.execute(sql`
-      update analytics_results set refreshing_at = now()
-       where project_id = ${projectId} and key in (${list(keys)})
-         and (refreshing_at is null or refreshing_at < now() - interval '5 minutes')
+      insert into analytics_results (project_id, key, value, computed_at, accessed_at, refreshing_at)
+      select ${projectId}, k, 'null'::jsonb, to_timestamp(0), now(), now() from unnest(array[${list(keys)}]::text[]) k
+      on conflict (project_id, key) do update set refreshing_at = now()
+       where analytics_results.refreshing_at is null or analytics_results.refreshing_at < now() - interval '5 minutes'
       returning key`)
   );
   return new Set(r.map((x) => x.key));
+}
+
+/** Solta a trava de uma chave (cálculo que falhou). */
+export async function releaseResult(projectId: string, key: string) {
+  await db.execute(sql`update analytics_results set refreshing_at = null where project_id = ${projectId} and key = ${key}`);
 }
 
 /** Marca as chaves como abertas agora (no máximo uma escrita por hora por chave). */
