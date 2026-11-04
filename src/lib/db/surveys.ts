@@ -254,7 +254,7 @@ export async function createSurveyFromTemplate(
 export async function duplicateSurvey(
   id: string,
   scope: SurveyScope,
-  schedule: { name?: string; startsAt: string | null; endsAt: string | null },
+  schedule: { name?: string; startsAt: string | null; endsAt: string | null; publish?: boolean },
   createdBy?: string
 ) {
   const source = await assertOwned(id, scope);
@@ -271,7 +271,9 @@ export async function duplicateSurvey(
     projectId: source.projectId,
     name: schedule.name?.trim() || `${source.name} (cópia)`,
     type: source.type,
-    status: "rascunho",
+    // publicada com vigência = agendada até o início (o SDK só a exibe dentro da vigência)
+    status: schedule.publish ? "ativa" : "rascunho",
+    publishedAt: schedule.publish ? new Date() : null,
     channel: source.channel,
     audience: source.audience,
     segment: source.segment,
@@ -435,6 +437,21 @@ export async function enforceResponseLimit(id: string, known?: SurveyRow) {
       .set({ status: scheduled ? "encerrada" : "pausada", updatedAt: new Date() })
       .where(eq(surveys.id, id));
   }
+}
+
+/**
+ * Fim da vigência: pesquisa publicada cujo último dia (ends_at, data civil) já passou no fuso do
+ * workspace vai para "encerrada" (Arquivadas no painel). Roda no cron diário (todos) e ao abrir a
+ * lista (o projeto aberto), para não esperar o cron. Devolve quantas mudaram.
+ */
+export async function archiveExpiredSurveys(projectId?: string): Promise<number> {
+  const r = (await db.execute(sql`
+    update surveys s set status = 'encerrada', updated_at = now()
+      from workspaces w
+     where w.id = s.workspace_id and s.status = 'ativa' and s.ends_at is not null and s.ends_at <> ''
+       and s.ends_at < to_char(now() at time zone coalesce(nullif(w.timezone, ''), 'America/Sao_Paulo'), 'YYYY-MM-DD')
+       ${projectId ? sql`and s.project_id = ${projectId}` : sql``}`)) as unknown as { rowCount?: number };
+  return r.rowCount ?? 0;
 }
 
 export async function deleteSurvey(id: string, scope: SurveyScope) {

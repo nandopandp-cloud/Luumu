@@ -6,11 +6,11 @@ import { Button } from "@/components/ui/Button";
 import { IllustratedState } from "@/components/ui/IllustratedState";
 import { SurveysEmptyArt } from "@/components/illustrations/EmptyArt";
 import { SurveysTable, type SurveyListItem } from "@/components/surveys/SurveysTable";
-import { listSurveys } from "@/lib/db/surveys";
+import { archiveExpiredSurveys, listSurveys } from "@/lib/db/surveys";
 import { listHosts } from "@/lib/db/hosts";
 import { getCurrentProjectId, getCurrentWorkspaceId } from "@/lib/auth/current";
 import { getWorkspace } from "@/lib/db/workspace";
-import { today } from "@/lib/surveys/schedule";
+import { displayStatus, scheduleLabel, today } from "@/lib/surveys/schedule";
 import { timeAgo } from "@/lib/utils";
 import type { SurveyStatus } from "@/lib/surveys/types";
 
@@ -18,6 +18,8 @@ export const dynamic = "force-dynamic";
 
 export default async function SurveysPage() {
   const [projectId, workspaceId] = await Promise.all([getCurrentProjectId(), getCurrentWorkspaceId()]);
+  // vigência vencida → arquivada (o cron diário faz o mesmo para todos os projetos)
+  await archiveExpiredSurveys(projectId).catch((e) => console.error("[surveys] arquivar vencidas", e));
   const [rows, workspace, hosts, platform] = await Promise.all([
     listSurveys(projectId),
     getWorkspace(workspaceId),
@@ -33,6 +35,8 @@ export default async function SurveysPage() {
     name: s.name,
     type: s.type,
     status: s.status as SurveyStatus,
+    display: displayStatus(s.status as SurveyStatus, s.startsAt, s.endsAt, currentDate),
+    schedule: s.startsAt || s.endsAt ? scheduleLabel(s.startsAt, s.endsAt) : null,
     channel: s.channel,
     targetHosts: (s.targetHosts as string[]) ?? [],
     creator: s.creator,

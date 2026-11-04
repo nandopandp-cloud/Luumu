@@ -16,6 +16,7 @@ import { sendEmail } from "@/lib/email/send";
 import { reportEmailHtml } from "@/lib/email/report-template";
 import { getAppOrigin } from "@/lib/config/env";
 import { pruneBehaviorData } from "@/lib/db/retention";
+import { archiveExpiredSurveys } from "@/lib/db/surveys";
 import { runProductReportCron } from "@/lib/product-report/cron";
 
 export const dynamic = "force-dynamic";
@@ -166,9 +167,11 @@ export async function GET(req: Request) {
   // mesma rodada diária: limpeza dos dados de comportamento além da retenção do plano
   // (aproveita o cron que já existe; best-effort, não afeta os relatórios)
   const pruned = await pruneBehaviorData().catch((e) => ({ error: String(e) }));
+  // pesquisas cuja vigência terminou: "encerrada" (Arquivadas no painel)
+  const archivedSurveys = await archiveExpiredSurveys().catch((e) => ({ error: String(e) }));
 
   // Report Quinzenal de Produto: atualiza a quinzena encerrada (só onde a automação foi ligada)
   const productReport = await runProductReportCron().catch(() => [{ period: "", status: "error" }]);
 
-  return NextResponse.json({ processed: results.length, results, pruned, productReport });
+  return NextResponse.json({ processed: results.length, results, pruned, archivedSurveys, productReport });
 }

@@ -16,14 +16,18 @@ import { SegmentedControl } from "@/components/ui/Tabs";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils";
 import { setStatusAction, renameSurveyAction, deleteSurveyAction, duplicateSurveyAction } from "@/app/(app)/surveys/actions";
-import { addDays, scheduleLabel } from "@/lib/surveys/schedule";
-import { SURVEY_STATUS_LABEL, type SurveyStatus } from "@/lib/surveys/types";
+import { addDays, formatDate, scheduleLabel } from "@/lib/surveys/schedule";
+import { SURVEY_STATUS_LABEL, type SurveyDisplayStatus, type SurveyStatus } from "@/lib/surveys/types";
 
 export interface SurveyListItem {
   id: string;
   name: string;
   type: string;
   status: SurveyStatus;
+  /** status do painel: "agendada" = publicada com início da vigência no futuro */
+  display: SurveyDisplayStatus;
+  /** vigência legível ("09/11/2026 a 15/11/2026"); null = sem vigência */
+  schedule: string | null;
   channel: string;
   targetHosts: string[]; // plataformas onde aparece ([] = todas)
   creator: { name: string; avatarUrl: string | null } | null; // null = sem registro de autor
@@ -32,11 +36,11 @@ export interface SurveyListItem {
   updatedAtLabel: string;
 }
 
-const statusTone: Record<SurveyStatus, "success" | "warn" | "neutral" | "brand"> = {
-  ativa: "success", pausada: "warn", encerrada: "neutral", rascunho: "brand",
+const statusTone: Record<SurveyDisplayStatus, "success" | "warn" | "neutral" | "brand" | "info"> = {
+  ativa: "success", agendada: "info", pausada: "warn", encerrada: "neutral", rascunho: "brand",
 };
 
-type Filter = "todas" | SurveyStatus;
+type Filter = "todas" | SurveyDisplayStatus;
 
 // valor do filtro de plataforma para pesquisas sem alvo (aparecem em todas as plataformas)
 
@@ -78,7 +82,7 @@ export function SurveysTable({
   */
   const filtered = items.filter(
     (s) =>
-      (filter === "todas" || s.status === filter) &&
+      (filter === "todas" || s.display === filter) &&
       (!initialHosts.length || s.targetHosts.some((h) => initialHosts.includes(h))) &&
       s.name.toLowerCase().includes(q.toLowerCase())
   );
@@ -88,7 +92,7 @@ export function SurveysTable({
     name: (x) => x.name,
     creator: (x) => x.creator?.name ?? null,
     type: (x) => x.type,
-    status: (x) => x.status,
+    status: (x) => x.display,
     channel: (x) => x.channel,
     responses: (x) => x.responseCount,
     score: (x) => x.score,
@@ -119,15 +123,20 @@ export function SurveysTable({
     });
   }
 
-  function doDuplicate(values: { name: string; startsAt: string; endsAt: string }) {
+  function doDuplicate(values: { name: string; startsAt: string; endsAt: string; schedule: boolean }) {
     if (!duplicating) return;
     const target = duplicating;
     startTransition(async () => {
       const res = await duplicateSurveyAction({ id: target.id, ...values });
-      if (res.ok) {
+      if (res.ok && values.schedule) {
+        setDuplicating(null);
+        // agendada: entra no ar sozinha no início da vigência; fica na lista, na aba Agendadas
+        toast("success", values.startsAt > currentDate ? `Pesquisa agendada: ${scheduleLabel(values.startsAt, values.endsAt)}.` : "Pesquisa duplicada e publicada.");
+        router.refresh();
+      } else if (res.ok) {
         setDuplicating(null);
         toast("success", "Pesquisa duplicada. Abrindo a cópia…");
-        // a cópia nasce como rascunho: leva direto ao builder dela para revisar e publicar
+        // rascunho: leva direto ao builder da cópia para revisar e publicar
         router.push(`/surveys/${res.id}/builder`);
       } else {
         toast("error", res.error ?? "Não foi possível duplicar.");
@@ -155,6 +164,7 @@ export function SurveysTable({
           options={[
             { value: "todas", label: "Todas" },
             { value: "ativa", label: "Ativas" },
+            { value: "agendada", label: "Agendadas" },
             { value: "rascunho", label: "Rascunhos" },
             { value: "pausada", label: "Pausadas" },
             { value: "encerrada", label: "Arquivadas" },
@@ -226,7 +236,12 @@ export function SurveysTable({
                     )}
                   </td>
                   <td className="px-3 py-3.5"><Badge tone="brand" dot={false}>{s.type}</Badge></td>
-                  <td className="px-3 py-3.5"><Badge tone={statusTone[s.status]}>{SURVEY_STATUS_LABEL[s.status].toLowerCase()}</Badge></td>
+                  <td className="px-3 py-3.5">
+                    <span title={s.schedule ? `Vigência: ${s.schedule}` : undefined}>
+                      <Badge tone={statusTone[s.display]}>{SURVEY_STATUS_LABEL[s.display].toLowerCase()}</Badge>
+                    </span>
+                    {s.display === "agendada" && s.schedule && <div className="mt-1 text-[11px] text-fg-mut">{s.schedule}</div>}
+                  </td>
                   <td className="px-3 py-3.5 text-fg-soft">{s.channel}</td>
                   <td className="px-3 py-3.5 text-fg-soft">{s.responseCount}</td>
                   <td className="px-3 py-3.5 font-bold text-luumu-roxo">{s.score ?? "—"}</td>
@@ -377,15 +392,19 @@ function DuplicateDialog({
   survey: SurveyListItem;
   currentDate: string;
   onCancel: () => void;
-  onConfirm: (values: { name: string; startsAt: string; endsAt: string }) => void;
+  onConfirm: (values: { name: string; startsAt: string; endsAt: string; schedule: boolean }) => void;
 }) {
   const [name, setName] = useState(`${survey.name} (cópia)`);
   const [startsAt, setStartsAt] = useState(currentDate);
   const [endsAt, setEndsAt] = useState(() => addDays(currentDate, 30));
+  // agendar (publica já com a vigência) ou criar como rascunho para revisar antes
+  const [schedule, setSchedule] = useState(true);
   const [saving, start] = useTransition();
 
   const invalidRange = Boolean(startsAt && endsAt && startsAt > endsAt);
-  const valid = name.trim().length > 0 && !invalidRange;
+  const endPassed = Boolean(schedule && endsAt && endsAt < currentDate);
+  const valid = name.trim().length > 0 && !invalidRange && !endPassed && (!schedule || Boolean(startsAt));
+  const future = Boolean(startsAt && startsAt > currentDate);
 
   return (
     <Backdrop onClose={onCancel}>
@@ -425,18 +444,38 @@ function DuplicateDialog({
         <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome da pesquisa" />
       </Field>
 
-      <p className="mt-3 text-xs text-fg-mut">
-        A cópia é criada como rascunho para você revisar antes de publicar.
-      </p>
+      <div className="mt-4 grid gap-2" role="radiogroup" aria-label="Depois de duplicar">
+        <label className={cn("flex cursor-pointer items-start gap-3 rounded-xl border p-3 text-sm transition", schedule ? "border-accent bg-surface-brand" : "border-line")}>
+          <input type="radio" className="mt-0.5 accent-[var(--accent)]" checked={schedule} onChange={() => setSchedule(true)} />
+          <span>
+            <span className="font-semibold">{future ? "Agendar" : "Publicar agora"}</span>
+            <span className="block text-xs text-fg-mut">
+              {future
+                ? `Fica como agendada e entra no ar sozinha em ${formatDate(startsAt)}${endsAt ? `; sai do ar depois de ${formatDate(endsAt)}` : ""}.`
+                : `Entra no ar hoje${endsAt ? ` e sai depois de ${formatDate(endsAt)}` : ""}.`}
+            </span>
+          </span>
+        </label>
+        <label className={cn("flex cursor-pointer items-start gap-3 rounded-xl border p-3 text-sm transition", !schedule ? "border-accent bg-surface-brand" : "border-line")}>
+          <input type="radio" className="mt-0.5 accent-[var(--accent)]" checked={!schedule} onChange={() => setSchedule(false)} />
+          <span>
+            <span className="font-semibold">Salvar como rascunho</span>
+            <span className="block text-xs text-fg-mut">Abre a cópia no editor para revisar e publicar depois.</span>
+          </span>
+        </label>
+        {schedule && !startsAt && <p className="text-xs text-erro">Escolha a data de início para agendar.</p>}
+        {endPassed && <p className="text-xs text-erro">A data de fim já passou: a pesquisa não entraria no ar.</p>}
+      </div>
 
       <div className="mt-5 flex justify-end gap-2">
         <Button variant="ghost" size="sm" onClick={onCancel}>Cancelar</Button>
         <Button
           size="sm"
           disabled={!valid || saving}
-          onClick={() => start(() => onConfirm({ name: name.trim(), startsAt, endsAt }))}
+          onClick={() => start(() => onConfirm({ name: name.trim(), startsAt, endsAt, schedule }))}
         >
-          {saving ? <Loader2 className="size-4 animate-spin" /> : <Copy className="size-4" />} Duplicar
+          {saving ? <Loader2 className="size-4 animate-spin" /> : schedule ? <CalendarRange className="size-4" /> : <Copy className="size-4" />}{" "}
+          {schedule ? (future ? "Duplicar e agendar" : "Duplicar e publicar") : "Duplicar"}
         </Button>
       </div>
     </Backdrop>

@@ -139,7 +139,7 @@ export const HELP: HelpCategory[] = [
       {
         id: "status",
         q: "O que significa cada status?",
-        a: "- Rascunho: em edição, não aparece para ninguém.\n- Ativa: publicada e aparecendo.\n- Pausada: fica fora do ar, mas pode ser retomada.\n- Arquivada: saiu do ar e não recebe mais respostas. Qualquer pesquisa pode ser arquivada pelo menu (⋯) da lista; ela fica na aba Arquivadas.",
+        a: "- Rascunho: em edição, não aparece para ninguém.\n- Ativa: publicada e aparecendo.\n- Agendada: publicada, mas a vigência ainda não começou; entra no ar sozinha na data de início e, depois do último dia da vigência, vai sozinha para Arquivadas. Ao duplicar uma pesquisa você escolhe as datas e pode agendá-la direto.\n- Pausada: fica fora do ar, mas pode ser retomada.\n- Arquivada: saiu do ar e não recebe mais respostas. Qualquer pesquisa pode ser arquivada pelo menu (⋯) da lista; ela fica na aba Arquivadas.",
       },
       {
         id: "idioma",

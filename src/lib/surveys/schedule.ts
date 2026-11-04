@@ -11,6 +11,8 @@
  * pesquisa virar de vigência algumas horas antes/depois da meia-noite do cliente.
  */
 
+import type { SurveyDisplayStatus, SurveyStatus } from "./types";
+
 /** Fuso padrão dos workspaces (mesmo default de `workspaces.timezone` no schema). */
 export const DEFAULT_TIMEZONE = "America/Sao_Paulo";
 
@@ -54,6 +56,16 @@ export function isWithinSchedule(
   ref: string = today()
 ): boolean {
   return scheduleState(startsAt, endsAt, ref) === "vigente";
+}
+
+/** Status do painel: publicada com início no futuro = "agendada" (ver SurveyDisplayStatus). */
+export function displayStatus(
+  status: SurveyStatus,
+  startsAt: string | null | undefined,
+  endsAt: string | null | undefined,
+  ref: string = today()
+): SurveyDisplayStatus {
+  return status === "ativa" && scheduleState(startsAt, endsAt, ref) === "agendada" ? "agendada" : status;
 }
 
 /** Rótulo legível da vigência, para exibir no diálogo e nas configurações. */

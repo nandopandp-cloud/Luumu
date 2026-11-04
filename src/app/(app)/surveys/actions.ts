@@ -173,7 +173,10 @@ const duplicateSchema = z
     name: z.string().trim().max(120, "Nome muito longo.").optional(),
     startsAt: z.string().optional(),
     endsAt: z.string().optional(),
+    /** true = a cópia já nasce publicada com a vigência (agendada se o início for futuro) */
+    schedule: z.boolean().optional(),
   })
+  .refine((d) => !d.schedule || Boolean(normalizeDate(d.startsAt)), { message: "Escolha a data de início para agendar." })
   .refine(
     (d) => {
       const from = normalizeDate(d.startsAt);
@@ -195,6 +198,7 @@ export async function duplicateSurveyAction(input: unknown) {
       name: parsed.data.name,
       startsAt: normalizeDate(parsed.data.startsAt),
       endsAt: normalizeDate(parsed.data.endsAt),
+      publish: parsed.data.schedule === true,
     },
     user.userId
   );
