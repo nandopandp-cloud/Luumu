@@ -5,6 +5,7 @@ import { db } from "./client";
 import { analyticsPageviews, analyticsSessions, analyticsSettings, analyticsUsers, analyticsViews, avatarSvgParts, avatarSvgs } from "@/lib/db/schema";
 import { analyticsViewId } from "./ids";
 import { sharedCache } from "./shared-cache";
+import { rollupPlan, rollupQueries } from "./analytics-rollup";
 import { periodToRange, startOfTodayBR } from "@/lib/utils/period";
 import { hostList } from "@/lib/platform/hosts";
 import { sanitizeSvg, svgHash } from "@/lib/analytics/svg-avatar";
@@ -442,8 +443,10 @@ async function configured(s: AnalyticsScope, p: AnalyticsScope, st: AnalyticsSet
       ? sql`, count(distinct p.anon_id) filter (where ${name} = any(p.events) and p.created_at >= ${iso(s.from)}::timestamptz)::int ${sql.raw(col)},
              count(distinct p.anon_id) filter (where ${name} = any(p.events) and p.created_at < ${iso(s.from)}::timestamptz)::int ${sql.raw(col + "_prev")}`
       : sql``;
+  // dias prontos do resumo diário (exato e ~12× menor); sem eles, as telas
+  const [cur, prev] = await Promise.all([rollupPlan(s.from, s.to), rollupPlan(p.from, p.to)]);
   const [r] = rows<Record<string, number>>(
-    await db.execute(sql`
+    await db.execute(cur && prev ? rollupQueries.configured(s, cur, p, prev, st) : sql`
       select count(distinct p.anon_id) filter (where p.created_at >= ${iso(s.from)}::timestamptz)::int active,
              count(distinct p.anon_id) filter (where p.created_at < ${iso(s.from)}::timestamptz)::int active_prev,
              count(distinct p.anon_id) filter (where cardinality(p.events) > 0 and p.created_at >= ${iso(s.from)}::timestamptz)::int any_event,
@@ -458,8 +461,9 @@ async function configured(s: AnalyticsScope, p: AnalyticsScope, st: AnalyticsSet
 async function engagementFunnel(s: AnalyticsScope, st: AnalyticsSettings) {
   const step2 = st.taskStartEvent ? sql`bool_or(${st.taskStartEvent} = any(p.events))` : sql`count(*) >= 2`;
   const step3 = st.taskDoneEvent ? sql`bool_or(${st.taskDoneEvent} = any(p.events))` : sql`bool_or(cardinality(p.events) > 0)`;
+  const plan = await rollupPlan(s.from, s.to);
   const [r] = rows<Record<string, number>>(
-    await db.execute(sql`
+    await db.execute(plan ? rollupQueries.funnel(s, plan, st) : sql`
       with u as (
         select p.anon_id, ${step2} s2, ${step3} s3, min((p.created_at at time zone ${TZ})::date) d0
           from analytics_pageviews p where ${pf(s)} group by p.anon_id
@@ -483,8 +487,9 @@ async function engagementFunnel(s: AnalyticsScope, st: AnalyticsSettings) {
 }
 
 async function topPages(s: AnalyticsScope, limit = 10) {
+  const plan = await rollupPlan(s.from, s.to);
   const r = rows<{ host: string; path: string; pv: number; users: number; ms: number }>(
-    await db.execute(sql`
+    await db.execute(plan ? rollupQueries.pages(s, plan, limit) : sql`
       select p.host, p.path, count(*)::int pv, count(distinct p.anon_id)::int users, coalesce(avg(p.duration_ms), 0)::int ms
         from analytics_pageviews p where ${pf(s)} group by 1, 2 order by 3 desc limit ${limit}`)
   );
@@ -538,8 +543,9 @@ async function retention(s: AnalyticsScope) {
 }
 
 async function topEvents(s: AnalyticsScope, limit = 10) {
+  const plan = await rollupPlan(s.from, s.to);
   const r = rows<{ e: string; total: number; users: number; sessions: number }>(
-    await db.execute(sql`
+    await db.execute(plan ? rollupQueries.events(s, plan, limit) : sql`
       select e, count(*)::int total, count(distinct p.anon_id)::int users, count(distinct p.session_id)::int sessions
         from analytics_pageviews p, unnest(p.events) e where ${pf(s)} group by e order by users desc, total desc limit ${limit}`)
   );
@@ -548,8 +554,10 @@ async function topEvents(s: AnalyticsScope, limit = 10) {
 
 async function eventTrend(s: AnalyticsScope, names: string[]) {
   if (!names.length) return [];
+  // série por hora (recortes de até 2 dias) não existe no resumo diário
+  const plan = hourly(s) ? null : await rollupPlan(s.from, s.to);
   const r = rows<{ e: string; d: string; users: number }>(
-    await db.execute(sql`
+    await db.execute(plan ? rollupQueries.eventTrend(s, plan, names) : sql`
       select e, ${bucket(s, sql`p.created_at`)} d, count(distinct p.anon_id)::int users
         from analytics_pageviews p, unnest(p.events) e where ${pf(s)} and e in (${sql.join(names.map((x) => sql`${x}`), sql`, `)})
        group by 1, 2 order by 2`)
@@ -996,9 +1004,10 @@ export async function listAnalyticsUsers(
 
   // eventos no período só para as linhas desta página (barato)
   const ids = r.map((x) => String(x.anon_id));
+  const plan = ids.length ? await rollupPlan(s.from, s.to) : null;
   const ev = ids.length
     ? rows<{ anon_id: string; n: number }>(
-        await db.execute(sql`
+        await db.execute(plan ? rollupQueries.userEvents(s, plan, ids) : sql`
           select p.anon_id, coalesce(sum(cardinality(p.events)), 0)::int n from analytics_pageviews p
            where ${pf(s)} and p.anon_id in (${sql.join(ids.map((x) => sql`${x}`), sql`, `)}) group by 1`)
       )

@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "./client";
 import { workspaces } from "@/lib/db/schema";
 import { planOf } from "@/lib/billing/plans";
+import { brDay } from "@/lib/analytics/rollup-range";
 
 /*
   Retenção dos dados de comportamento (rodada pelo cron diário). Sem isto as tabelas de
@@ -11,7 +12,8 @@ import { planOf } from "@/lib/billing/plans";
    - heatmaps: a retenção do plano, com teto de 180 dias (são as linhas mais pesadas, com
      cliques e movimento; mapa de calor antigo descreve uma página que já mudou);
    - analytics: telas pela retenção do plano (teto de 2 anos); sessões e usuários seguem a
-     mesma regra das telas (usuário só sai quando a última visita dele passou do corte).
+     mesma regra das telas (usuário só sai quando a última visita dele passou do corte); o
+     resumo diário (analytics_session_days) sai pelo dia do corte, junto com as telas.
   Apaga em lotes, com orçamento de tempo, para não segurar o banco numa transação longa.
 */
 
@@ -33,7 +35,7 @@ async function deleteInBatches(statement: (limit: number) => ReturnType<typeof s
 export async function pruneBehaviorData(budgetMs = 45_000) {
   const deadline = Date.now() + budgetMs;
   const ws = await db.select({ id: workspaces.id, plan: workspaces.plan }).from(workspaces);
-  const out = { heatmaps: 0, pageviews: 0, sessions: 0, users: 0 };
+  const out = { heatmaps: 0, pageviews: 0, sessions: 0, users: 0, sessionDays: 0 };
   for (const w of ws) {
     if (Date.now() > deadline) break;
     const days = planOf(w.plan).limits.retentionDays;
@@ -74,6 +76,17 @@ export async function pruneBehaviorData(budgetMs = 45_000) {
       );
     } catch {
       // migração do analytics ainda não aplicada: nada a limpar
+    }
+    try {
+      const cutDay = brDay(new Date(anCut));
+      out.sessionDays += await deleteInBatches(
+        (n) => sql`delete from analytics_session_days where ctid in (
+          select r.ctid from analytics_session_days r join projects pr on pr.id = r.project_id
+           where pr.workspace_id = ${w.id} and r.day < ${cutDay}::date limit ${n})`,
+        deadline
+      );
+    } catch {
+      // migração 0041 ainda não aplicada: nada a limpar
     }
   }
   return out;

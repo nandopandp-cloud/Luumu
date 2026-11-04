@@ -78,6 +78,24 @@ A cota de heatmap (`heatmapQuota`) continua no `sharedCache`: o `session_id` do 
 `sessionStorage` da aba e pode atravessar dias, então somar por dia mudaria o limite do plano.
 Ela usa um índice compacto (27 MB) e pesa pouco no working set.
 
+### Rodada 4 (03/11/2026) — painel do Analytics (migração `0041`)
+
+O painel lia `analytics_pageviews` (4 mi de telas em 30 dias no maior projeto, ~2 GB do disco por
+consulta) a cada aba e período: 5 a 33 s por bloco, e cada abertura escalava a compute.
+
+| Mudança | Onde | Efeito |
+| --- | --- | --- |
+| Cache compartilhado de 10 min por dataset, chave pelo período relativo ("30d") | `getAnalyticsCached` em `src/lib/db/analytics.ts` | Voltar a uma aba ou filtro já visto não consulta o banco. |
+| MAU numa passada só | `mauSeries` | 12,6 s → 0,7 s (relia as sessões uma vez por dia da série). |
+| Resumo diário por sessão (`analytics_session_days`), montado pelo cron | `src/lib/db/analytics-rollup.ts` | Telas, eventos, tendência de eventos, eventos configurados, funil e eventos da lista de usuários leem o resumo nos dias prontos e só as pontas do período das telas. Contagens exatas (conferidas uma a uma contra as telas). Maior projeto, 30 dias: telas 9,5 → 3,6 s; eventos 17,8 → ~9–12 s; tendência 33 → 3,3 s; 7 dias: configurados 4,0 → 0,7 s, funil 3,0 → 0,6 s. |
+
+O resumo ocupa ~220 MB por mês no maior projeto (~7% do que `analytics_pageviews` cresce) e sai
+com a mesma retenção das telas. O cron lê só os 3 últimos dias (<1 s por dia). A coleta do SDK não
+muda. Para aplicar: rode `drizzle/0041_analytics_session_days.sql`, faça o deploy (sem as tabelas
+o painel lê as telas, como antes), preencha o histórico com `scripts/backfill-analytics-rollups.ts`
+e confira com `scripts/check-analytics-rollups.ts`. `ANALYTICS_ROLLUPS=off` no Vercel volta o painel
+para as telas sem deploy.
+
 ### Piso do custo: a compute nunca dorme
 
 Tráfego de madrugada (1h–6h BRT): 100–250 telas/hora, intervalos acima de 5 min são raros.

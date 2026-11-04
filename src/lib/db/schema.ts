@@ -11,6 +11,7 @@ import {
   index,
   uniqueIndex,
   primaryKey,
+  bigint,
 } from "drizzle-orm/pg-core";
 
 /* =====================================================================
@@ -752,6 +753,41 @@ export const analyticsPageviews = pgTable(
     index("analytics_pv_created_brin").using("brin", t.createdAt).with({ pages_per_range: 32, autosummarize: true }),
   ]
 );
+
+/**
+ * Resumo diário das telas do Analytics: uma linha por sessão e dia de Brasília, com as telas e
+ * os eventos daquele dia em listas paralelas (nome · quantidade · tempo). Montado pelo cron
+ * (lib/db/analytics-rollup.ts) a partir de analytics_pageviews; o painel lê daqui os dias
+ * inteiros já prontos e só a ponta do período das telas. Migração 0041.
+ */
+export const analyticsSessionDays = pgTable(
+  "analytics_session_days",
+  {
+    projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    day: date("day", { mode: "string" }).notNull(),
+    sessionId: text("session_id").notNull(),
+    anonId: text("anon_id").notNull(),
+    host: text("host").notNull(),
+    device: text("device").notNull(),
+    pages: integer("pages").notNull(),
+    durationMs: bigint("duration_ms", { mode: "number" }).notNull(),
+    paths: text("paths").array().notNull(),
+    pathCounts: integer("path_counts").array().notNull(),
+    pathMs: bigint("path_ms", { mode: "number" }).array().notNull(),
+    events: text("events").array().notNull(),
+    eventCounts: integer("event_counts").array().notNull(),
+  },
+  (t) => [
+    index("analytics_session_days_project_idx").on(t.projectId, t.day),
+    index("analytics_session_days_day_brin").using("brin", t.day),
+  ]
+);
+
+/** Dias já resumidos em analytics_session_days (para todos os projetos). */
+export const analyticsRollupDays = pgTable("analytics_rollup_days", {
+  day: date("day", { mode: "string" }).primaryKey(),
+  doneAt: timestamp("done_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 /**
  * Eventos rastreados por dia JÁ ENCERRADO (horário de Brasília), por workspace: o medidor do mês
