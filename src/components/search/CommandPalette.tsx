@@ -124,7 +124,7 @@ const SURVEY_STATUS: Record<string, { label: string; cls: string }> = {
   ativa: { label: "Ativa", cls: "bg-sucesso/12 text-sucesso" },
   rascunho: { label: "Rascunho", cls: "bg-fg/8 text-fg-mut" },
   pausada: { label: "Pausada", cls: "bg-aviso/15 text-aviso" },
-  encerrada: { label: "Encerrada", cls: "bg-fg/8 text-fg-mut" },
+  encerrada: { label: "Arquivada", cls: "bg-fg/8 text-fg-mut" },
 };
 const TOUR_STATUS: Record<string, { label: string; cls: string }> = {
   published: { label: "Publicado", cls: "bg-sucesso/12 text-sucesso" },

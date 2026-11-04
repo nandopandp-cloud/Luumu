@@ -139,7 +139,7 @@ export const HELP: HelpCategory[] = [
       {
         id: "status",
         q: "O que significa cada status?",
-        a: "- Rascunho: em edição, não aparece para ninguém.\n- Ativa: publicada e aparecendo.\n- Pausada: fica fora do ar, mas pode ser retomada.\n- Encerrada: terminou e não recebe mais respostas.",
+        a: "- Rascunho: em edição, não aparece para ninguém.\n- Ativa: publicada e aparecendo.\n- Pausada: fica fora do ar, mas pode ser retomada.\n- Arquivada: saiu do ar e não recebe mais respostas. Qualquer pesquisa pode ser arquivada pelo menu (⋯) da lista; ela fica na aba Arquivadas.",
       },
       {
         id: "idioma",

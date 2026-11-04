@@ -31,6 +31,7 @@ import { Select } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
 import { builderBlocks, defaultConfig, defaultTitle, type BuilderQuestion } from "@/lib/surveys/builder";
 import { surveyTemplates } from "@/lib/surveys/templates";
+import { surveyStatusLabel } from "@/lib/surveys/types";
 
 import { registerPrePublish } from "@/components/surveys/PublishButton";
 import { QuestionSettings } from "./QuestionSettings";
@@ -336,7 +337,7 @@ export function SurveyBuilder({
             ))}
           </Select>
         </label>
-        <Badge tone={statusTone[status as keyof typeof statusTone] ?? "neutral"}>{status}</Badge>
+        <Badge tone={statusTone[status as keyof typeof statusTone] ?? "neutral"}>{surveyStatusLabel(status).toLowerCase()}</Badge>
       </div>
 
       {/* Header de ações */}

@@ -19,7 +19,7 @@ export interface RecentSurvey {
 const STATUS: Record<string, { label: string; cls: string }> = {
   ativa: { label: "Ativa", cls: "bg-sucesso/10 text-sucesso" },
   pausada: { label: "Pausada", cls: "bg-aviso/15 text-aviso" },
-  encerrada: { label: "Encerrada", cls: "bg-fg/10 text-fg-soft" },
+  encerrada: { label: "Arquivada", cls: "bg-fg/10 text-fg-soft" },
   rascunho: { label: "Rascunho", cls: "bg-surface-brand text-accent" },
 };
 

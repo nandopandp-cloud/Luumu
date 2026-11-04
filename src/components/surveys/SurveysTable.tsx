@@ -6,7 +6,7 @@ import { createPortal } from "react-dom";
 import Link from "@/components/ui/Link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Search, MoreHorizontal, Pause, Play, Square, Eye, Pencil, Type, Trash2, Loader2, AlertTriangle, Copy, CalendarRange } from "lucide-react";
+import { Search, MoreHorizontal, Pause, Play, Archive, Eye, Pencil, Type, Trash2, Loader2, AlertTriangle, Copy, CalendarRange } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -17,7 +17,7 @@ import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils";
 import { setStatusAction, renameSurveyAction, deleteSurveyAction, duplicateSurveyAction } from "@/app/(app)/surveys/actions";
 import { addDays, scheduleLabel } from "@/lib/surveys/schedule";
-import type { SurveyStatus } from "@/lib/surveys/types";
+import { SURVEY_STATUS_LABEL, type SurveyStatus } from "@/lib/surveys/types";
 
 export interface SurveyListItem {
   id: string;
@@ -157,7 +157,7 @@ export function SurveysTable({
             { value: "ativa", label: "Ativas" },
             { value: "rascunho", label: "Rascunhos" },
             { value: "pausada", label: "Pausadas" },
-            { value: "encerrada", label: "Encerradas" },
+            { value: "encerrada", label: "Arquivadas" },
           ]}
         />
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -226,7 +226,7 @@ export function SurveysTable({
                     )}
                   </td>
                   <td className="px-3 py-3.5"><Badge tone="brand" dot={false}>{s.type}</Badge></td>
-                  <td className="px-3 py-3.5"><Badge tone={statusTone[s.status]}>{s.status}</Badge></td>
+                  <td className="px-3 py-3.5"><Badge tone={statusTone[s.status]}>{SURVEY_STATUS_LABEL[s.status].toLowerCase()}</Badge></td>
                   <td className="px-3 py-3.5 text-fg-soft">{s.channel}</td>
                   <td className="px-3 py-3.5 text-fg-soft">{s.responseCount}</td>
                   <td className="px-3 py-3.5 font-bold text-luumu-roxo">{s.score ?? "—"}</td>
@@ -275,8 +275,9 @@ export function SurveysTable({
                               {s.status === "pausada" && (
                                 <MenuBtn onClick={() => changeStatus(s.id, "ativa", "Pesquisa reativada.")} icon={<Play className="size-4" />}>Reativar</MenuBtn>
                               )}
-                              {(s.status === "ativa" || s.status === "pausada") && (
-                                <MenuBtn onClick={() => changeStatus(s.id, "encerrada", "Pesquisa encerrada.")} icon={<Square className="size-4" />}>Encerrar</MenuBtn>
+                              {/* arquivar: de qualquer status (tira do ar e da lista de trabalho; fica em "Arquivadas") */}
+                              {s.status !== "encerrada" && (
+                                <MenuBtn onClick={() => changeStatus(s.id, "encerrada", "Pesquisa arquivada.")} icon={<Archive className="size-4" />}>Arquivar</MenuBtn>
                               )}
                               <div className="my-1 border-t border-line" />
                               <MenuBtn onClick={() => { setMenuFor(null); setMenuPos(null); setDeleting(s); }} icon={<Trash2 className="size-4" />} danger>Excluir</MenuBtn>

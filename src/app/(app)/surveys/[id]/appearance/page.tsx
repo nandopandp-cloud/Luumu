@@ -7,6 +7,7 @@ import { AppearanceEditor } from "@/components/surveys/AppearanceEditor";
 import { getSurveyWithQuestions } from "@/lib/db/surveys";
 import { getCurrentProjectId } from "@/lib/auth/current";
 import { normalizeAppearance, type BuilderQuestion } from "@/lib/surveys/builder";
+import { surveyStatusLabel } from "@/lib/surveys/types";
 
 export const dynamic = "force-dynamic";
 
@@ -49,7 +50,7 @@ export default async function AppearancePage({
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="font-display text-2xl font-extrabold tracking-tight">{survey.name}</h1>
           <Badge tone="brand" dot={false}>{survey.type}</Badge>
-          <Badge tone={statusTone[survey.status as keyof typeof statusTone]}>{survey.status}</Badge>
+          <Badge tone={statusTone[survey.status as keyof typeof statusTone]}>{surveyStatusLabel(survey.status).toLowerCase()}</Badge>
         </div>
         <p className="mt-1 text-sm text-fg-mut">
           Escolha como a pesquisa aparece dentro do produto do seu cliente. O preview mostra o resultado real.
