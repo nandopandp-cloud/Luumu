@@ -136,7 +136,7 @@ export function WidgetStage({
 
   return (
     <div className={wrapClass}>
-      {format === "modal" && <div className="pointer-events-auto absolute inset-0 bg-black/30" />}
+      {format === "modal" && <div className="pointer-events-auto absolute inset-0 bg-black/50" />}
       <div className={cn("relative", format === "bar" && "w-full")}>{children}</div>
     </div>
   );

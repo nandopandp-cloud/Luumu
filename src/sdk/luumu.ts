@@ -244,7 +244,12 @@ const isMessage = (q: Question) => MESSAGE_BLOCKS.indexOf(q.blockId) >= 0;
     * { box-sizing: border-box; font-family: 'Plus Jakarta Sans','Inter',system-ui,-apple-system,sans-serif; }
     .wrap { position: fixed; z-index: 2147483000; pointer-events: none; inset: 0; }
     .stage { position: absolute; display: flex; padding: 20px; inset: 0; }
-    .card { pointer-events: auto; background: ${bg}; color: ${fg}; border: 1px solid ${line};
+    .back { position: absolute; inset: 0; background: rgba(0,0,0,.5); pointer-events: auto;
+      animation: luumuFade .25s ease-out; }
+    @keyframes luumuFade { from { opacity: 0; } to { opacity: 1; } }
+    /* posicionado e acima do .back: sem isso o véu do modal (absolute) é pintado por cima do
+       cartão, escurece as perguntas e captura os cliques (o input fica bloqueado) */
+    .card { position: relative; z-index: 1; pointer-events: auto; background: ${bg}; color: ${fg}; border: 1px solid ${line};
       border-radius: 18px; box-shadow: 0 12px 40px rgba(0,0,0,.22); width: 360px; max-width: calc(100vw - 32px);
       overflow: hidden; animation: luumuIn .4s cubic-bezier(.16,1,.3,1); }
     .card.bar { width: 100%; max-width: 720px; border-radius: 14px; }
@@ -354,9 +359,7 @@ const isMessage = (q: Question) => MESSAGE_BLOCKS.indexOf(q.blockId) >= 0;
     if (ap.format === "modal") {
       stage.style.alignItems = "center";
       stage.style.justifyContent = "center";
-      const back = el("div");
-      back.style.cssText = "position:absolute;inset:0;background:rgba(0,0,0,.3);pointer-events:auto";
-      stage.append(back);
+      stage.append(el("div", { class: "back" }));
     } else if (isBar) {
       stage.style.alignItems = ap.position === "top" ? "flex-start" : "flex-end";
       stage.style.justifyContent = "center";
