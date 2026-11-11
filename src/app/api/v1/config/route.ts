@@ -5,6 +5,7 @@ import { listPublishedToursForSdk } from "@/lib/db/tours";
 import { heatmapPlan, isHeatmapsEnabled } from "@/lib/db/heatmaps";
 import { getIdentityCapture, listCaptureRules, resolveCaptureRule } from "@/lib/db/identity-capture";
 import { getAnalyticsSettings } from "@/lib/db/analytics";
+import { getAccessibilityForSdk } from "@/lib/db/accessibility";
 import { SDK_BUNDLE_VERSION } from "@/lib/tours/sdk-version";
 import { normalizeAppearance } from "@/lib/surveys/builder";
 import { resolveKey } from "@/lib/api/keys";
@@ -72,7 +73,7 @@ export async function GET(req: Request) {
   }
 
   const host = normalizeHost(searchParams.get("host"));
-  const [active, eventCatalog, hostState, tours, heatmaps, analytics, capture, captureRules] = await Promise.all([
+  const [active, eventCatalog, hostState, tours, heatmaps, analytics, capture, captureRules, a11y] = await Promise.all([
     listActiveSurveysForSdk(resolved.projectId),
     eventCatalogForSdk(resolved.projectId, host),
     hostStateForSdk(resolved.projectId, host),
@@ -88,6 +89,9 @@ export async function GET(req: Request) {
     getIdentityCapture(resolved.workspaceId).catch(() => null),
     // onde procurar nome/foto NESTE projeto/plataforma (sem a migração 0025 = automático)
     listCaptureRules(resolved.projectId).catch(() => []),
+    // plugin de acessibilidade (sem a migração 0044 = desligado). Recorte público: a lista
+    // individual de estudantes sinalizados nunca sai aqui (lib/accessibility/audience.ts)
+    getAccessibilityForSdk(resolved.projectId).catch(() => null),
   ]);
   // heatmaps: taxa de amostragem (cota do plano) + páginas que já têm cópia (o SDK não pergunta)
   const plan = heatmaps ? await heatmapPlan(resolved.workspaceId, resolved.projectId, host).catch(() => null) : null;
@@ -125,6 +129,8 @@ export async function GET(req: Request) {
       analytics,
       // ler nome e foto do usuário logado na própria página (n/a = seletores; vazios = automático)
       idc: analytics && capture?.enabled ? resolveCaptureRule(captureRules, host ?? "") : null,
+      // plugin de acessibilidade ligado: o SDK baixa sdk-a11y.js só se vier preenchido
+      a11y,
       // versão atual de sdk-tours.js / sdk-builder.js (o core pode estar em cache e ser mais velho)
       sdk: SDK_BUNDLE_VERSION,
     },

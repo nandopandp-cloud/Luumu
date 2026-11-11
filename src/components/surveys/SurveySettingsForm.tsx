@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { Zap, Loader2, Check, Minus, RefreshCw, Search, X, Plus, Globe } from "lucide-react";
+import { Zap, Loader2, Check, RefreshCw, Search, X, Plus, Globe } from "lucide-react";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { Field, Input, Select } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
@@ -12,8 +12,8 @@ import { scheduleLabel, scheduleState } from "@/lib/surveys/schedule";
 import { hostLabel } from "@/lib/platform/hosts";
 import { HostBadge } from "@/components/ui/HostBadge";
 import { HostPicker } from "@/components/ui/HostPicker";
-import { SEGMENTS, SCHOOL_YEARS, yearsOfSegment, schoolYearsLabel } from "@/lib/surveys/school-years";
-import { cn } from "@/lib/utils";
+import { schoolYearsLabel } from "@/lib/surveys/school-years";
+import { SchoolYearPicker } from "./SchoolYearPicker";
 
 export interface SettingsValues {
   id: string;
@@ -324,62 +324,6 @@ function AudienceList({
   );
 }
 
-/** Seleção de anos escolares agrupada por segmento; o rótulo do segmento marca/desmarca todos os anos dele. */
-function SchoolYearPicker({ selected, onChange }: { selected: string[]; onChange: (next: string[]) => void }) {
-  const toggle = (codes: string[], on: boolean) => {
-    const set = new Set(selected);
-    codes.forEach((c) => (on ? set.add(c) : set.delete(c)));
-    // mantém a ordem escolar
-    onChange(SCHOOL_YEARS.map((y) => y.code).filter((c) => set.has(c)));
-  };
-
-  return (
-    <div className="flex flex-col gap-2">
-      {SEGMENTS.map((seg) => {
-        const codes = yearsOfSegment(seg.id);
-        const picked = codes.filter((c) => selected.includes(c)).length;
-        const all = picked === codes.length;
-        return (
-          <div key={seg.id} className="flex flex-wrap items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => toggle(codes, !all)}
-              aria-pressed={all}
-              className="flex w-36 shrink-0 items-center gap-2 text-left text-sm font-semibold text-fg-soft hover:text-accent"
-            >
-              <span
-                className={cn(
-                  "grid size-4 shrink-0 place-items-center rounded border",
-                  picked ? "border-accent bg-accent text-white" : "border-line-strong"
-                )}
-              >
-                {all ? <Check className="size-3" /> : picked ? <Minus className="size-3" /> : null}
-              </span>
-              {seg.label}
-            </button>
-            {SCHOOL_YEARS.filter((y) => y.segment === seg.id).map((y) => {
-              const on = selected.includes(y.code);
-              return (
-                <button
-                  key={y.code}
-                  type="button"
-                  onClick={() => toggle([y.code], !on)}
-                  aria-pressed={on}
-                  className={cn(
-                    "rounded-full px-2.5 py-1 text-xs font-semibold transition",
-                    on ? "bg-accent text-white" : "bg-bg-sunken text-fg-soft hover:text-accent"
-                  )}
-                >
-                  {y.label}
-                </button>
-              );
-            })}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 
 export function SurveySettingsForm({
   initial,

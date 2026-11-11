@@ -12,6 +12,7 @@ import {
   Crown,
   CircleHelp,
   CalendarRange,
+  Accessibility,
   type LucideIcon,
 } from "lucide-react";
 import { LOCKED_ROUTES } from "@/lib/config/locked-routes";
@@ -52,6 +53,7 @@ export const NAV: NavGroup[] = [
       { href: "/surveys", label: "Pesquisas", icon: ClipboardList },
       { href: "/responses", label: "Respostas", icon: MessageSquare },
       { href: "/tours", label: "Tours", icon: Route, badge: "Novo" },
+      { href: "/accessibility", label: "Acessibilidade", icon: Accessibility, badge: "Novo" },
     ],
   },
   {

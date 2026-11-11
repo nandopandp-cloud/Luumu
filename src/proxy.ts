@@ -13,7 +13,7 @@ const secret = new TextEncoder().encode(secretStr);
 // rotas do app que exigem sessão
 const PROTECTED = [
   "/dashboard", "/surveys", "/responses", "/heatmaps", "/replay",
-  "/analytics", "/insights", "/reports", "/sdk", "/settings", "/tours", "/billing", "/help",
+  "/analytics", "/insights", "/reports", "/sdk", "/settings", "/tours", "/billing", "/help", "/accessibility",
   // só exige sessão; a restrição à conta autorizada fica no guard do módulo (lib/product-report/access.ts)
   "/product-report",
 ];

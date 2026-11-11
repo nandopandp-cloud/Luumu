@@ -8,6 +8,7 @@ import { readFileSync, writeFileSync } from "node:fs";
    - public/sdk-builder.js  overlay do builder (só na aba do administrador)
    - public/sdk-heatmaps.js gravador de heatmaps (só em projetos com a coleta ativa)
    - public/sdk-analytics.js coletor de analytics de produto (idem)
+   - public/sdk-a11y.js     plugin de acessibilidade (só em projetos com o plugin ligado)
    - public/sdk.js          core: pesquisas, eventos e a ponte dos tours (carregado em toda página)
 
   Versão dos bundles sob demanda = hash do CONTEÚDO deles, gravado em
@@ -22,6 +23,7 @@ const lazy = [
   ["src/sdk/builder/builder.ts", "public/sdk-builder.js"],
   ["src/sdk/heatmaps/recorder.ts", "public/sdk-heatmaps.js"],
   ["src/sdk/analytics/collector.ts", "public/sdk-analytics.js"],
+  ["src/sdk/accessibility/widget.ts", "public/sdk-a11y.js"],
 ];
 const lazyResults = await Promise.all(lazy.map(([entry, outfile]) => build({ ...common, entryPoints: [entry], outfile })));
 
@@ -30,7 +32,7 @@ for (const [, outfile] of lazy) hash.update(readFileSync(outfile));
 const VERSION = hash.digest("hex").slice(0, 10);
 writeFileSync(
   "src/lib/tours/sdk-version.ts",
-  `// Gerado por scripts/build-sdk.mjs — não editar. Hash do conteúdo de sdk-tours.js + sdk-builder.js + sdk-heatmaps.js + sdk-analytics.js.\nexport const SDK_BUNDLE_VERSION = "${VERSION}";\n`
+  `// Gerado por scripts/build-sdk.mjs — não editar. Hash do conteúdo de sdk-tours.js + sdk-builder.js + sdk-heatmaps.js + sdk-analytics.js + sdk-a11y.js.\nexport const SDK_BUNDLE_VERSION = "${VERSION}";\n`
 );
 
 const core = await build({

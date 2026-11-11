@@ -18,6 +18,8 @@ import type { TourCatalogEntry } from "../lib/tours/types";
 import type { ToursRuntime } from "./tours/runtime";
 import type { HeatmapsRecorder } from "./heatmaps/recorder";
 import type { AnalyticsCollector } from "./analytics/collector";
+import type { A11yView, A11yWidget } from "./accessibility/widget";
+import type { PublicA11yConfig } from "../lib/accessibility/config";
 import { whoFrom } from "./analytics/identity";
 // = SURVEY_EVENT de lib/analytics/core (repetido aqui para não puxar aquele módulo para o core)
 const SURVEY_EVENT = "luumu_survey_response";
@@ -170,6 +172,7 @@ const isMessage = (q: Question) => MESSAGE_BLOCKS.indexOf(q.blockId) >= 0;
     hmFresh: string[]; // "dispositivo|rota" com cópia recente (não perguntar nem enviar)
     analytics: boolean; // coleta de analytics de produto ativa no projeto
     idc: { n: string; a: string } | null; // ler nome/foto da página (configuração da workspace)
+    a11y: PublicA11yConfig | null; // plugin de acessibilidade ligado (config pública) ou null
   };
   let eventsOpen: boolean | null = null;
   let serverKnown: Record<string, 1> = {};
@@ -685,6 +688,7 @@ const isMessage = (q: Question) => MESSAGE_BLOCKS.indexOf(q.blockId) >= 0;
         heatmaps?: unknown;
         analytics?: unknown;
         idc?: unknown;
+        a11y?: unknown;
         hmRate?: unknown;
         hmFresh?: unknown;
       };
@@ -699,6 +703,7 @@ const isMessage = (q: Question) => MESSAGE_BLOCKS.indexOf(q.blockId) >= 0;
         heatmaps: parsed.heatmaps === true,
         analytics: parsed.analytics === true,
         idc: parseCapture(parsed.idc),
+        a11y: parseA11y(parsed.a11y),
         hmRate: typeof parsed.hmRate === "number" ? parsed.hmRate : 1,
         hmFresh: Array.isArray(parsed.hmFresh) ? (parsed.hmFresh as string[]) : [],
       };
@@ -723,6 +728,7 @@ const isMessage = (q: Question) => MESSAGE_BLOCKS.indexOf(q.blockId) >= 0;
           heatmaps: catalog.heatmaps,
           analytics: catalog.analytics,
           idc: catalog.idc,
+          a11y: catalog.a11y,
           hmRate: catalog.hmRate,
           hmFresh: catalog.hmFresh,
         })
@@ -751,6 +757,7 @@ const isMessage = (q: Question) => MESSAGE_BLOCKS.indexOf(q.blockId) >= 0;
           heatmaps: d.heatmaps === true,
           analytics: d.analytics === true,
           idc: parseCapture(d.idc),
+          a11y: parseA11y(d.a11y),
           hmRate: typeof d.hmRate === "number" ? d.hmRate : 1,
           hmFresh: Array.isArray(d.hmFresh) ? d.hmFresh : [],
         },
@@ -781,6 +788,7 @@ const isMessage = (q: Question) => MESSAGE_BLOCKS.indexOf(q.blockId) >= 0;
     safe(maybeLoadTours);
     if (catalog.heatmaps && heatmapsSampled(catalog.hmRate)) safe(() => loadHeatmaps(key, catalog.hmRate, catalog.hmFresh));
     if (catalog.analytics) safe(() => loadAnalytics(key, catalog.idc));
+    if (catalog.a11y) safe(() => loadA11y(key, catalog.a11y!));
   }
 
   /* ---------- Product Tours: ponte com o runtime carregado sob demanda ----------
@@ -955,6 +963,40 @@ const isMessage = (q: Question) => MESSAGE_BLOCKS.indexOf(q.blockId) >= 0;
       })
       .catch(() => {
         analyticsLoading = false;
+      });
+  }
+
+  /* ---------- Acessibilidade: widget baixado só quando o projeto ligou o plugin ----------
+   *
+   * Diferente de heatmaps/analytics, o widget aparece para TODO visitante do projeto (é o
+   * botão de acessibilidade do produto), então não há amostragem. Também roda no preview de
+   * tour: quem confere o tour vê o produto como o estudante. Fica fora só do builder.
+   */
+  let a11y: A11yWidget | null = null;
+  let a11yLoading = false;
+  let a11yPending: A11yView | null = null;
+
+  // a forma vem do servidor (normalizeA11yConfig); aqui só barra lixo de cache antigo
+  function parseA11y(v: unknown): PublicA11yConfig | null {
+    const o = v as PublicA11yConfig | null;
+    return o && typeof o === "object" && o.brand && o.launcher && o.features && o.nudge ? o : null;
+  }
+
+  function loadA11y(key: string, config: PublicA11yConfig) {
+    if (builderToken) return;
+    if (a11y) return a11y.update(config);
+    if (a11yLoading) return;
+    a11yLoading = true;
+    loadScript("sdk-a11y.js")
+      .then(() => {
+        const wdg = (window as unknown as { __luumuA11y?: A11yWidget }).__luumuA11y || null;
+        wdg?.boot({ api: API, key, host: HOST, config, identity: audienceTraits });
+        a11y = wdg;
+        if (a11yPending) a11y?.open(a11yPending);
+        a11yPending = null;
+      })
+      .catch(() => {
+        a11yLoading = false;
       });
   }
 
@@ -1722,6 +1764,20 @@ const isMessage = (q: Question) => MESSAGE_BLOCKS.indexOf(q.blockId) >= 0;
       start({ key: opts.key || opts.publicKey || keyFromAttr, surveyId: opts.surveyId, force: opts.force });
     },
     tours,
+    /*
+      Plugin de acessibilidade: para o produto abrir o painel por um botão próprio
+      (Luumu.accessibility.open() ou .open("libras" | "face")). Antes do widget carregar, o
+      pedido fica guardado e é atendido assim que ele chegar.
+    */
+    accessibility: {
+      open(view: A11yView = "panel") {
+        if (a11y) a11y.open(view);
+        else a11yPending = view;
+      },
+      close() {
+        a11y?.close();
+      },
+    },
     // exibe uma pesquisa específica ignorando "já visto" (útil para testes/preview)
     show(surveyId: string) {
       start({ surveyId, force: true });

@@ -900,6 +900,24 @@ export const productReportRuns = pgTable(
   (t) => [index("product_report_runs_period_idx").on(t.workspaceId, t.period, t.createdAt)]
 );
 
+/* =====================================================================
+   PLUGIN DE ACESSIBILIDADE — ver lib/accessibility/ e docs/accessibility/
+   ===================================================================== */
+
+/**
+ * Configuração do plugin por projeto (recursos, aparência, Libras pelo VLibras e convite). Sem
+ * linha = desligado: o SDK atualiza em todos os sites de uma vez, e o botão de acessibilidade
+ * só aparece no produto quando alguém liga aqui. `config` passa sempre por
+ * normalizeA11yConfig (lib/accessibility/config.ts) — na leitura e na escrita. Migração 0044.
+ */
+export const accessibilitySettings = pgTable("accessibility_settings", {
+  projectId: text("project_id").primaryKey().references(() => projects.id, { onDelete: "cascade" }),
+  enabled: boolean("enabled").notNull().default(false),
+  config: jsonb("config").notNull().default({}),
+  updatedBy: text("updated_by").references(() => users.id, { onDelete: "set null" }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export type Workspace = typeof workspaces.$inferSelect;
 export type Survey = typeof surveys.$inferSelect;
 export type ScheduledReport = typeof scheduledReports.$inferSelect;

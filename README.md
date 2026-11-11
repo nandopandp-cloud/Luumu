@@ -76,6 +76,8 @@ luumu/
 │   │   │   ├── responses/            feed de respostas
 │   │   │   ├── tours/                product tours e /[id]: analytics, appearance,
 │   │   │   │                         settings, versions
+│   │   │   ├── accessibility/        plugin de acessibilidade: recursos, aparência,
+│   │   │   │                         Libras (VLibras), convite e prévia ao vivo
 │   │   │   ├── heatmaps/             mapas de clique, movimento e scroll
 │   │   │   ├── replay/               session replay (bloqueado, dados mock)
 │   │   │   ├── analytics/            analytics de produto
@@ -90,13 +92,14 @@ luumu/
 │   │   ├── api/
 │   │   │   ├── v1/                   API PÚBLICA usada pelo SDK (CORS + chave do projeto):
 │   │   │   │                         config, collect, events, responses, surveys, tours,
-│   │   │   │                         builder, heatmaps, analytics, avatars
+│   │   │   │                         builder, heatmaps, analytics, avatars, accessibility
 │   │   │   └── …                     API INTERNA do painel: exports (analytics, reports,
 │   │   │                             product-report), uploads (logo, avatar, tours), search,
 │   │   │                             usage, events/status, cron/reports
 │   │   ├── s/[id]/                   página pública de pesquisa (link compartilhável)
 │   │   ├── r/[token]/                relatório público
-│   │   ├── demo/                     demonstração do widget
+│   │   ├── demo/                     demonstração do widget; accessibility/ = plataforma
+│   │   │                             fictícia com o plugin de acessibilidade (e a prévia)
 │   │   ├── layout.tsx · page.tsx · error.tsx · global-error.tsx · globals.css · icon.png
 │   │
 │   ├── components/                   componentes React
@@ -108,6 +111,7 @@ luumu/
 │   │   ├── surveys/                  tabela, renderer, widget, aparência, settings, publicar
 │   │   │   └── builder/              builder drag-and-drop de perguntas
 │   │   ├── tours/                    builder de tours, editor de passos, alvo, versões, analytics
+│   │   ├── accessibility/            editor do plugin de acessibilidade, Libras e prévia
 │   │   ├── responses/                feed de respostas e exportação
 │   │   ├── insights/                 telas de insights + chat/ (perguntas à IA)
 │   │   ├── analytics/                views, widgets e lista de usuários
@@ -142,6 +146,8 @@ luumu/
 │   │   ├── tours/                    tipos, normalização, posição, alvo, condições,
 │   │   │                             frequência, render do card, token, sdk-version.ts (gerado)
 │   │   ├── heatmaps/                 core.ts (limites, compactação), draw.ts (render)
+│   │   ├── accessibility/            features (recursos, perfis), config, audience (convite),
+│   │   │                             nudge (frequência), vlibras (Libras pelo gov.br)
 │   │   ├── analytics/                core, derive (métricas), selectors, identity-filter,
 │   │   │                             svg-avatar, svg-parts (avatar em peças), export
 │   │   ├── insights/                 análise de temas, perguntas (regra + IA), contexto da IA
@@ -163,6 +169,8 @@ luumu/
 │   │   ├── builder/                  overlay de seleção de elementos + discovery (sob demanda)
 │   │   ├── heatmaps/recorder.ts      gravador de heatmaps (sob demanda)
 │   │   ├── analytics/                coletor de analytics e identidade (sob demanda)
+│   │   ├── accessibility/            plugin de acessibilidade: widget, efeitos na página,
+│   │   │                             VLibras e navegação por rosto (sob demanda)
 │   │   └── shared/                   dom.ts, memory.ts (localStorage)
 │   │
 │   ├── types/                        declarações de tipos de terceiros
@@ -177,12 +185,13 @@ luumu/
 │   ├── test-report-email.ts          envia um e-mail de relatório de teste
 │   ├── tsconfig.scripts.json         tsconfig de scripts e testes (alias @/, stub server-only)
 │   └── support/                      stub de server-only
-├── tests/                            um diretório por módulo: analytics, billing, export,
+├── tests/                            um diretório por módulo: accessibility, analytics, billing, export,
 │                                     heatmaps, help, insights, platform, product-report,
 │                                     sdk, search, surveys, tours, ui
 ├── docs/
 │   ├── ARQUITETURA.md                camadas, onde colocar cada coisa, convenções
 │   ├── tours/                        arquitetura e integração dos product tours
+│   ├── accessibility/                plugin de acessibilidade (peças, LGPD, Libras)
 │   ├── product-report/               Report Quinzenal
 │   ├── infra/                        custos do Neon
 │   └── design/                       protótipos HTML e arte-fonte
@@ -205,6 +214,7 @@ Camadas, a tabela "onde colocar cada coisa" e as convenções estão em
 
 - [Arquitetura e convenções](docs/ARQUITETURA.md)
 - Product Tours: [arquitetura](docs/tours/ARQUITETURA.md) · [integração no produto](docs/tours/INTEGRACAO.md)
+- [Plugin de Acessibilidade](docs/accessibility/README.md)
 - [Report Quinzenal](docs/product-report/README.md)
 - [Custos do Neon](docs/infra/neon-custos.md)
 
