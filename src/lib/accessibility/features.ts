@@ -118,10 +118,15 @@ export interface A11yPrefs {
   libras: boolean;
   /** perfis rápidos ligados, na ordem em que foram ligados */
   profiles: ProfileId[];
+  /**
+   * Onde o estudante deixou o botão de acessibilidade (arrastando): centro do botão em fração
+   * da tela (0–1), para valer em telas de tamanhos diferentes. null = posição do painel da Luumu.
+   */
+  launcherPos: { x: number; y: number } | null;
 }
 
 /** Recursos que viram preferência guardada (a navegação por rosto usa a câmera: é só da sessão). */
-export type PrefKey = Exclude<keyof A11yPrefs, "profiles">;
+export type PrefKey = Exclude<keyof A11yPrefs, "profiles" | "launcherPos">;
 
 export const DEFAULT_PREFS: A11yPrefs = {
   textSize: 0,
@@ -140,6 +145,7 @@ export const DEFAULT_PREFS: A11yPrefs = {
   focusRing: false,
   libras: false,
   profiles: [],
+  launcherPos: null,
 };
 
 /* ------------------------------------------------------------------------ perfis rápidos */
@@ -158,7 +164,7 @@ export interface ProfileInfo {
   icon: string;
   /** para o painel da Luumu: a quem o perfil costuma ajudar */
   audienceHint: string;
-  preset: Partial<Omit<A11yPrefs, "profiles">>;
+  preset: Partial<Omit<A11yPrefs, "profiles" | "launcherPos">>;
 }
 
 /** Ordem do painel do estudante (perfis de acessibilidade). */
@@ -335,14 +341,22 @@ export function normalizePrefs(input: unknown): A11yPrefs {
     focusRing: bool("focusRing"),
     libras: bool("libras"),
     profiles: Array.isArray(o.profiles) ? [...new Set(o.profiles.filter(isProfileId))] : [],
+    launcherPos: launcherPos(o.launcherPos),
   };
+}
+
+function launcherPos(v: unknown): A11yPrefs["launcherPos"] {
+  const o = v as { x?: unknown; y?: unknown } | null;
+  if (!o || typeof o !== "object" || typeof o.x !== "number" || typeof o.y !== "number" || !Number.isFinite(o.x) || !Number.isFinite(o.y)) return null;
+  const c = (n: number) => Math.round(Math.min(1, Math.max(0, n)) * 10000) / 10000;
+  return { x: c(o.x), y: c(o.y) };
 }
 
 /** Quantos ajustes estão ligados (selo no botão do launcher). */
 export function activeCount(p: A11yPrefs): number {
   let n = p.textSize > 0 ? 1 : 0;
   for (const k of Object.keys(DEFAULT_PREFS) as (keyof A11yPrefs)[]) {
-    if (k === "textSize" || k === "profiles") continue;
+    if (k === "textSize" || k === "profiles" || k === "launcherPos") continue;
     if (p[k] !== DEFAULT_PREFS[k]) n++;
   }
   return n;

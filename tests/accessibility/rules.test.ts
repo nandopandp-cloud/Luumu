@@ -73,6 +73,13 @@ test("normalizePrefs descarta valores desconhecidos e limita o tamanho", () => {
   assert.deepEqual(normalizePrefs(null), DEFAULT_PREFS);
 });
 
+test("posição do botão arrastado: fração da tela, validada; não conta como ajuste", () => {
+  assert.deepEqual(normalizePrefs({ launcherPos: { x: 0.25, y: 1.7 } }).launcherPos, { x: 0.25, y: 1 });
+  assert.equal(normalizePrefs({ launcherPos: { x: "a", y: 1 } }).launcherPos, null);
+  assert.equal(normalizePrefs({}).launcherPos, null);
+  assert.equal(activeCount({ ...DEFAULT_PREFS, launcherPos: { x: 0.5, y: 0.5 } }), 0);
+});
+
 test("activeCount conta ajustes ligados, não perfis", () => {
   assert.equal(activeCount(DEFAULT_PREFS), 0);
   assert.equal(activeCount(toggleProfile(DEFAULT_PREFS, "foco", allOn)), 3);

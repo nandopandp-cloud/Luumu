@@ -533,6 +533,61 @@ test("produto: atualizar a configuração com o convite aberto não registra 'vi
   assert.equal(shown.length, 1);
 });
 
+test("botão arrastável: soltar em outro lugar salva a posição e não abre o painel", async () => {
+  boot(cfg());
+  const main = $(".lb-main")!;
+  const ev = (type: string, x: number, y: number) =>
+    main.dispatchEvent(new (window as any).PointerEvent(type, { bubbles: true, composed: true, pointerId: 7, button: 0, clientX: x, clientY: y }));
+  // centro do botão no navegador simulado: (160, 118)
+  ev("pointerdown", 160, 118);
+  ev("pointermove", 260, 200);
+  ev("pointermove", 400, 300);
+  assert.ok($(".launcher")!.classList.contains("dragging"));
+  ev("pointerup", 400, 300);
+  click(main);
+  assert.equal($(".panel")!.classList.contains("open"), false, "soltar não abre o painel");
+  const saved = JSON.parse(localStorage.getItem("luumu_a11y_pk_test:anon")!).p.launcherPos;
+  assert.deepEqual(saved, { x: 400 / 1280, y: 300 / 800 });
+  const l = $(".launcher") as HTMLElement;
+  assert.equal(l.style.left, "366px");
+  assert.equal(l.style.top, "266px", "na metade de cima: atalhos abrem para baixo");
+  assert.ok(l.classList.contains("mid") && l.classList.contains("left"), "dicas à direita perto da borda esquerda");
+
+  // um toque sem arrastar continua abrindo o painel
+  ev("pointerdown", 400, 300);
+  ev("pointermove", 402, 301);
+  ev("pointerup", 402, 301);
+  await sleep(400);
+  click($(".lb-main"));
+  assert.ok($(".panel")!.classList.contains("open"));
+
+  // restaurar padrão volta para o canto configurado
+  click($('[data-k="reset"]'));
+  assert.equal(($(".launcher") as HTMLElement).style.bottom, "24px");
+});
+
+test("botão arrastável: Shift + setas movem; opção desligada no painel impede arrastar", () => {
+  boot(cfg());
+  const main = $(".lb-main")!;
+  main.dispatchEvent(new (window as any).KeyboardEvent("keydown", { key: "ArrowLeft", shiftKey: true, bubbles: true, composed: true }));
+  const pos = JSON.parse(localStorage.getItem("luumu_a11y_pk_test:anon")!).p.launcherPos;
+  assert.ok(pos && pos.x < 160 / 1280, "andou para a esquerda");
+  assert.equal(main.getAttribute("aria-describedby"), "lu-lb-hint", "leitor de tela sabe como mover");
+
+  w.destroy();
+  localStorage.clear();
+  boot(cfg({ launcher: { draggable: false } }));
+  const m2 = $(".lb-main")!;
+  const ev = (type: string, x: number, y: number) =>
+    m2.dispatchEvent(new (window as any).PointerEvent(type, { bubbles: true, composed: true, pointerId: 8, button: 0, clientX: x, clientY: y }));
+  ev("pointerdown", 160, 118);
+  ev("pointermove", 400, 300);
+  ev("pointerup", 400, 300);
+  assert.equal(localStorage.getItem("luumu_a11y_pk_test:anon"), null, "nada salvo");
+  assert.equal(($(".launcher") as HTMLElement).style.bottom, "24px");
+  assert.equal(m2.getAttribute("aria-describedby"), null);
+});
+
 test("prévia não grava nada no navegador", () => {
   boot(cfg(), { preview: {} });
   click($('[data-a="open"]'));

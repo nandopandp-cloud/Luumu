@@ -90,6 +90,8 @@ export interface A11yConfig {
     /** distância da borda inferior em px (para não cobrir o chat do produto) */
     offset: number;
     colors: LauncherColors;
+    /** o estudante pode arrastar o botão para onde quiser (a posição fica salva com as escolhas dele) */
+    draggable: boolean;
   };
   features: Record<FeatureId, boolean>;
   profiles: ProfileId[];
@@ -135,6 +137,7 @@ export const DEFAULT_A11Y_CONFIG: A11yConfig = {
     faceShortcut: true,
     offset: 24,
     colors: { main: "", ...LAUNCHER_PRESETS[0].colors },
+    draggable: true,
   },
   features: Object.fromEntries(FEATURE_IDS.map((f) => [f, true])) as Record<FeatureId, boolean>,
   profiles: [...PROFILE_IDS],
@@ -246,6 +249,7 @@ export function normalizeA11yConfig(input: unknown): A11yConfig {
         button: color(lc.button, d.launcher.colors.button),
         icon: color(lc.icon, d.launcher.colors.icon),
       },
+      draggable: bool(launcher.draggable, d.launcher.draggable),
     },
     features: Object.fromEntries(FEATURE_IDS.map((f) => [f, bool(features[f], d.features[f])])) as Record<FeatureId, boolean>,
     profiles,

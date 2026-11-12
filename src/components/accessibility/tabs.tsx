@@ -170,7 +170,7 @@ export function AppearanceTab({ config, patch, projectLogo }: { config: A11yConf
         <SectionTitle icon={<MousePointer2 className="size-4.5" />} title="Botão flutuante" description="Estilo, cores e posição da cápsula de atalhos na tela do estudante." />
         <div className="grid gap-4">
           <LauncherStyleEditor config={config} patch={patch} />
-          <Field label="Posição">
+          <Field label="Posição inicial" hint={config.launcher.draggable ? "Onde o botão aparece até o estudante arrastá-lo." : undefined}>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" role="radiogroup" aria-label="Posição do botão">
               {LAUNCHER_POSITIONS.map((p) => {
                 const on = config.launcher.position === p.value;
@@ -201,6 +201,13 @@ export function AppearanceTab({ config, patch, projectLogo }: { config: A11yConf
             </Field>
           </div>
           <div className="grid gap-2">
+            <ToggleRow
+              icon={<MousePointer2 className="size-4.5" />}
+              title="Estudante pode arrastar o botão"
+              description="Ele leva o botão para qualquer canto da tela (ou move com Shift + setas). A posição fica salva com as escolhas dele, em qualquer aparelho; “Restaurar padrão” volta para a posição definida aqui."
+              checked={config.launcher.draggable}
+              onChange={(draggable) => launcher({ draggable })}
+            />
             <ToggleRow title="Rótulo sempre visível" description="Mostra o nome ao lado do botão principal o tempo todo. Desligado, os nomes aparecem ao passar o mouse ou focar pelo teclado." checked={config.launcher.showLabels} onChange={(showLabels) => launcher({ showLabels })} />
             <ToggleRow
               icon={<Hand className="size-4.5" />}

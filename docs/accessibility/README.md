@@ -108,6 +108,11 @@ plugin), porque ligar, desligar ou mudar onde ele aparece precisa chegar logo. S
   focar pelo teclado — Tab no botão principal já revela o resto) a cápsula cresce e mostra Libras
   e Navegação por rosto, com o nome de cada um ao lado. Em telas de toque os atalhos ficam no
   painel. Na posição "meio", o botão principal fica em cima e a cápsula cresce para baixo.
+- **Arrastar** (`launcher.draggable`, ligado por padrão): o estudante leva o botão para qualquer
+  ponto da tela com mouse, caneta ou dedo (um toque sem arrastar continua abrindo o painel), ou
+  move com Shift + setas. A posição fica em `prefs.launcherPos` (centro em fração da tela, para
+  valer em telas diferentes) e sincroniza com a conta como as demais escolhas; na metade de cima
+  da tela os atalhos abrem para baixo. "Restaurar padrão" volta à posição do painel da Luumu.
 - **Cores** (`launcher.colors`): botão principal (vazio = cor de destaque da marca), fundo da
   cápsula, botões de atalho e ícones; estilos prontos Noite, Grafite, Claro e Lavanda. O widget
   deriva gradientes, anel, brilho e a cor de texto com contraste; o painel avisa quando o ícone

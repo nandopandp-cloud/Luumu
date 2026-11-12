@@ -42,6 +42,12 @@ button:focus-visible,[tabindex]:focus-visible,a:focus-visible{outline:3px solid 
 .lb-x{opacity:0;visibility:hidden;transform:scale(.7);transition:opacity .18s ease,transform .25s cubic-bezier(.16,1,.3,1),visibility 0s linear .3s}
 .launcher:hover .lb-x,.launcher:focus-within .lb-x{opacity:1;visibility:visible;transform:none;transition:opacity .22s ease .06s,transform .3s cubic-bezier(.16,1,.3,1) .04s,visibility 0s}
 @media (hover:none){.lb-more{display:none}}
+/* arrastar: só o botão principal acompanha o ponteiro */
+.lb-main{touch-action:none;-webkit-user-select:none;user-select:none}
+.launcher.dragging .lb-more{display:none}
+.launcher.dragging .lb-label{opacity:0!important}
+.launcher.dragging .lb-main{cursor:grabbing;transform:scale(1.08);transition:none;box-shadow:inset 0 0 0 2.5px var(--lb-main-ring),0 0 30px var(--lb-main-glow),0 18px 34px rgba(15,17,40,.38)}
+.lb-label small{display:block;font-size:11.5px;font-weight:600;opacity:.7;margin-top:1px}
 .lb{position:relative;display:grid;place-items:center;width:60px;height:60px;border-radius:50%;flex:none;transition:transform .2s cubic-bezier(.16,1,.3,1),filter .2s,box-shadow .2s}
 .lb-main{color:var(--lb-main-ink);background:linear-gradient(180deg,var(--lb-main-hi) 0%,var(--lb-main) 48%,var(--lb-main-lo) 100%);box-shadow:inset 0 0 0 2.5px var(--lb-main-ring),0 0 22px var(--lb-main-glow),0 10px 22px rgba(15,17,40,.3)}
 .lb-main:hover{transform:scale(1.05);filter:brightness(1.06)}

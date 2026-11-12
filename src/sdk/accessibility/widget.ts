@@ -447,17 +447,114 @@ function createWidget(): A11yWidget {
       .join(";");
   }
 
+  /* ---------------- posição do botão (arrastável) ---------------- */
+  const EDGE = 8;
+  const clamp = (n: number, a: number, b: number) => Math.min(Math.max(n, a), Math.max(a, b));
+  /** metade do botão principal + o respiro do contêiner (centro → canto do launcher) */
+  const mainHalf = () => ((launcher.querySelector(".lb-main") as HTMLElement | null)?.offsetWidth || 60) / 2 + 4;
+  const dragAllowed = () => cfg.launcher.draggable !== false;
+
+  /**
+   * Posição do launcher: a que o estudante escolheu arrastando (centro em fração da tela) ou o
+   * canto configurado no painel. Na metade de cima da tela, os atalhos abrem para baixo; perto
+   * da borda esquerda, as dicas de texto aparecem à direita.
+   */
+  function placeLauncher() {
+    const p = dragAllowed() ? prefs.launcherPos : null;
+    const labels = cfg.launcher.showLabels ? " labels" : "";
+    const drag = launcher.classList.contains("dragging") ? " dragging" : "";
+    if (!p) {
+      const pos = cfg.launcher.position;
+      const left = pos.endsWith("left");
+      const middle = pos.startsWith("middle");
+      launcher.className = `launcher${left ? " left" : ""}${middle ? " mid" : ""}${labels}${drag}`;
+      launcher.style.left = left ? "20px" : "auto";
+      launcher.style.right = left ? "auto" : "20px";
+      // no meio da tela o botão principal fica parado e os atalhos abrem para baixo
+      launcher.style.top = middle ? "calc(50% - 40px)" : "auto";
+      launcher.style.bottom = middle ? "auto" : `${cfg.launcher.offset}px`;
+      return;
+    }
+    const W = innerWidth;
+    const H = innerHeight;
+    const half = mainHalf();
+    const cx = clamp(p.x * W, half + EDGE, W - half - EDGE);
+    const cy = clamp(p.y * H, half + EDGE, H - half - EDGE);
+    const opensUp = cy > H * 0.45;
+    launcher.className = `launcher${cx < W / 2 ? " left" : ""}${opensUp ? "" : " mid"}${labels}${drag}`;
+    launcher.style.left = `${cx - half}px`;
+    launcher.style.right = "auto";
+    launcher.style.top = opensUp ? "auto" : `${cy - half}px`;
+    launcher.style.bottom = opensUp ? `${H - cy - half}px` : "auto";
+  }
+
+  /** Centro atual do botão principal (para o teclado mover a partir dele). */
+  function mainCenter(): { x: number; y: number } {
+    const r = (launcher.querySelector(".lb-main") as HTMLElement | null)?.getBoundingClientRect();
+    return r ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : { x: innerWidth - 50, y: innerHeight - 60 };
+  }
+
+  function saveLauncherPos(cx: number, cy: number) {
+    const half = mainHalf();
+    const x = clamp(cx, half + EDGE, innerWidth - half - EDGE) / innerWidth;
+    const y = clamp(cy, half + EDGE, innerHeight - half - EDGE) / innerHeight;
+    setPrefs({ ...prefs, launcherPos: { x, y } });
+  }
+
+  // arrastar com mouse, caneta ou dedo; um toque/clique sem arrastar continua abrindo o painel
+  let drag: { id: number; sx: number; sy: number; ox: number; oy: number; cx: number; cy: number; moved: boolean } | null = null;
+  let suppressClick = false;
+  function onDragStart(e: PointerEvent) {
+    if (!dragAllowed() || e.button !== 0) return;
+    const main = (e.target as Element).closest?.(".lb-main") as HTMLElement | null;
+    if (!main) return;
+    const r = main.getBoundingClientRect();
+    const cx = r.left + r.width / 2;
+    const cy = r.top + r.height / 2;
+    drag = { id: e.pointerId, sx: e.clientX, sy: e.clientY, ox: e.clientX - cx, oy: e.clientY - cy, cx, cy, moved: false };
+    try {
+      main.setPointerCapture?.(e.pointerId);
+    } catch {}
+  }
+  function onDragMove(e: PointerEvent) {
+    if (!drag || e.pointerId !== drag.id) return;
+    if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 6) return;
+    if (!drag.moved) {
+      drag.moved = true;
+      launcher.classList.add("dragging");
+    }
+    e.preventDefault();
+    const half = mainHalf();
+    drag.cx = clamp(e.clientX - drag.ox, half + EDGE, innerWidth - half - EDGE);
+    drag.cy = clamp(e.clientY - drag.oy, half + EDGE, innerHeight - half - EDGE);
+    launcher.style.left = `${drag.cx - half}px`;
+    launcher.style.top = `${drag.cy - half}px`;
+    launcher.style.right = launcher.style.bottom = "auto";
+  }
+  function onDragEnd(e: PointerEvent) {
+    if (!drag || e.pointerId !== drag.id) return;
+    const d = drag;
+    drag = null;
+    if (!d.moved) return;
+    launcher.classList.remove("dragging");
+    // o clique que vem logo depois de soltar não abre o painel
+    suppressClick = true;
+    setTimeout(() => (suppressClick = false), 350);
+    saveLauncherPos(d.cx, d.cy);
+  }
+  // teclado: Shift + setas movem o botão principal
+  function onLauncherKey(e: KeyboardEvent) {
+    if (!dragAllowed() || !e.shiftKey || !(e.target as Element).closest?.(".lb-main")) return;
+    const step = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] }[e.key];
+    if (!step) return;
+    e.preventDefault();
+    const c = mainCenter();
+    saveLauncherPos(c.x + step[0] * Math.max(24, innerWidth * 0.05), c.y + step[1] * Math.max(24, innerHeight * 0.05));
+    (launcher.querySelector(".lb-main") as HTMLElement | null)?.focus();
+  }
+
   function renderLauncher() {
-    const pos = cfg.launcher.position;
-    const left = pos.endsWith("left");
-    const middle = pos.startsWith("middle");
-    launcher.className = `launcher${left ? " left" : ""}${middle ? " mid" : ""}${cfg.launcher.showLabels ? " labels" : ""}`;
     launcher.setAttribute("style", launcherVars());
-    launcher.style.left = left ? "20px" : "auto";
-    launcher.style.right = left ? "auto" : "20px";
-    // no meio da tela o botão principal fica parado e a cápsula cresce para baixo
-    launcher.style.top = middle ? "calc(50% - 40px)" : "auto";
-    launcher.style.bottom = middle ? "auto" : `${cfg.launcher.offset}px`;
     const eff = effective(prefs);
     const count = activeCount(eff);
     /*
@@ -473,9 +570,10 @@ function createWidget(): A11yWidget {
     if (enabled("faceNav") && cfg.launcher.faceShortcut) extras.push(extra("face", "Navegação por rosto", "face", face.active));
     launcher.innerHTML = `<div class="lb-pill">
       ${extras.length ? `<div class="lb-more"><div class="lb-more-in">${extras.join("")}</div></div>` : ""}
-      <button type="button" class="lb lb-main${panelOpen ? " on" : ""}" data-a="open" aria-haspopup="dialog" aria-expanded="${panelOpen}" aria-label="${esc(cfg.launcher.label)}${count ? `, ${count} ${count === 1 ? "ajuste ativo" : "ajustes ativos"}` : ""}">
-        ${icon("access", 32, 2.6)}<span class="lb-label" aria-hidden="true">${esc(cfg.launcher.label)}</span>${count ? `<span class="lb-badge" aria-hidden="true">${count}</span>` : ""}</button>
-    </div>`;
+      <button type="button" class="lb lb-main${panelOpen ? " on" : ""}" data-a="open" aria-haspopup="dialog" aria-expanded="${panelOpen}" aria-label="${esc(cfg.launcher.label)}${count ? `, ${count} ${count === 1 ? "ajuste ativo" : "ajustes ativos"}` : ""}"${dragAllowed() ? ` aria-describedby="lu-lb-hint" aria-keyshortcuts="Shift+ArrowUp Shift+ArrowDown Shift+ArrowLeft Shift+ArrowRight"` : ""}>
+        ${icon("access", 32, 2.6)}<span class="lb-label" aria-hidden="true">${esc(cfg.launcher.label)}${dragAllowed() ? "<small>Arraste para mover</small>" : ""}</span>${count ? `<span class="lb-badge" aria-hidden="true">${count}</span>` : ""}</button>
+    </div>${dragAllowed() ? `<span class="sr" id="lu-lb-hint">Para mover o botão, arraste ou use Shift e as setas.</span>` : ""}`;
+    placeLauncher();
   }
 
   /* ---------------- painel ---------------- */
@@ -602,6 +700,10 @@ function createWidget(): A11yWidget {
     if (!a) return;
     switch (a) {
       case "open":
+        if (suppressClick) {
+          suppressClick = false;
+          return;
+        }
         return panelOpen ? closePanel() : openPanel();
       case "close":
         return closePanel();
@@ -835,6 +937,12 @@ function createWidget(): A11yWidget {
     toastEl.setAttribute("aria-live", "polite");
     rootEl.append(launcher, scrim, panel, toastEl);
     rootEl.addEventListener("click", onAction);
+    launcher.addEventListener("pointerdown", onDragStart);
+    launcher.addEventListener("pointermove", onDragMove);
+    launcher.addEventListener("pointerup", onDragEnd);
+    launcher.addEventListener("pointercancel", onDragEnd);
+    launcher.addEventListener("keydown", onLauncherKey);
+    window.addEventListener("resize", placeLauncher);
     (document.body || document.documentElement).appendChild(hostEl);
 
     effects = createPageEffects(rootEl, cfg.brand.accent);
@@ -940,6 +1048,7 @@ function createWidget(): A11yWidget {
       timers.forEach(clearTimeout);
       flushPending();
       window.removeEventListener("pagehide", flushPending);
+      window.removeEventListener("resize", placeLauncher);
       document.removeEventListener("visibilitychange", onHidden);
       closePanel();
       closeNudge();
