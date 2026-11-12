@@ -20,6 +20,7 @@ import type { HeatmapsRecorder } from "./heatmaps/recorder";
 import type { AnalyticsCollector } from "./analytics/collector";
 import type { A11yView, A11yWidget } from "./accessibility/widget";
 import type { PublicA11yConfig } from "../lib/accessibility/config";
+import type { A11yEvent } from "../lib/accessibility/integration";
 import { whoFrom } from "./analytics/identity";
 // = SURVEY_EVENT de lib/analytics/core (repetido aqui para não puxar aquele módulo para o core)
 const SURVEY_EVENT = "luumu_survey_response";
@@ -990,6 +991,9 @@ const isMessage = (q: Question) => MESSAGE_BLOCKS.indexOf(q.blockId) >= 0;
   let a11y: A11yWidget | null = null;
   let a11yLoading = false;
   let a11yPending: A11yView | null = null;
+  // plataforma externa: estado do estudante (setUser) e quem ouve as mudanças (onChange)
+  let a11yExternal: unknown = null;
+  const a11yListeners: ((e: A11yEvent) => void)[] = [];
 
   // a forma vem do servidor (normalizeA11yConfig); aqui só barra lixo de cache antigo
   function parseA11y(v: unknown): PublicA11yConfig | null {
@@ -1025,7 +1029,17 @@ const isMessage = (q: Question) => MESSAGE_BLOCKS.indexOf(q.blockId) >= 0;
         const wdg = (window as unknown as { __luumuA11y?: A11yWidget }).__luumuA11y || null;
         // carregou depois de um catálogo novo dizer "desligado": não monta
         if (!a11yLoading) return;
-        wdg?.boot({ api: API, key, host: HOST, config, identity: audienceTraits, onDisabled: () => a11yDisabled(key) });
+        wdg?.boot({
+          api: API,
+          key,
+          host: HOST,
+          config,
+          identity: audienceTraits,
+          onDisabled: () => a11yDisabled(key),
+          onEvent: (e) => a11yListeners.slice().forEach((fn) => safe(() => fn(e))),
+        });
+        // setUser chamado antes de o plugin carregar: entrega agora
+        if (a11yExternal) safe(() => wdg?.setExternal(a11yExternal));
         a11y = wdg;
         if (a11yPending) a11y?.open(a11yPending);
         a11yPending = null;
@@ -1812,6 +1826,46 @@ const isMessage = (q: Question) => MESSAGE_BLOCKS.indexOf(q.blockId) >= 0;
       close() {
         a11y?.close();
       },
+      /*
+        Plataforma externa (modo "Controle por plataforma externa" no painel da Luumu):
+          Luumu.accessibility.setUser({ id, email, invite, profiles, status, prefs })
+        informa o estudante logado — se recebe o convite, quais perfis sugerir, o desfecho já
+        registrado e a última configuração salva. Pode ser chamado antes de o plugin carregar.
+        `id`/`email`/`user_hash`, se vierem, também identificam o estudante (como o Luumu.identify).
+      */
+      setUser(state: { id?: string | number; email?: string; [k: string]: unknown } = {}) {
+        const s = state && typeof state === "object" ? state : {};
+        const id = typeof s.id === "string" || typeof s.id === "number" ? s.id : undefined;
+        const email = typeof s.email === "string" ? s.email : undefined;
+        const userHash = typeof s.user_hash === "string" ? s.user_hash : undefined;
+        if (
+          (id !== undefined && String(id) !== String(identity.id ?? "")) ||
+          (email !== undefined && email !== identity.email) ||
+          (userHash !== undefined && userHash !== identity.user_hash)
+        ) {
+          Luumu.identify({
+            ...identity,
+            ...(id !== undefined ? { id: String(id) } : {}),
+            ...(email !== undefined ? { email } : {}),
+            ...(userHash !== undefined ? { user_hash: userHash } : {}),
+          });
+        }
+        a11yExternal = s;
+        safe(() => a11y?.setExternal(s));
+      },
+      /** Cada mudança no plugin, na hora. Devolve uma função para parar de ouvir. */
+      onChange(fn: (e: A11yEvent) => void) {
+        if (typeof fn !== "function") return () => {};
+        a11yListeners.push(fn);
+        return () => {
+          const i = a11yListeners.indexOf(fn);
+          if (i >= 0) a11yListeners.splice(i, 1);
+        };
+      },
+      /** Estado atual do plugin para o estudante (null antes de o plugin carregar). */
+      getState() {
+        return a11y ? a11y.getState() : null;
+      },
     },
     // exibe uma pesquisa específica ignorando "já visto" (útil para testes/preview)
     show(surveyId: string) {
@@ -1900,6 +1954,7 @@ const isMessage = (q: Question) => MESSAGE_BLOCKS.indexOf(q.blockId) >= 0;
         localStorage.removeItem("luumu_identity");
       } catch {}
       // logout: as escolhas e o convite do estudante anterior saem da tela
+      a11yExternal = null;
       safe(() => a11y?.identify());
     },
   };
@@ -1911,4 +1966,8 @@ const isMessage = (q: Question) => MESSAGE_BLOCKS.indexOf(q.blockId) >= 0;
   // auto-init se houver data-luumu (a menos que data-luumu-auto="false")
   const autoAttr = currentScript?.getAttribute("data-luumu-auto");
   if (keyFromAttr && autoAttr !== "false") Luumu.init({ key: keyFromAttr });
+  // a página pode esperar o SDK (script com defer/async): window "luumu:ready"
+  try {
+    window.dispatchEvent(new Event("luumu:ready"));
+  } catch {}
 })();

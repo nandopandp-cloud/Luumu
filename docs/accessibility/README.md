@@ -171,6 +171,45 @@ aparelho, navegador ou janela anônima. As escolhas ficam na conta dele
   mesmo valor em todos os aparelhos). Com "Exigir verificação", também o `user_hash` — sem ele o
   servidor recusa (403) e as escolhas ficam só no aparelho.
 
+## Integração com plataforma externa
+
+Painel → Ativação → **Integração**. No modo **Plataforma externa**, quem decide quem recebe o
+convite e onde ficam as escolhas do estudante é outra plataforma; a Luumu não guarda lista de
+convidados nem preferências (`/prefs` e `/match` não são chamados). Contrato em
+`src/lib/accessibility/integration.ts`; documentação para o time da plataforma em
+`docs/accessibility/integracao-plataforma-externa.pdf` (gerada por
+`scripts/a11y-integration-pdf.mjs`).
+
+**Entrada** — a página informa o estudante logado (pode ser antes de o plugin carregar; o SDK
+guarda e entrega; `luumu:ready` avisa quando o `Luumu` existe):
+
+```js
+Luumu.accessibility.setUser({
+  id: "123", email: "ana@escola.br", user_hash: "…",      // identificam (como o identify)
+  invite: true,                                          // mostrar o convite
+  profiles: ["leitura", "foco"],                         // perfis do convite (vazio = os do painel)
+  status: "pending",                                     // "accepted"/"dismissed" = não mostra de novo
+  prefs: { textSize: 2, legibleFont: true, profiles: ["leitura"] }, // última configuração salva
+});
+```
+
+O convite só sai com `invite: true`, status `pending`/`shown`, convite ligado no painel,
+nenhum recurso já ligado e uma vez por sessão do navegador. O plugin espera até 10 s pelo
+`setUser` antes de desistir do convite. `prefs` é adotado, exceto quando o estudante mudou algo
+nesta página depois do último `setUser` (um eco antigo não desfaz a mudança).
+
+**Saída** — cada mudança sai na hora, com o mesmo `A11yEvent`
+(`prefs.updated`, `invite.shown`, `invite.accepted`, `invite.dismissed`):
+
+- navegador: `window` `"luumu:accessibility"` (`e.detail`) e `Luumu.accessibility.onChange(fn)`;
+- webhook (opcional, vale nos dois modos): o widget manda para
+  `POST /api/v1/accessibility/events` (mesmas regras das outras rotas: key, CORS, limite,
+  verificação) e a Luumu repassa, com `after()`, para a URL configurada — assinado
+  (`X-Luumu-Signature: sha256=HMAC(segredo, "<ts>.<corpo>")`), até 3 tentativas (0, +1 s, +4 s),
+  5 s cada. Nada é guardado. A URL nunca vai para o navegador (`publicA11yConfig` só manda
+  `webhook: true`) e precisa ser https pública (`safeWebhookUrl`). Só estudantes identificados.
+  "Testar webhook" no painel manda um evento `test`.
+
 ## Verificação de identidade
 
 Sem ela, quem souber o ID de um estudante consegue pedir as preferências dele (que podem indicar

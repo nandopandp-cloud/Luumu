@@ -714,3 +714,106 @@ test("update troca a cor e os textos sem perder o estado", () => {
   assert.equal(($(".root") as HTMLElement).style.getPropertyValue("--acc"), "#0F766E");
   assert.ok(html().classList.contains("lu-a11y-spacing"));
 });
+
+/* ---------------- plataforma externa (lib/accessibility/integration.ts) ---------------- */
+
+const extCfg = (over: Record<string, unknown> = {}) =>
+  cfg({ integration: { mode: "external", webhookUrl: "https://plataforma.example.com/hook" }, nudge: { enabled: true, audience: "targeted", delay: 0 }, ...over });
+
+test("modo externo: sem setUser não há convite nem chamadas à Luumu; setUser com invite mostra os perfis da plataforma", async () => {
+  identity = { id: "ext-1" };
+  boot(extCfg());
+  await sleep(30);
+  assert.equal($(".mwrap"), null, "espera a plataforma dizer quem é convidado");
+  assert.equal(calls("prefs").length + calls("match").length, 0, "nada de lista nem preferências na Luumu");
+  (w as any).setExternal({ invite: true, profiles: ["calma", "libras"], status: "pending" });
+  await sleep(30);
+  assert.ok($(".mwrap"), "convite exibido");
+  const cards = [...shadow().querySelectorAll(".n-card")].map((c) => c.textContent!);
+  assert.equal(cards.length, 2, "só os perfis que a plataforma mandou");
+  assert.match(cards[0], /Tela mais calma/);
+  assert.equal(calls("prefs").length + calls("match").length, 0);
+});
+
+test("modo externo: status accepted/dismissed ou invite false não mostram o convite", async () => {
+  for (const state of [{ invite: true, status: "accepted" }, { invite: true, status: "dismissed" }, { invite: false }]) {
+    w.destroy();
+    sessionStorage.clear();
+    identity = { id: "ext-2" };
+    boot(extCfg());
+    (w as any).setExternal(state);
+    await sleep(30);
+    assert.equal($(".mwrap"), null, JSON.stringify(state));
+  }
+});
+
+test("modo externo: adota as escolhas da plataforma, e um reenvio antigo não desfaz a mudança feita aqui", async () => {
+  identity = { id: "ext-3" };
+  boot(extCfg());
+  (w as any).setExternal({ invite: false, prefs: { highlightLinks: true, textSize: 2 } });
+  assert.ok(html().classList.contains("lu-a11y-links"), "escolha salva na plataforma aplicada");
+  click($('[data-a="open"]'));
+  click($('[data-k="sw:highlightLinks"]')); // estudante desliga aqui
+  assert.equal(html().classList.contains("lu-a11y-links"), false);
+  (w as any).setExternal({ invite: false, prefs: { highlightLinks: true, textSize: 2 } }); // eco antigo
+  assert.equal(html().classList.contains("lu-a11y-links"), false, "a mudança do estudante vence o eco");
+  (w as any).setExternal({ invite: false, prefs: { highlightLinks: true, textSize: 2 } }); // plataforma insiste: é a configuração nova
+  assert.ok(html().classList.contains("lu-a11y-links"));
+  assert.equal((w as any).getState().prefs.textSize, 2);
+});
+
+test("modo externo: cada mudança sai na hora (evento no navegador, onEvent e webhook pela Luumu)", async () => {
+  identity = { id: "ext-4", email: "bia@escola.br" };
+  const seen: any[] = [];
+  const onWindow = (e: Event) => seen.push({ via: "window", ...(e as CustomEvent).detail });
+  window.addEventListener("luumu:accessibility", onWindow);
+  const viaBoot: any[] = [];
+  boot(extCfg(), { onEvent: (e: any) => viaBoot.push(e) });
+  (w as any).setExternal({ invite: true, profiles: ["leitura"] });
+  await sleep(30);
+  click($('[data-n="accept"]'));
+  await sleep(10);
+  click($('[data-a="open"]'));
+  click($('[data-k="sw:highlightLinks"]'));
+  await sleep(10);
+  window.removeEventListener("luumu:accessibility", onWindow);
+
+  const types = seen.map((e) => e.event);
+  assert.ok(types.includes("invite.shown"), types.join());
+  assert.ok(types.includes("invite.accepted"), types.join());
+  assert.ok(types.filter((t) => t === "prefs.updated").length >= 2, "aceitar o perfil e ligar o recurso");
+  assert.equal(viaBoot.length, seen.length, "onEvent recebe o mesmo que o evento do navegador");
+  const last = seen.at(-1);
+  assert.equal(last.event, "prefs.updated");
+  assert.deepEqual(last.user, { id: "ext-4", email: "bia@escola.br" });
+  assert.equal(last.host, "app.escola.com");
+  assert.equal(last.prefs.highlightLinks, true);
+  assert.deepEqual(last.changes, [{ field: "highlightLinks", from: false, to: true }]);
+  const accepted = seen.find((e) => e.event === "invite.accepted");
+  assert.deepEqual(accepted.invite, { status: "accepted", profiles: ["leitura"] });
+
+  const relayed = calls("events").map((c) => c.body);
+  assert.equal(relayed.length, seen.length, "cada evento também vai para o webhook");
+  assert.equal(relayed.at(-1).event, "prefs.updated");
+  assert.equal(relayed.at(-1).id, "ext-4");
+  assert.equal(relayed.at(-1).eventId, last.id, "mesmo id: a plataforma descarta repetidos");
+});
+
+test("sem webhook configurado ou estudante anônimo, nada é repassado pela Luumu (o evento no navegador continua)", async () => {
+  let n = 0;
+  const count = () => n++;
+  window.addEventListener("luumu:accessibility", count);
+  identity = { id: "ext-5" };
+  boot(cfg({ integration: { mode: "external", webhookUrl: "" } }));
+  click($('[data-a="open"]'));
+  click($('[data-k="sw:highlightLinks"]'));
+  w.destroy();
+  identity = {};
+  boot(extCfg());
+  click($('[data-a="open"]'));
+  click($('[data-k="sw:highlightLinks"]'));
+  await sleep(10);
+  window.removeEventListener("luumu:accessibility", count);
+  assert.equal(calls("events").length, 0);
+  assert.equal(n, 2);
+});

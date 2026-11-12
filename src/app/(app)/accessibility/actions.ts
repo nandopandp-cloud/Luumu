@@ -12,7 +12,10 @@ import {
   upsertInvitees,
   type InviteeRow,
 } from "@/lib/db/accessibility";
+import { randomUUID } from "node:crypto";
 import type { A11yConfig } from "@/lib/accessibility/config";
+import { safeWebhookUrl, testEvent } from "@/lib/accessibility/integration";
+import { deliverWebhook } from "@/lib/accessibility/webhook";
 import { inviteeKey, isInviteeStatus, parseInvitees, parseProfile, type InviteeStatus } from "@/lib/accessibility/invitees";
 
 /*
@@ -43,6 +46,8 @@ export async function saveAccessibilityAction(input: { enabled: boolean; config:
   if (JSON.stringify(input.config ?? {}).length > 200_000) return { ok: false, error: "Configuração grande demais." };
   try {
     const config = await saveAccessibilitySettings(m.projectId, { enabled: input.enabled, config: input.config }, m.userId);
+    // o webhook é assinado com o segredo do projeto: sem ele, a Luumu não repassaria nada
+    if (config.integration.webhookUrl) await getOrCreateIdentitySecret(m.projectId, m.userId);
     revalidatePath(PATH);
     return { ok: true, config };
   } catch {
@@ -162,4 +167,27 @@ export async function setRequireVerifiedAction(on: boolean): Promise<{ ok: true 
   } catch {
     return { ok: false, error: NO_TABLE };
   }
+}
+
+/* ---------------- integração com plataforma externa ---------------- */
+
+/**
+ * Manda um evento "test" (assinado, uma tentativa) para a URL informada — ainda não precisa
+ * estar salva. Cria o segredo do projeto se ainda não existir (é com ele que se assina).
+ */
+export async function testWebhookAction(url: string): Promise<{ ok: true; status: number } | Fail> {
+  const m = await manager();
+  if (!m) return NOT_ALLOWED;
+  const safe = safeWebhookUrl(url);
+  if (!safe) return { ok: false, error: "Use uma URL https pública (sem localhost, IP interno ou usuário e senha)." };
+  let secret: string;
+  try {
+    secret = await getOrCreateIdentitySecret(m.projectId, m.userId);
+  } catch {
+    return { ok: false, error: NO_TABLE };
+  }
+  const r = await deliverWebhook(safe, secret, testEvent(randomUUID()), 1);
+  if (r.ok) return { ok: true, status: r.status ?? 200 };
+  if (r.status) return { ok: false, error: `A plataforma respondeu ${r.status}. Ela precisa responder 2xx (de preferência 200 ou 204).` };
+  return { ok: false, error: r.error === "TimeoutError" ? "A plataforma não respondeu em 5 segundos." : "Não foi possível conectar à URL (DNS, certificado ou redirecionamento)." };
 }

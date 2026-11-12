@@ -12,6 +12,7 @@
 import { FEATURE_IDS, PROFILE_IDS, isProfileId, type FeatureId, type ProfileId } from "./features";
 import { normalizeGroups, type AudienceGroup } from "./audience";
 import { DEFAULT_SCOPE, normalizeScope, type ActivationScope } from "./scope";
+import { safeWebhookUrl, type IntegrationMode } from "./integration";
 import { HAIR_COLORS, SKIN_TONES, VLIBRAS_AVATARS, safePersonalizationUrl, type VlibrasAvatar, type VlibrasLook } from "./vlibras";
 
 export type LauncherPosition = "bottom-right" | "bottom-left" | "middle-right" | "middle-left";
@@ -73,6 +74,12 @@ export const LAUNCHER_PRESETS: { id: string; label: string; colors: Omit<Launche
 export interface A11yConfig {
   /** onde o plugin fica ativo (lib/accessibility/scope.ts) */
   scope: ActivationScope;
+  /**
+   * Quem controla convidados e preferências (lib/accessibility/integration.ts): "luumu" (lista
+   * e conta na Luumu) ou "external" (outra plataforma, via setUser + eventos/webhook).
+   * `webhookUrl` só existe no servidor; o navegador recebe `webhook: boolean`.
+   */
+  integration: { mode: IntegrationMode; webhookUrl: string };
   brand: {
     title: string;
     subtitle: string;
@@ -99,10 +106,11 @@ export interface A11yConfig {
   nudge: NudgeConfig;
 }
 
-/** O que o SDK recebe: sem os domínios (filtrados no servidor) e sabendo só se há convidados. */
-export type PublicA11yConfig = Omit<A11yConfig, "nudge" | "scope"> & {
+/** O que o SDK recebe: sem os domínios (filtrados no servidor), sem a URL do webhook e sabendo só se há convidados. */
+export type PublicA11yConfig = Omit<A11yConfig, "nudge" | "scope" | "integration"> & {
   scope: Omit<ActivationScope, "hosts">;
   nudge: NudgeConfig & { hasList: boolean };
+  integration: { mode: IntegrationMode; webhook: boolean };
 };
 
 export const LAUNCHER_POSITIONS: { value: LauncherPosition; label: string }[] = [
@@ -122,6 +130,7 @@ export const ACCENT_PRESETS = ["#4F46E5", "#6B2BD9", "#0E7490", "#0F766E", "#158
 
 export const DEFAULT_A11Y_CONFIG: A11yConfig = {
   scope: DEFAULT_SCOPE,
+  integration: { mode: "luumu", webhookUrl: "" },
   brand: {
     title: "Acessibilidade",
     subtitle: "Personalize a plataforma do seu jeito. Suas escolhas ficam salvas na sua conta.",
@@ -227,8 +236,13 @@ export function normalizeA11yConfig(input: unknown): A11yConfig {
   const lc = obj(launcher.colors);
   const offset = typeof launcher.offset === "number" && Number.isFinite(launcher.offset) ? Math.round(Math.min(200, Math.max(8, launcher.offset))) : d.launcher.offset;
 
+  const integration = obj(o.integration);
   return {
     scope: normalizeScope(o.scope),
+    integration: {
+      mode: integration.mode === "external" ? "external" : "luumu",
+      webhookUrl: safeWebhookUrl(integration.webhookUrl),
+    },
     brand: {
       title: text(brand.title, d.brand.title, 40),
       subtitle: optText(typeof brand.subtitle === "string" && OLD_SUBTITLES.includes(brand.subtitle.trim()) ? undefined : brand.subtitle, d.brand.subtitle, 160),
@@ -285,7 +299,14 @@ export function normalizeA11yConfig(input: unknown): A11yConfig {
 export function publicA11yConfig(config: A11yConfig, hasInvitees = false): PublicA11yConfig {
   const { hosts: _hosts, ...scope } = config.scope;
   void _hosts;
-  return { ...config, scope, nudge: { ...config.nudge, hasList: hasInvitees } };
+  const ext = config.integration.mode === "external";
+  return {
+    ...config,
+    scope,
+    // no modo externo a lista da Luumu não vale: quem decide é o setUser da outra plataforma
+    nudge: { ...config.nudge, hasList: ext ? false : hasInvitees },
+    integration: { mode: config.integration.mode, webhook: !!config.integration.webhookUrl },
+  };
 }
 
 /** Logo que vai na camisa do avatar (vazio = camisa lisa). */

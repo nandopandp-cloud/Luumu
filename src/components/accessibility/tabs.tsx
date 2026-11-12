@@ -240,7 +240,10 @@ export function NudgeTab({ config, patch, canManage, inviteeCount }: { config: A
   const n = config.nudge;
   const nudge = (p: Partial<A11yConfig["nudge"]>) => patch((c) => ({ ...c, nudge: { ...c.nudge, ...p } }));
   const targeted = n.audience === "targeted";
-  const reach = targeted
+  const external = config.integration.mode === "external";
+  const reach = external
+    ? "os estudantes que a plataforma externa marcar com invite: true"
+    : targeted
     ? `${n.groups.length} ${n.groups.length === 1 ? "grupo" : "grupos"} e ${inviteeCount.toLocaleString("pt-BR")} ${inviteeCount === 1 ? "convidado" : "convidados"} da lista`
     : "todos os estudantes com o plugin";
 
@@ -255,12 +258,23 @@ export function NudgeTab({ config, patch, canManage, inviteeCount }: { config: A
         <ToggleRow title="Mostrar o convite" description={n.enabled ? `Ativo para ${reach}.` : "Desligado: ninguém vê o convite."} checked={n.enabled} onChange={(enabled) => nudge({ enabled })} />
       </Card>
 
-      <Card>
-        <SectionTitle icon={<Users className="size-4.5" />} title="Convidados" description="Estudantes que recebem o convite, um a um ou em lote. Cada um pode ter o próprio perfil sugerido." />
-        <InviteesManager canManage={canManage} />
-      </Card>
+      {external ? (
+        <Card>
+          <SectionTitle icon={<Users className="size-4.5" />} title="Convidados" description="Controlados pela plataforma externa (aba Ativação → Integração)." />
+          <p className="text-xs leading-relaxed text-fg-mut">
+            O convite aparece para o estudante que a plataforma informar com <code>invite: true</code> em <code>Luumu.accessibility.setUser</code>, com os perfis
+            que ela mandar em <code>profiles</code>. Se <code>status</code> vier <code>&quot;accepted&quot;</code> ou <code>&quot;dismissed&quot;</code>, ele não aparece de novo. O aceite
+            e a recusa voltam para a plataforma na hora (evento <code>luumu:accessibility</code> e webhook). A mensagem, a ilustração e os botões abaixo continuam valendo.
+          </p>
+        </Card>
+      ) : (
+        <Card>
+          <SectionTitle icon={<Users className="size-4.5" />} title="Convidados" description="Estudantes que recebem o convite, um a um ou em lote. Cada um pode ter o próprio perfil sugerido." />
+          <InviteesManager canManage={canManage} />
+        </Card>
+      )}
 
-      <Card className={cn(!n.enabled && "opacity-60")}>
+      {!external && <Card className={cn(!n.enabled && "opacity-60")}>
         <SectionTitle icon={<Building2 className="size-4.5" />} title="Quem mais recebe" description="Além dos convidados da lista, o convite pode ir para grupos inteiros ou para todos." />
         <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Público do convite">
           {[
@@ -286,7 +300,7 @@ export function NudgeTab({ config, patch, canManage, inviteeCount }: { config: A
             <IdentifyHint />
           </div>
         )}
-      </Card>
+      </Card>}
 
       <Card className={cn(!n.enabled && "opacity-60")}>
         <SectionTitle icon={<Sparkles className="size-4.5" />} title="Mensagem" description="Tom acolhedor: o convite nunca diz por que o estudante foi sinalizado." />

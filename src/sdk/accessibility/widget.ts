@@ -41,6 +41,7 @@ import { messageHtml, nudgeImageUrl, readableOn, shade, type PublicA11yConfig } 
 import { matchesAnyGroup } from "../../lib/accessibility/audience";
 import { scopeDecision } from "../../lib/accessibility/scope";
 import { userKeyFrom } from "../../lib/accessibility/invitees";
+import { normalizeExternalState, prefsDiff, type A11yEvent, type A11yEventType, type ExternalUserState, type InviteStatus } from "../../lib/accessibility/integration";
 import { nudgeDue, parseNudgeMemo, type NudgeMemo } from "../../lib/accessibility/nudge";
 import { icon } from "./icons";
 import { WIDGET_CSS } from "./styles";
@@ -59,6 +60,8 @@ export interface A11yBootConfig {
   preview?: { nudge?: boolean };
   /** o servidor respondeu que o plugin está desligado: o core tira o widget e o catálogo guardado */
   onDisabled?: () => void;
+  /** cada evento do plugin (mudança de configuração, convite) — o core repassa ao onChange da página */
+  onEvent?: (e: A11yEvent) => void;
 }
 
 export type A11yView = "panel" | "nudge" | "libras" | "face";
@@ -70,6 +73,10 @@ export interface A11yWidget {
   close(): void;
   /** o produto chamou Luumu.identify/reset: reavalia estudante, escolhas, escopo e convite */
   identify(): void;
+  /** plataforma externa (Luumu.accessibility.setUser): convite e última configuração do estudante */
+  setExternal(state: unknown): void;
+  /** estado atual do plugin para o estudante (Luumu.accessibility.getState) */
+  getState(): { user: { id: string | null; email: string | null }; prefs: A11yPrefs; activeProfiles: ProfileId[] };
   destroy(): void;
 }
 
@@ -123,6 +130,23 @@ function createWidget(): A11yWidget {
   let pulling: Promise<void> = Promise.resolve();
   // mudança feita neste aparelho que a conta ainda não confirmou (só ela pode sobrescrever a conta)
   let dirty = false;
+  /*
+    Modo "external" (painel → Ativação → Integração): a outra plataforma informa o estudante por
+    Luumu.accessibility.setUser e recebe cada mudança por evento/webhook. A Luumu não lê nem grava
+    lista de convidados ou preferências nesse modo.
+  */
+  const external = () => cfg.integration?.mode === "external";
+  let ext: ExternalUserState | null = null;
+  let extAdopted = false; // a configuração da plataforma já foi aplicada para este estudante
+  let changedSinceExt = false; // o estudante mudou algo depois do último setUser (não desfazer)
+  let extResolve: (() => void) | null = null;
+  let extReady: Promise<void> = new Promise((r) => (extResolve = r));
+  function resetExternal() {
+    ext = null;
+    extAdopted = false;
+    changedSinceExt = false;
+    extReady = new Promise((r) => (extResolve = r));
+  }
   let changeSeq = 0;
   let remoteBlocked = false;
   let panelOpen = false;
@@ -244,7 +268,7 @@ function createWidget(): A11yWidget {
   function pushNow() {
     if (pushTimer) clearTimeout(pushTimer);
     pushTimer = null;
-    if (owner === "anon" || preview()) return;
+    if (owner === "anon" || preview() || external()) return;
     const seq = changeSeq;
     const who0 = owner;
     void post("prefs", { op: "set", prefs, t: prefsAt, nudge: nudgeMemo }, true).then((r) => {
@@ -278,7 +302,7 @@ function createWidget(): A11yWidget {
   }
   const pulledKey = () => `luumu_a11y_pulled_${boot!.key}:${owner}`;
   async function pullPrefs(attempt = 0): Promise<void> {
-    if (owner === "anon" || preview()) return;
+    if (owner === "anon" || preview() || external()) return;
     const last = Number(get(pulledKey()) || 0);
     if (!attempt && Date.now() - last < PULL_EVERY_MS) {
       // leu há pouco: só envia o que estiver pendente
@@ -329,6 +353,8 @@ function createWidget(): A11yWidget {
   /** identify chegou depois do boot (ou trocou o usuário): carrega as escolhas e o escopo dele */
   function syncOwner() {
     if (currentOwner() === owner) return;
+    // o estado vindo da plataforma externa era do estudante anterior
+    resetExternal();
     loadPrefs();
     applyAll();
     void decideScope();
@@ -338,6 +364,8 @@ function createWidget(): A11yWidget {
   // st: desfecho do convite que o servidor já registrou para este convidado
   type MatchMemo = { m: boolean; p: string | null; st: string | null; at: number };
   async function inviteeMatch(): Promise<MatchMemo | null> {
+    // modo externo: quem está "na lista" é quem a plataforma marcou com invite: true
+    if (external()) return ext ? { m: ext.invite, p: ext.profiles[0] ?? null, st: ext.status, at: Date.now() } : null;
     if (!cfg.nudge.hasList || owner === "anon" || preview()) return null;
     const cacheKey = `luumu_a11y_match_${boot!.key}:${owner}`;
     const cached = json(get(cacheKey)) as MatchMemo | null;
@@ -352,7 +380,7 @@ function createWidget(): A11yWidget {
   /* ---------------- escopo de ativação ---------------- */
   async function decideScope() {
     if (preview()) return setScope(true);
-    const d = scopeDecision(cfg.scope, boot!.identity(), cfg.nudge.hasList);
+    const d = scopeDecision(cfg.scope, boot!.identity(), external() || cfg.nudge.hasList);
     if (d !== "ask") return setScope(d === "yes");
     const m = await inviteeMatch();
     setScope(!!m?.m);
@@ -734,9 +762,47 @@ function createWidget(): A11yWidget {
   }
 
   function setPrefs(next: A11yPrefs) {
+    const before = prefs;
     prefs = next;
+    changedSinceExt = true;
     savePrefs();
     applyAll();
+    const changes = prefsDiff(before, next);
+    if (changes.length) emit("prefs.updated", { changes });
+  }
+
+  /*
+    Saída em tempo real: cada mudança vira um evento —
+     - no navegador: window "luumu:accessibility" (detail = evento) e Luumu.accessibility.onChange;
+     - webhook (se configurado): POST /api/v1/accessibility/events → a Luumu repassa, assinado.
+  */
+  function emit(type: A11yEventType, extra: { changes?: A11yEvent["changes"]; invite?: A11yEvent["invite"] } = {}) {
+    if (!boot) return;
+    const i = boot.identity();
+    const user = {
+      id: typeof i.id === "string" || typeof i.id === "number" ? String(i.id) : null,
+      email: typeof i.email === "string" ? i.email : null,
+    };
+    const e: A11yEvent = {
+      event: type,
+      id: typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`,
+      occurredAt: new Date().toISOString(),
+      user,
+      host: boot.host,
+      prefs,
+      activeProfiles: prefs.profiles,
+      changes: extra.changes ?? [],
+      invite: extra.invite ?? null,
+    };
+    try {
+      window.dispatchEvent(new CustomEvent("luumu:accessibility", { detail: e }));
+    } catch {}
+    try {
+      boot.onEvent?.(e);
+    } catch {}
+    if (cfg.integration?.webhook && owner !== "anon" && !preview()) {
+      void post("events", { event: e.event, eventId: e.id, occurredAt: e.occurredAt, host: e.host, prefs: e.prefs, changes: e.changes, invite: e.invite }, true);
+    }
   }
 
   function onAction(e: Event) {
@@ -829,7 +895,8 @@ function createWidget(): A11yWidget {
     // na conta do estudante: aceitar vale em qualquer aparelho e depois de limpar o navegador
     schedulePush();
     // o painel da Luumu mostra quem viu, aceitou ou dispensou (só para convidados da lista)
-    if (invited) void post("match", { event: s }, true);
+    if (invited && !external()) void post("match", { event: s }, true);
+    emit(`invite.${s}` as A11yEventType, { invite: { status: s as InviteStatus, profiles: nudgeCards } });
   }
 
   /** Caminho relativo (ex.: a ilustração padrão) é da Luumu, não do site do cliente. */
@@ -850,7 +917,10 @@ function createWidget(): A11yWidget {
     const suggested = pid && profileAvailable(pid, cfg.features) ? pid : null;
     // até três perfis no convite (os primeiros do painel); o sugerido entra e já vem marcado
     const available = NUDGE_PROFILE_ORDER.filter((p) => cfg.profiles.includes(p) && profileAvailable(p, cfg.features));
-    const cards = (suggested ? [suggested, ...available.filter((p) => p !== suggested)] : available).slice(0, 3);
+    // modo externo: os perfis que a plataforma mandou, na ordem dela
+    const extCards = external() && ext?.profiles.length ? ext.profiles.filter((p) => profileAvailable(p, cfg.features)) : [];
+    const cards = (extCards.length ? extCards : suggested ? [suggested, ...available.filter((p) => p !== suggested)] : available).slice(0, 3);
+    nudgeCards = cards;
     // todos os perfis mostrados vêm marcados e não se desmarcam: o estudante só aceita ou dispensa
     const picked = new Set<ProfileId>(cards);
     const img = nudgeImageUrl(n);
@@ -914,6 +984,8 @@ function createWidget(): A11yWidget {
   }
 
   let inviteeStatus: string | null = null;
+  // perfis mostrados no convite aberto (vão nos eventos invite.*)
+  let nudgeCards: ProfileId[] = [];
   async function inAudience(): Promise<boolean> {
     const n = cfg.nudge;
     const m = await inviteeMatch();
@@ -928,6 +1000,7 @@ function createWidget(): A11yWidget {
     const n = cfg.nudge;
     if (!n.enabled || nudgeEl) return;
     syncOwner();
+    if (external()) return maybeNudgeExternal();
     if (inScope === null) await decideScope();
     if (!inScope) return;
     // espera a conta: quem já aceitou (ou já tem recursos ligados) em outro aparelho não vê de novo
@@ -949,6 +1022,21 @@ function createWidget(): A11yWidget {
     if (!(await inAudience())) return;
     // convidado que já aceitou: o painel da Luumu registrou, mesmo sem nada guardado aqui
     if (inviteeStatus === "accepted") return;
+    showNudge();
+  }
+
+  /**
+   * Convite no modo externo: aparece para quem a plataforma marcou com invite: true e ainda não
+   * aceitou/dispensou (status). Espera o setUser por até 10 s depois do carregamento.
+   */
+  async function maybeNudgeExternal() {
+    await Promise.race([extReady, new Promise((r) => timers.push(setTimeout(r, 10_000)))]);
+    if (!boot || nudgeEl || !ext?.invite || ext.status === "accepted" || ext.status === "dismissed") return;
+    if (inScope === null) await decideScope();
+    if (!inScope) return;
+    if (sessionFlag("luumu_a11y_nudged") === "1" || activeCount(effective(prefs)) > 0) return;
+    invited = true;
+    inviteeProfile = null;
     showNudge();
   }
 
@@ -1077,6 +1165,37 @@ function createWidget(): A11yWidget {
       closePanel();
       closeNudge();
     },
+    setExternal(input) {
+      if (!boot) return;
+      syncOwner();
+      ext = normalizeExternalState(input);
+      // aplica a última configuração salva na plataforma — mas um reenvio antigo, chegado depois
+      // de o estudante já ter mudado algo nesta página, não desfaz a mudança dele
+      if (external() && ext.prefs && (!extAdopted || !changedSinceExt)) {
+        if (JSON.stringify(ext.prefs) !== JSON.stringify(prefs)) {
+          prefs = ext.prefs;
+          prefsAt = Date.now();
+          dirty = false;
+          storeLocal();
+          applyAll();
+        }
+      }
+      extAdopted = true;
+      changedSinceExt = false;
+      extResolve?.();
+      if (external()) {
+        void decideScope();
+        if (!nudgeEl) void maybeNudge(false);
+      }
+    },
+    getState() {
+      const i = boot?.identity() ?? {};
+      return {
+        user: { id: i.id == null ? null : String(i.id), email: typeof i.email === "string" ? i.email : null },
+        prefs: { ...prefs },
+        activeProfiles: [...prefs.profiles],
+      };
+    },
     identify() {
       if (!boot || preview()) return;
       const before = owner;
@@ -1105,6 +1224,7 @@ function createWidget(): A11yWidget {
       prefs = { ...DEFAULT_PREFS };
       prefsAt = 0;
       dirty = false;
+      resetExternal();
       nudgeMemo = null;
       pulling = Promise.resolve();
       inScope = null;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { AlertTriangle, Check, Copy, Eye, Globe, KeyRound, Loader2, RefreshCw, ShieldCheck, Users } from "lucide-react";
+import { AlertTriangle, Check, Copy, Eye, Globe, KeyRound, Loader2, Plug, RefreshCw, Send, ShieldCheck, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -11,7 +11,9 @@ import { HostPicker } from "@/components/ui/HostPicker";
 import { useToast } from "@/components/ui/Toast";
 import type { A11yConfig } from "@/lib/accessibility/config";
 import { scopeReachesNobody } from "@/lib/accessibility/scope";
-import { revealIdentitySecretAction, setRequireVerifiedAction } from "@/app/(app)/accessibility/actions";
+import { revealIdentitySecretAction, setRequireVerifiedAction, testWebhookAction } from "@/app/(app)/accessibility/actions";
+import { Input } from "@/components/ui/Input";
+import { safeWebhookUrl } from "@/lib/accessibility/integration";
 import { SectionTitle, ToggleRow } from "./controls";
 import { GroupsEditor, IdentifyHint } from "./GroupsEditor";
 
@@ -36,7 +38,9 @@ export function ActivationTab({
   const sc = config.scope;
   const scope = (p: Partial<A11yConfig["scope"]>) => patch((c) => ({ ...c, scope: { ...c.scope, ...p } }));
   const targeted = sc.audience === "targeted";
-  const nobody = scopeReachesNobody(sc, inviteeCount);
+  const external = config.integration.mode === "external";
+  // no modo externo, "convidados" são os estudantes que a plataforma marcou com invite: true
+  const nobody = !external && scopeReachesNobody(sc, inviteeCount);
 
   return (
     <div className="flex flex-col gap-4">
@@ -80,9 +84,11 @@ export function ActivationTab({
             )}
             <GroupsEditor groups={sc.groups} onChange={(groups) => scope({ groups })} />
             <ToggleRow
-              title="Convidados da lista"
+              title={external ? "Convidados da plataforma externa" : "Convidados da lista"}
               description={
-                inviteeCount
+                external
+                  ? "Estudantes que a plataforma externa marcar com invite: true (Luumu.accessibility.setUser) também veem o plugin."
+                  : inviteeCount
                   ? `Os ${inviteeCount.toLocaleString("pt-BR")} estudantes da lista (aba Convite) também veem o plugin.`
                   : "A lista da aba Convite está vazia. Quem for adicionado lá passa a ver o plugin."
               }
@@ -94,8 +100,111 @@ export function ActivationTab({
         )}
       </Card>
 
+      <IntegrationCard config={config} patch={patch} canManage={canManage} />
+
       <IdentityCard canManage={canManage} initial={verification} />
     </div>
+  );
+}
+
+/** Quem controla convidados e preferências: a Luumu ou uma plataforma externa (lib/accessibility/integration.ts). */
+function IntegrationCard({ config, patch, canManage }: { config: A11yConfig; patch: Patch; canManage: boolean }) {
+  const toast = useToast();
+  const it = config.integration;
+  const set = (p: Partial<A11yConfig["integration"]>) => patch((c) => ({ ...c, integration: { ...c.integration, ...p } }));
+  const [url, setUrl] = useState(it.webhookUrl);
+  const [busy, start] = useTransition();
+  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const typed = url.trim();
+  const valid = !typed || !!safeWebhookUrl(typed);
+
+  const commit = (v: string) => {
+    const clean = safeWebhookUrl(v);
+    if (v.trim() && !clean) return;
+    set({ webhookUrl: clean });
+  };
+
+  return (
+    <Card>
+      <SectionTitle
+        icon={<Plug className="size-4.5" />}
+        title="Integração"
+        description="Quem decide quais estudantes recebem o convite e onde ficam salvas as escolhas de cada um."
+        aside={it.mode === "external" ? <Badge tone="brand">Plataforma externa</Badge> : <Badge tone="neutral">Luumu</Badge>}
+      />
+      <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Quem controla convidados e preferências">
+        {[
+          { v: "luumu" as const, t: "Luumu", d: "Lista de convidados na aba Convite; escolhas salvas na conta do estudante pela Luumu." },
+          { v: "external" as const, t: "Plataforma externa", d: "A outra plataforma informa convite e escolhas (setUser) e recebe cada mudança na hora." },
+        ].map((o) => (
+          <button
+            key={o.v}
+            type="button"
+            role="radio"
+            aria-checked={it.mode === o.v}
+            onClick={() => set({ mode: o.v })}
+            className={cn("rounded-xl border p-3.5 text-left transition", it.mode === o.v ? "border-accent bg-surface-brand" : "border-line hover:border-line-strong")}
+          >
+            <span className="block text-sm font-semibold">{o.t}</span>
+            <span className="mt-0.5 block text-xs text-fg-mut">{o.d}</span>
+          </button>
+        ))}
+      </div>
+
+      {it.mode === "external" && (
+        <p className="mt-4 rounded-xl bg-bg-sunken px-3 py-2.5 text-xs leading-relaxed text-fg-mut">
+          Nesse modo a Luumu não guarda convidados nem preferências. A página da plataforma chama <code>Luumu.accessibility.setUser({"{ id, invite, profiles, status, prefs }"})</code> para
+          cada estudante logado e recebe as mudanças pelo evento <code>luumu:accessibility</code> no navegador e/ou pelo webhook abaixo. A documentação completa está em
+          docs/accessibility/integracao-plataforma-externa.pdf.
+        </p>
+      )}
+
+      <div className={cn("mt-5 flex flex-col gap-2", !canManage && "pointer-events-none opacity-60")}>
+        <label htmlFor="a11y-webhook" className="text-sm font-semibold">
+          Webhook <span className="font-normal text-fg-mut">(opcional)</span>
+        </label>
+        <p className="text-xs text-fg-mut">
+          Cada mudança no plugin (escolhas do estudante e desfecho do convite) é enviada na hora, assinada com o segredo do projeto (card abaixo), para esta URL. Vale nos dois modos.
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            id="a11y-webhook"
+            value={url}
+            placeholder="https://plataforma.com.br/webhooks/luumu-acessibilidade"
+            onChange={(e) => {
+              setUrl(e.target.value);
+              setResult(null);
+            }}
+            onBlur={() => commit(url)}
+            aria-invalid={!valid}
+            className="min-w-0 flex-1 font-mono text-xs"
+            spellCheck={false}
+          />
+          <button
+            type="button"
+            disabled={!typed || !valid || busy}
+            onClick={() =>
+              start(async () => {
+                const r = await testWebhookAction(typed);
+                setResult(r.ok ? { ok: true, text: `Entregue: a plataforma respondeu ${r.status}.` } : { ok: false, text: r.error });
+                if (r.ok) commit(typed);
+                else toast("error", r.error);
+              })
+            }
+            className="inline-flex items-center gap-1.5 rounded-lg border border-line-strong px-3 py-2 text-xs font-semibold text-fg-soft hover:border-accent hover:text-accent disabled:opacity-40"
+          >
+            {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />} Testar webhook
+          </button>
+        </div>
+        {!valid && <p className="text-xs font-semibold text-erro">Use uma URL https pública (sem localhost, IP interno ou usuário e senha).</p>}
+        {result && (
+          <p role="status" className={cn("text-xs font-semibold", result.ok ? "text-sucesso" : "text-erro")}>
+            {result.text}
+          </p>
+        )}
+        {it.webhookUrl && typed === it.webhookUrl && <p className="text-xs text-fg-mut">Publique as alterações para o webhook passar a valer.</p>}
+      </div>
+    </Card>
   );
 }
 
