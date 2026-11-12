@@ -499,6 +499,40 @@ test("convidado que já aceitou (registrado no painel) não vê o convite num na
   assert.equal($(".mwrap"), null);
 });
 
+test("prévia do painel: editar o texto do convite não rouba o foco nem registra 'visto' de novo", async () => {
+  // o campo do painel da Luumu ao lado da prévia
+  const field = document.createElement("textarea");
+  document.body.appendChild(field);
+  try {
+    boot(cfg({ nudge: { enabled: true } }), { preview: {} });
+    w.open("nudge");
+    await sleep(60);
+    field.focus();
+    assert.equal(document.activeElement, field);
+    for (const msg of ["Texto 1", "Texto 12", "Texto 1"]) {
+      w.update(cfg({ nudge: { enabled: true, message: msg } }));
+      await sleep(50);
+      assert.equal(document.activeElement, field, "o foco continua no campo enquanto digita");
+    }
+    assert.equal($(".n-text")!.textContent, "Texto 1", "a prévia mostra o texto novo");
+  } finally {
+    field.remove();
+  }
+});
+
+test("produto: atualizar a configuração com o convite aberto não registra 'visto' de novo", async () => {
+  identity = { id: "convidado-redraw" };
+  server.match = true;
+  boot(publicA11yConfig(normalizeA11yConfig({ nudge: { enabled: true, audience: "targeted", delay: 0 } }), true));
+  await sleep(40);
+  assert.ok($(".mwrap"));
+  w.update(publicA11yConfig(normalizeA11yConfig({ nudge: { enabled: true, audience: "targeted", delay: 0, title: "Novo" } }), true));
+  await sleep(20);
+  assert.equal($(".n-title")!.textContent, "Novo");
+  const shown = calls("match").filter((c) => c.body.event === "shown");
+  assert.equal(shown.length, 1);
+});
+
 test("prévia não grava nada no navegador", () => {
   boot(cfg(), { preview: {} });
   click($('[data-a="open"]'));

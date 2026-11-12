@@ -123,8 +123,8 @@ function createWidget(): A11yWidget {
   let pulling: Promise<void> = Promise.resolve();
   let remoteBlocked = false;
   let panelOpen = false;
-  let releasePanelTrap: (() => void) | null = null;
-  let releaseNudgeTrap: (() => void) | null = null;
+  let releasePanelTrap: ((restore?: boolean) => void) | null = null;
+  let releaseNudgeTrap: ((restore?: boolean) => void) | null = null;
   let toastTimer: ReturnType<typeof setTimeout> | null = null;
   let darkQuery: MediaQueryList | null = null;
   const memory: Record<string, string> = {};
@@ -387,7 +387,12 @@ function createWidget(): A11yWidget {
 
   /* ---------------- foco preso nos diálogos ---------------- */
   /** `focusSelf`: o foco inicial vai para o próprio diálogo (o leitor de tela anuncia o título) */
-  function trapFocus(container: HTMLElement, focusSelf = false): () => void {
+  /*
+    Prévia (painel da Luumu): o widget roda num iframe ao lado do formulário. Puxar o foco ali
+    roubava o teclado de quem digita no painel — a cada letra o convite era redesenhado e o
+    campo de texto perdia o foco. Na prévia nada recebe foco sozinho; no produto, sim.
+  */
+  function trapFocus(container: HTMLElement, focusSelf = false, initial = true): (restore?: boolean) => void {
     const before = (hostEl?.shadowRoot?.activeElement as HTMLElement | null) ?? (document.activeElement as HTMLElement | null);
     const focusables = () =>
       Array.from(container.querySelectorAll<HTMLElement>("button:not([disabled]),[href],input,select,textarea,[tabindex]:not([tabindex='-1'])")).filter(
@@ -408,10 +413,10 @@ function createWidget(): A11yWidget {
       }
     };
     container.addEventListener("keydown", onKey);
-    setTimeout(() => (focusSelf ? container : focusables()[0] ?? container).focus?.(), 30);
-    return () => {
+    if (initial && !preview()) setTimeout(() => (focusSelf ? container : focusables()[0] ?? container).focus?.(), 30);
+    return (restore = true) => {
       container.removeEventListener("keydown", onKey);
-      before?.focus?.();
+      if (restore && !preview()) before?.focus?.();
     };
   }
 
@@ -654,8 +659,9 @@ function createWidget(): A11yWidget {
   }
 
   /* ---------------- convite ---------------- */
-  function closeNudge() {
-    releaseNudgeTrap?.();
+  /** `restore`: devolver o foco para onde estava (não quando o convite só é redesenhado) */
+  function closeNudge(restore = true) {
+    releaseNudgeTrap?.(restore);
     releaseNudgeTrap = null;
     nudgeEl?.remove();
     nudgeEl = null;
@@ -684,7 +690,8 @@ function createWidget(): A11yWidget {
     }
   }
 
-  function showNudge() {
+  /** `redraw`: só redesenha um convite já aberto (configuração mudou) — sem foco e sem registrar "visto" */
+  function showNudge(redraw = false) {
     if (nudgeEl) return;
     const n = cfg.nudge;
     const pid = inviteeProfile ?? n.profile;
@@ -751,6 +758,10 @@ function createWidget(): A11yWidget {
       }
     });
     rootEl.appendChild(nudgeEl);
+    if (redraw) {
+      releaseNudgeTrap = trapFocus(nudgeEl.querySelector(".nudge") as HTMLElement, true, false);
+      return;
+    }
     releaseNudgeTrap = trapFocus(nudgeEl.querySelector(".nudge") as HTMLElement, true);
     remember("shown");
     sessionFlag("luumu_a11y_nudged", "1");
@@ -882,8 +893,12 @@ function createWidget(): A11yWidget {
       libras.update(cfg, side());
       face.setSide(side());
       if (nudgeEl) {
-        closeNudge();
-        showNudge();
+        // configuração nova com o convite aberto: redesenha no lugar, sem mexer no foco
+        const keep = nudgeEl.querySelector(".nudge")?.scrollTop ?? 0;
+        closeNudge(false);
+        showNudge(true);
+        const n2 = nudgeEl as HTMLElement | null;
+        if (n2) (n2.querySelector(".nudge") as HTMLElement).scrollTop = keep;
       }
       applyAll();
     },
