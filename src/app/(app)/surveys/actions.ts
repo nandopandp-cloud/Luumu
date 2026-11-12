@@ -25,6 +25,7 @@ import { headers } from "next/headers";
 import { detectDevice, isDeviceKind } from "@/lib/surveys/device";
 import { getCurrentWorkspaceId, getCurrentProjectId, requireUser } from "@/lib/auth/current";
 import { getSurvey } from "@/lib/db/surveys";
+import { addFavoriteColor, listFavoriteColors, MAX_FAVORITE_COLORS, removeFavoriteColor } from "@/lib/db/color-favorites";
 import type { SurveyType, SurveyStatus } from "@/lib/surveys/types";
 
 /* ---------- Criar (a partir de template) ---------- */
@@ -252,6 +253,34 @@ export async function submitResponseAction(input: unknown) {
   revalidatePath(`/surveys/${data.surveyId}/responses`);
   revalidatePath("/dashboard");
   return { ok: true as const };
+}
+
+/* ---------- Cores favoritas da workspace (editor de aparência) ---------- */
+type FavResult = { ok: true; colors: string[] } | { ok: false; error: string };
+
+/** Favorita uma cor para o time reutilizar em qualquer pesquisa. */
+export async function addFavoriteColorAction(color: string): Promise<FavResult> {
+  const session = await requireUser();
+  const workspaceId = await getCurrentWorkspaceId();
+  try {
+    const r = await addFavoriteColor(workspaceId, String(color ?? ""), session.userId);
+    if (r === "invalid") return { ok: false, error: "Cor inválida. Use o formato #RRGGBB." };
+    if (r === "full") return { ok: false, error: `Limite de ${MAX_FAVORITE_COLORS} cores favoritas. Remova uma para adicionar outra.` };
+  } catch {
+    return { ok: false, error: "Não foi possível favoritar. A migração 0046 (cores favoritas) já foi aplicada?" };
+  }
+  return { ok: true, colors: (await listFavoriteColors(workspaceId)) ?? [] };
+}
+
+export async function removeFavoriteColorAction(color: string): Promise<FavResult> {
+  await requireUser();
+  const workspaceId = await getCurrentWorkspaceId();
+  try {
+    await removeFavoriteColor(workspaceId, String(color ?? ""));
+  } catch {
+    return { ok: false, error: "Não foi possível remover a cor favorita." };
+  }
+  return { ok: true, colors: (await listFavoriteColors(workspaceId)) ?? [] };
 }
 
 /* ---------- Aparência do widget (aba Exibição) ---------- */

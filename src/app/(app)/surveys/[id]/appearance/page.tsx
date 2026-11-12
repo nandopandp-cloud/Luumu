@@ -5,7 +5,8 @@ import { Badge } from "@/components/ui/Badge";
 import { SurveySubnav } from "@/components/surveys/SurveySubnav";
 import { AppearanceEditor } from "@/components/surveys/AppearanceEditor";
 import { getSurveyWithQuestions } from "@/lib/db/surveys";
-import { getCurrentProjectId } from "@/lib/auth/current";
+import { getCurrentProjectId, getCurrentWorkspaceId } from "@/lib/auth/current";
+import { listFavoriteColors } from "@/lib/db/color-favorites";
 import { normalizeAppearance, type BuilderQuestion } from "@/lib/surveys/builder";
 import { surveyStatusLabel } from "@/lib/surveys/types";
 
@@ -24,7 +25,11 @@ export default async function AppearancePage({
   // escopo por projeto ativo (e não só por workspace): impede abrir por URL direta
   // uma pesquisa de projeto que o membro não tem permissão de ver
   const projectId = await getCurrentProjectId();
-  const data = await getSurveyWithQuestions(id, { projectId });
+  const [data, favoriteColors] = await Promise.all([
+    getSurveyWithQuestions(id, { projectId }),
+    // cores favoritas do time; null = migração 0046 ainda não aplicada
+    getCurrentWorkspaceId().then(listFavoriteColors),
+  ]);
   if (!data) notFound();
   const { survey, questions } = data;
 
@@ -64,6 +69,7 @@ export default async function AppearancePage({
         surveyName={survey.name}
         questions={rendered}
         initial={normalizeAppearance(survey.appearance)}
+        favoriteColors={favoriteColors}
       />
     </div>
   );

@@ -959,6 +959,22 @@ export const accessibilityUserPrefs = pgTable(
   (t) => [primaryKey({ columns: [t.projectId, t.userHash] })]
 );
 
+/**
+ * Cores favoritas da workspace (editor de aparência das pesquisas): o time favorita uma cor
+ * personalizada uma vez e reutiliza em qualquer pesquisa. Tabela própria (e não coluna em
+ * `workspaces`): sem a migração 0046, só os favoritos ficam indisponíveis. `color` = #RRGGBB.
+ */
+export const colorFavorites = pgTable(
+  "color_favorites",
+  {
+    workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+    color: text("color").notNull(),
+    createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.workspaceId, t.color] })]
+);
+
 export type Workspace = typeof workspaces.$inferSelect;
 export type Survey = typeof surveys.$inferSelect;
 export type ScheduledReport = typeof scheduledReports.$inferSelect;

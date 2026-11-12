@@ -16,6 +16,7 @@ import {
 } from "@/lib/surveys/builder";
 import { SurveyWidget, WidgetStage } from "./SurveyWidget";
 import { saveAppearanceAction } from "@/app/(app)/surveys/actions";
+import { AccentColorPicker } from "./AccentColorPicker";
 
 const formats: { value: WidgetFormat; label: string; icon: React.ElementType; hint: string }[] = [
   { value: "popup", label: "Popup", icon: SquareStack, hint: "Cartão no canto" },
@@ -45,11 +46,14 @@ export function AppearanceEditor({
   surveyName,
   questions,
   initial,
+  favoriteColors = null,
 }: {
   id: string;
   surveyName: string;
   questions: BuilderQuestion[];
   initial: Appearance;
+  /** cores favoritas da workspace; null = migração 0046 ainda não aplicada */
+  favoriteColors?: string[] | null;
 }) {
   const [a, setA] = useState<Appearance>(initial);
   const [saving, startSaving] = useTransition();
@@ -150,22 +154,7 @@ export function AppearanceEditor({
             </Field>
 
             <Field label="Cor de destaque">
-              <div className="flex items-center gap-2">
-                {accentSwatches.map((c) => (
-                  <button
-                    key={c}
-                    onClick={() => update({ accent: c })}
-                    className={cn("size-7 rounded-full ring-2 ring-offset-2 ring-offset-bg-elev transition", a.accent === c ? "ring-accent" : "ring-transparent")}
-                    style={{ background: c }}
-                    aria-label={`Cor ${c}`}
-                  />
-                ))}
-                <Input
-                  value={a.accent}
-                  onChange={(e) => update({ accent: e.target.value })}
-                  className="ml-1 w-28 py-1.5 font-mono text-xs"
-                />
-              </div>
+              <AccentColorPicker value={a.accent} onChange={(accent) => update({ accent })} presets={accentSwatches} favorites={favoriteColors} />
             </Field>
 
             <Field label="Atraso para aparecer (segundos)">
