@@ -88,10 +88,11 @@ test("monta o launcher com os atalhos e abre o painel acessível", async () => {
   assert.ok($(".panel")!.classList.contains("open"));
   assert.equal($(".panel")!.getAttribute("role"), "dialog");
   assert.equal($('[data-a="open"]')!.getAttribute("aria-expanded"), "true");
-  // seções na ordem do layout de referência; os perfis rápidos ficam no convite
+  // perfis de acessibilidade no topo, depois as seções do layout de referência
   const secs = [...shadow().querySelectorAll(".sec-t")].map((h) => h.textContent!.trim());
-  assert.deepEqual(secs, ["Navegação e interação", "Leitura", "Cores e contraste", "Comunicação"]);
-  assert.equal($('[data-k^="pf:"]'), null);
+  assert.deepEqual(secs, ["Perfis de acessibilidade", "Navegação e interação", "Leitura", "Cores e contraste", "Comunicação"]);
+  const perfis = [...shadow().querySelectorAll(".prof b")].map((b) => b.textContent);
+  assert.deepEqual(perfis, ["Usuário cego (leitor de tela)", "Baixa visão", "Habilidades motoras", "Daltonismo", "Epilepsia", "TDAH", "Dislexia", "Deficiência auditiva"]);
 });
 
 test("cores da cápsula de atalhos vêm do painel (botão principal segue a cor de destaque)", () => {
@@ -126,6 +127,19 @@ test("ligar um recurso muda a página, avisa e fica guardado para o usuário", a
   identity = { id: "aluno-2" };
   boot(cfg());
   assert.equal(html().classList.contains("lu-a11y-links"), false);
+});
+
+test("perfil do painel liga vários recursos de uma vez (TDAH: máscara, guia e sem animações)", () => {
+  boot(cfg());
+  click($('[data-a="open"]'));
+  click($('[data-k="pf:foco"]'));
+  assert.equal($('[data-k="pf:foco"]')!.getAttribute("aria-pressed"), "true");
+  assert.equal(($(".mask-top") as HTMLElement).hidden, false);
+  assert.equal(($(".guide") as HTMLElement).hidden, false);
+  assert.ok(html().classList.contains("lu-a11y-still"));
+  assert.match($(".toast")!.textContent!, /TDAH: ativado/);
+  click($('[data-k="pf:foco"]'));
+  assert.equal(($(".mask-top") as HTMLElement).hidden, true);
 });
 
 test("máscara e pausar animações pelas chaves do painel; restaurar desliga tudo", () => {

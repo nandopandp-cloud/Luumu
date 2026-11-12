@@ -137,7 +137,7 @@ export const DEFAULT_A11Y_CONFIG: A11yConfig = {
     colors: { main: "", ...LAUNCHER_PRESETS[0].colors },
   },
   features: Object.fromEntries(FEATURE_IDS.map((f) => [f, true])) as Record<FeatureId, boolean>,
-  profiles: ["foco", "leitura", "ritmo", "visao", "calma", "libras"],
+  profiles: [...PROFILE_IDS],
   libras: {
     avatar: "icaro",
     personalizationUrl: "",
@@ -214,7 +214,12 @@ export function normalizeA11yConfig(input: unknown): A11yConfig {
   const libras = obj(o.libras);
   const nudge = obj(o.nudge);
 
-  const profiles = Array.isArray(o.profiles) ? [...new Set(o.profiles.filter(isProfileId))] : d.profiles;
+  // a lista padrão antiga (seis perfis) vira a nova, com os oito do painel
+  const OLD_DEFAULT_PROFILES = "foco,leitura,ritmo,visao,calma,libras";
+  const rawProfiles = Array.isArray(o.profiles) && o.profiles.join(",") !== OLD_DEFAULT_PROFILES ? o.profiles : null;
+  const picked = rawProfiles ? new Set(rawProfiles.filter(isProfileId)) : new Set(d.profiles);
+  // sempre na ordem do painel
+  const profiles = PROFILE_IDS.filter((p) => picked.has(p));
   const delay = typeof nudge.delay === "number" && Number.isFinite(nudge.delay) ? Math.round(Math.min(30, Math.max(0, nudge.delay))) : d.nudge.delay;
   const lc = obj(launcher.colors);
   const offset = typeof launcher.offset === "number" && Number.isFinite(launcher.offset) ? Math.round(Math.min(200, Math.max(8, launcher.offset))) : d.launcher.offset;
@@ -243,7 +248,7 @@ export function normalizeA11yConfig(input: unknown): A11yConfig {
       },
     },
     features: Object.fromEntries(FEATURE_IDS.map((f) => [f, bool(features[f], d.features[f])])) as Record<FeatureId, boolean>,
-    profiles: profiles.filter((p) => (PROFILE_IDS as readonly string[]).includes(p)),
+    profiles,
     libras: {
       avatar: oneOf(libras.avatar, VLIBRAS_AVATARS.map((a) => a.value), d.libras.avatar),
       personalizationUrl: safePersonalizationUrl(libras.personalizationUrl),

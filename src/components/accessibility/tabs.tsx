@@ -3,7 +3,7 @@
 import {
   Accessibility, Bolt, Building2, CaseSensitive, Contrast, Droplet, Eye, Hand, Heading, Keyboard, Link2, Lock, Megaphone,
   Moon, MousePointer2, Palette, Pause, Rows3, ScanFace, ScanLine, SlidersHorizontal, Sparkles, Sun, SunMoon,
-  Type, Users, Volume2, ZoomIn,
+  Type, Users, Volume2, ZoomIn, EyeOff, EarOff, Brain, Target, BookOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/Card";
@@ -26,6 +26,7 @@ export const FEATURE_ICON: Record<string, React.ElementType> = {
   type: Type, mask: Rows3, guide: ScanLine, speaker: Volume2, font: CaseSensitive, spacing: SlidersHorizontal, contrast: Contrast, drop: Droplet,
   eye: Eye, link: Link2, heading: Heading, cursor: MousePointer2, pause: Pause, keyboard: Keyboard, face: ScanFace, hands: Hand,
   bolt: Bolt, sliders: SlidersHorizontal, zoom: ZoomIn, palette: Palette, moon: Moon,
+  eyeOff: EyeOff, earOff: EarOff, brain: Brain, target: Target, book: BookOpen,
 };
 
 /* ================================================================ Recursos */
@@ -47,8 +48,8 @@ export function FeaturesTab({ config, patch }: { config: A11yConfig; patch: Patc
       <Card>
         <SectionTitle
           icon={<Sparkles className="size-4.5" />}
-          title="Perfis rápidos"
-          description="Atalhos que ligam vários recursos de uma vez. Os nomes falam do benefício, nunca de diagnóstico: o estudante não precisa se rotular para usar."
+          title="Perfis de acessibilidade"
+          description="Atalhos que ligam vários recursos de uma vez. No painel do estudante aparecem com o nome da necessidade (Baixa visão, TDAH...); nos cartões do convite, com um nome que fala do benefício (Mais foco, Mais conforto na leitura...)."
         />
         <div className="grid gap-2 sm:grid-cols-2">
           {PROFILES.map((p) => {
@@ -73,6 +74,7 @@ export function FeaturesTab({ config, patch }: { config: A11yConfig; patch: Patc
                 <span className="min-w-0">
                   <span className="block text-sm font-semibold">{p.label}</span>
                   <span className="block text-xs text-fg-mut">{p.description}</span>
+                  <span className="mt-1 block text-[11px] text-fg-mut">No convite: “{p.nudgeLabel}”</span>
                   <span className="mt-1.5 inline-flex items-center gap-1 rounded-md bg-bg-sunken px-1.5 py-0.5 text-[10.5px] font-semibold text-fg-mut" title="Só a equipe vê esta indicação">
                     <Lock className="size-2.5" /> Ajuda em: {p.audienceHint}
                   </span>

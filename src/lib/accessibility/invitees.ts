@@ -46,7 +46,7 @@ export function parseProfile(raw: unknown): ProfileId | null {
   if (isProfileId(raw)) return raw;
   const n = normalizeValue(raw);
   if (!n) return null;
-  return PROFILES.find((p) => p.id === n || normalizeValue(p.label) === n)?.id ?? null;
+  return PROFILES.find((p) => p.id === n || normalizeValue(p.label) === n || normalizeValue(p.nudgeLabel) === n)?.id ?? null;
 }
 
 const HEADER = {

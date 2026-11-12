@@ -144,85 +144,101 @@ export const DEFAULT_PREFS: A11yPrefs = {
 
 /* ------------------------------------------------------------------------ perfis rápidos */
 
-export const PROFILE_IDS = ["foco", "leitura", "ritmo", "visao", "cores", "calma", "ouvir", "libras"] as const;
+export const PROFILE_IDS = ["ouvir", "visao", "ritmo", "cores", "calma", "foco", "leitura", "libras"] as const;
 export type ProfileId = (typeof PROFILE_IDS)[number];
 
 export interface ProfileInfo {
   id: ProfileId;
+  /** nome no painel do estudante (perfis de acessibilidade) */
   label: string;
+  /** nome curto, voltado ao benefício, nos cartões do convite */
+  nudgeLabel: string;
+  /** o que o perfil liga — precisa bater com o `preset` */
   description: string;
   icon: string;
-  /** para o painel da Luumu: a quem o perfil costuma ajudar (nunca aparece para o estudante) */
+  /** para o painel da Luumu: a quem o perfil costuma ajudar */
   audienceHint: string;
   preset: Partial<Omit<A11yPrefs, "profiles">>;
 }
 
+/** Ordem do painel do estudante (perfis de acessibilidade). */
 export const PROFILES: ProfileInfo[] = [
   {
-    id: "foco",
-    label: "Mais foco",
-    description: "Máscara e guia de leitura",
-    icon: "bolt",
-    audienceHint: "TDAH e dificuldade de concentração",
-    preset: { readingMask: true, readingGuide: true, stopAnimations: true },
-  },
-  {
-    id: "leitura",
-    label: "Mais conforto na leitura",
-    description: "Texto maior, fonte legível e espaçamento",
-    icon: "eye",
-    audienceHint: "Dislexia e baixa visão leve",
-    preset: { textSize: 2, legibleFont: true, spacing: true },
-  },
-  {
-    id: "ritmo",
-    label: "Uma navegação no seu ritmo",
-    description: "Sem animações, links destacados e cursor maior",
-    icon: "sliders",
-    audienceHint: "Deficiência motora e TEA",
-    preset: { stopAnimations: true, highlightLinks: true, bigCursor: true, focusRing: true },
+    id: "ouvir",
+    label: "Usuário cego (leitor de tela)",
+    nudgeLabel: "Ouvir o conteúdo",
+    description: "Ativa o leitor de texto e a navegação por teclado.",
+    icon: "eyeOff",
+    audienceHint: "Cegueira e baixa visão severa",
+    preset: { textReader: true, focusRing: true },
   },
   {
     id: "visao",
-    label: "Enxergar melhor",
-    description: "Texto bem maior, alto contraste e títulos marcados",
+    label: "Baixa visão",
+    nudgeLabel: "Enxergar melhor",
+    description: "Amplia o texto, sublinha links e títulos, aumenta o contraste e o cursor.",
     icon: "zoom",
     audienceHint: "Baixa visão",
     preset: { textSize: 3, contrast: "high", highlightLinks: true, highlightHeadings: true, bigCursor: true },
   },
   {
+    id: "ritmo",
+    label: "Habilidades motoras",
+    nudgeLabel: "Uma navegação no seu ritmo",
+    description: "Ativa a navegação por teclado, o cursor grande e destaca os links.",
+    icon: "hands",
+    audienceHint: "Deficiência motora e TEA",
+    preset: { stopAnimations: true, highlightLinks: true, bigCursor: true, focusRing: true },
+  },
+  {
     id: "cores",
-    label: "Cores fáceis de distinguir",
-    description: "Ajuste de cores e links realçados",
-    icon: "palette",
+    label: "Daltonismo",
+    nudgeLabel: "Cores fáceis de distinguir",
+    description: "Ativa o modo daltonismo e destaca os links.",
+    icon: "eye",
     audienceHint: "Daltonismo",
     preset: { colorBlind: "deutan", highlightLinks: true },
   },
   {
     id: "calma",
-    label: "Tela mais calma",
-    description: "Cores suaves e nada se mexendo",
-    icon: "moon",
+    label: "Epilepsia",
+    nudgeLabel: "Tela mais calma",
+    description: "Diminui a saturação e bloqueia as animações.",
+    icon: "brain",
     audienceHint: "Epilepsia fotossensível e sensibilidade sensorial",
     preset: { saturation: "low", stopAnimations: true },
   },
   {
-    id: "ouvir",
-    label: "Ouvir o conteúdo",
-    description: "Leitor de texto e foco visível",
-    icon: "speaker",
-    audienceHint: "Cegueira, baixa visão e dificuldade de leitura",
-    preset: { textReader: true, focusRing: true },
+    id: "foco",
+    label: "TDAH",
+    nudgeLabel: "Mais foco",
+    description: "Bloqueia as animações e ativa a máscara e o guia de leitura.",
+    icon: "target",
+    audienceHint: "TDAH e dificuldade de concentração",
+    preset: { readingMask: true, readingGuide: true, stopAnimations: true },
+  },
+  {
+    id: "leitura",
+    label: "Dislexia",
+    nudgeLabel: "Mais conforto na leitura",
+    description: "Fonte legível, texto maior e mais espaço entre letras e linhas.",
+    icon: "book",
+    audienceHint: "Dislexia e dificuldade de leitura",
+    preset: { textSize: 2, legibleFont: true, spacing: true },
   },
   {
     id: "libras",
-    label: "Conteúdo em Libras",
-    description: "Tradutor VLibras para os textos",
-    icon: "hands",
+    label: "Deficiência auditiva",
+    nudgeLabel: "Conteúdo em Libras",
+    description: "Ativa a tradução dos textos em Libras (VLibras).",
+    icon: "earOff",
     audienceHint: "Surdez e deficiência auditiva",
     preset: { libras: true },
   },
 ];
+
+/** Ordem de preferência dos cartões do convite (os três primeiros disponíveis aparecem). */
+export const NUDGE_PROFILE_ORDER: ProfileId[] = ["foco", "leitura", "ritmo", "visao", "calma", "cores", "ouvir", "libras"];
 
 export const profileInfo = (id: ProfileId) => PROFILES.find((p) => p.id === id)!;
 export const isProfileId = (v: unknown): v is ProfileId => typeof v === "string" && (PROFILE_IDS as readonly string[]).includes(v);

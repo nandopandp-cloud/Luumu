@@ -252,6 +252,12 @@ test("recorte público: sem domínios e sem lista, só se há convidados", () =>
   assert.equal(publicA11yConfig(c).nudge.hasList, false);
 });
 
+test("perfis: lista padrão antiga vira a nova (oito, na ordem do painel); lista própria fica", () => {
+  assert.deepEqual(normalizeA11yConfig({ profiles: ["foco", "leitura", "ritmo", "visao", "calma", "libras"] }).profiles, ["ouvir", "visao", "ritmo", "cores", "calma", "foco", "leitura", "libras"]);
+  assert.deepEqual(normalizeA11yConfig({ profiles: ["libras", "foco"] }).profiles, ["foco", "libras"]);
+  assert.deepEqual(normalizeA11yConfig({ profiles: [] }).profiles, []);
+});
+
 test("convite: textos padrão antigos viram os novos; personalizados ficam", () => {
   const old = normalizeA11yConfig({ nudge: { title: "Sua experiência pode ficar ainda melhor", cta: "Ativar recursos" } });
   assert.equal(old.nudge.title, "Uma experiência mais personalizada para você!");

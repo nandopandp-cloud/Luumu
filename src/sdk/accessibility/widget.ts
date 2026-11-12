@@ -25,6 +25,7 @@ import {
   DEFAULT_PREFS,
   FEATURE_GROUPS,
   FEATURES,
+  NUDGE_PROFILE_ORDER,
   normalizePrefs,
   profileAvailable,
   profileInfo,
@@ -473,6 +474,9 @@ function createWidget(): A11yWidget {
   }
 
   /* ---------------- painel ---------------- */
+  // cartões do convite usam os ícones do layout de referência do convite
+  const NUDGE_ICON: Partial<Record<ProfileId, string>> = { foco: "bolt", leitura: "eye", ritmo: "sliders", visao: "zoom", calma: "moon", cores: "palette", ouvir: "speaker", libras: "hands" };
+
   // Contraste, saturação e daltonismo: a chave liga a variação mais comum; as outras aparecem abaixo
   const SELECT_ON: Partial<Record<FeatureId, string>> = { contrast: "high", saturation: "low", colorBlind: "deutan" };
 
@@ -516,6 +520,18 @@ function createWidget(): A11yWidget {
     const scroll = body?.scrollTop ?? 0;
     const eff = effective(prefs);
     const logo = cfg.brand.logoUrl;
+    const profiles = cfg.profiles.filter((p) => profileAvailable(p, cfg.features));
+    const profileSec = profiles.length
+      ? `<section class="sec sec-perfis" aria-labelledby="lu-sec-perfis"><h3 class="sec-t" id="lu-sec-perfis"><span class="sec-i" aria-hidden="true">${icon("access", 22, 2.2)}</span>Perfis de acessibilidade</h3>
+        <p class="sec-sub">Ligue vários recursos de uma vez. Dá para combinar perfis.</p>
+        <div class="profiles">${profiles
+          .map((id) => {
+            const p = profileInfo(id);
+            const on = prefs.profiles.includes(id);
+            return `<button type="button" class="prof" aria-pressed="${on}" data-a="profile" data-id="${id}" data-k="pf:${id}"><span class="ck" aria-hidden="true">${icon("check", 12, 3.4)}</span><span class="pi" aria-hidden="true">${icon(p.icon, 24, 2)}</span><b>${esc(p.label)}</b><span class="pd">${esc(p.description)}</span></button>`;
+          })
+          .join("")}</div></section>`
+      : "";
     const groups = FEATURE_GROUPS.map((g) => {
       const rows = FEATURES.filter((f) => f.group === g.id && enabled(f.id)).map((f) => rowFor(f.id, eff));
       return rows.length
@@ -531,6 +547,7 @@ function createWidget(): A11yWidget {
   <button type="button" class="x" data-a="close" data-k="close" aria-label="Fechar">${icon("close", 22, 2.4)}</button>
 </header>
 <div class="p-body">
+  ${profileSec}
   ${groups || `<p class="empty">Nenhum recurso disponível.</p>`}
 </div>
 <footer class="p-foot">
@@ -673,7 +690,7 @@ function createWidget(): A11yWidget {
     const pid = inviteeProfile ?? n.profile;
     const suggested = pid && profileAvailable(pid, cfg.features) ? pid : null;
     // até três perfis no convite (os primeiros do painel); o sugerido entra e já vem marcado
-    const available = cfg.profiles.filter((p) => profileAvailable(p, cfg.features));
+    const available = NUDGE_PROFILE_ORDER.filter((p) => cfg.profiles.includes(p) && profileAvailable(p, cfg.features));
     const cards = (suggested ? [suggested, ...available.filter((p) => p !== suggested)] : available).slice(0, 3);
     const picked = new Set<ProfileId>(suggested ? [suggested] : []);
     const img = nudgeImageUrl(n);
@@ -690,7 +707,7 @@ function createWidget(): A11yWidget {
     ${cards.length ? `<div class="n-cards" role="group" aria-label="Escolha o que ativar">${cards
       .map((id) => {
         const p = profileInfo(id);
-        return `<button type="button" class="n-card" data-n="pick" data-id="${id}" aria-pressed="${picked.has(id)}" title="${esc(p.description)}"><span class="n-ck">${icon("check", 12, 3.4)}</span>${icon(p.icon, 30, 2.2)}<b>${esc(p.label)}</b></button>`;
+        return `<button type="button" class="n-card" data-n="pick" data-id="${id}" aria-pressed="${picked.has(id)}" title="${esc(p.description)}"><span class="n-ck">${icon("check", 12, 3.4)}</span>${icon(NUDGE_ICON[id] ?? p.icon, 30, 2.2)}<b>${esc(p.nudgeLabel)}</b></button>`;
       })
       .join("")}</div>` : ""}
   </div>
@@ -723,7 +740,7 @@ function createWidget(): A11yWidget {
         let next = prefs;
         for (const id of picked) if (!next.profiles.includes(id)) next = toggleProfile(next, id, cfg.features);
         setPrefs(next);
-        const names = [...picked].map((id) => profileInfo(id).label);
+        const names = [...picked].map((id) => profileInfo(id).nudgeLabel);
         toast(`${names.length === 1 ? names[0] : `${names.length} perfis`}: ativado${names.length === 1 ? "" : "s"}. Ajuste quando quiser no botão ${cfg.launcher.label}.`);
       }
     });
