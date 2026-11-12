@@ -12,12 +12,16 @@ export const metadata: Metadata = { title: "Acessibilidade · Luumu" };
 export default async function AccessibilityPage() {
   const project = (await getCurrentProject())!;
 
-  // sem a migração 0044 a tabela não existe: a área avisa em vez de quebrar
+  // sem as migrações 0044/0045 a consulta falha: a área avisa em vez de quebrar, e o erro real
+  // vai para o log (antes ele era engolido e "falta a migração" escondia a causa)
   let settings;
   try {
     settings = await getAccessibilitySettings(project.id);
-  } catch {
-    return <AccessibilityUnavailable />;
+  } catch (err) {
+    console.error("[accessibility] falha ao ler a configuração do plugin:", err);
+    // o Drizzle embrulha o erro do Postgres ("Failed query: …"); o motivo fica em `cause`
+    const e = err as { message?: unknown; cause?: { message?: unknown } };
+    return <AccessibilityUnavailable detail={[e?.message, e?.cause?.message].filter((m) => typeof m === "string").join(" ")} />;
   }
   const [canManage, sdkKey, hosts] = await Promise.all([
     canManageWorkspace(),

@@ -65,24 +65,41 @@ O produto também pode abrir o painel por um botão próprio:
 
 ## Onde o plugin aparece (Ativação)
 
-`config.scope` (`scope.ts`):
+`config.scope` (`scope.ts`), com duas escolhas independentes:
 
-- **Todo o projeto** (padrão): todos os domínios e todos os estudantes.
-- **Só onde eu escolher**: domínios (plataformas do projeto, nenhum marcado = todos) e, dentro
-  deles, quem casar com um grupo de rede/escola/turma/ano **ou** estiver na lista de
-  convidados (opção "Convidados da lista também recebem"). Sem grupos e sem convidados, vale
-  para todos nos domínios escolhidos.
+- **Plataformas**: as do projeto onde o botão aparece. Nenhuma marcada = todas (mesmo padrão
+  do público das pesquisas). Nas outras, o plugin nem é carregado.
+- **Estudantes**: todos, ou só alguns — quem casar com um grupo de rede/escola/turma/ano ou
+  estiver na lista de convidados ("Convidados da lista"). "Só alguns" sem nenhum critério não
+  alcança ninguém; o painel avisa antes de publicar.
 
 Cada camada é decidida onde custa menos e expõe menos:
 
 | Camada | Onde | Por quê |
 |---|---|---|
-| domínio | servidor, no `/config` | o host já é parte da chave de cache; fora dele o SDK nem recebe o plugin |
+| plataforma | servidor, no `/config` | o host já é parte da chave de cache; fora dela o SDK nem recebe o plugin |
 | grupos | navegador | rede/escola/turma não identificam ninguém |
 | convidados | servidor, `/match`, por estudante | a lista é dado sensível |
 
 Enquanto decide, o widget fica escondido e não toca na página. Fora do escopo, as escolhas
 guardadas do estudante não são aplicadas.
+
+## No ar × rascunho (painel)
+
+O cartão do topo descreve **o que está no ar** (a última versão salva): ligado ou desligado,
+onde, para quem e quantos recursos. O botão Ligado/Desligado liga e desliga **essa** versão.
+O que se edita nas abas é um rascunho: aparece como "Alterações ainda não publicadas", a prévia
+já o mostra, e só vai ao produto com **Publicar alterações**.
+
+**Tempo até chegar ao produto: até ~5 minutos.** O SDK guarda o catálogo do `/config` no
+navegador para não buscá-lo a cada página: 30 min normalmente, **5 min quando o plugin está
+ligado** no catálogo guardado (um botão visível precisa sumir logo quando é desligado). Somam-se
+até ~1 min de cache de borda e ~1 min de cache em memória do servidor. Além disso:
+
+- se um catálogo novo chega sem o plugin, o core desmonta o widget (a página volta como era);
+- se uma rota do plugin (`/prefs`, `/match`) responde 404 ("desligado"), o widget avisa o core,
+  que tira o plugin da página na hora e descarta o catálogo guardado. Falha do banco responde
+  503, para não desligar o plugin por engano.
 
 ## Convidados
 
@@ -214,6 +231,9 @@ e `destroy()` devolve a página exatamente como estava. Algumas notas:
 
 1. Aplique `drizzle/0044_accessibility.sql` no SQL Editor do Neon (três tabelas:
    `accessibility_settings`, `accessibility_invitees`, `accessibility_user_prefs`). Sem ela, o
-   `/config` manda o plugin desligado e `/accessibility` mostra um aviso.
+   `/config` manda o plugin desligado e `/accessibility` mostra um aviso com o erro do banco.
+   Depois aplique `drizzle/0045_accessibility_identity.sql`: ela acrescenta as colunas da
+   verificação de identidade em bancos onde a tabela de configuração veio da primeira versão
+   da 0044 (o `CREATE TABLE IF NOT EXISTS` não altera tabela existente). As duas são idempotentes.
 2. `pnpm build:sdk` gera `public/sdk-a11y.js`, e o `prebuild` já roda esse passo.
 3. Upload de logo usa o mesmo Blob Store dos tours (`BLOB_READ_WRITE_TOKEN`). Sem ele, cole a URL.

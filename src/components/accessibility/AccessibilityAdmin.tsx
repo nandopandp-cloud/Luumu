@@ -10,6 +10,7 @@ import { Tabs } from "@/components/ui/Tabs";
 import { Mascot } from "@/components/ui/Mascot";
 import { useToast } from "@/components/ui/Toast";
 import { normalizeA11yConfig, publicA11yConfig, type A11yConfig } from "@/lib/accessibility/config";
+import { scopeReachesNobody, scopeSummary } from "@/lib/accessibility/scope";
 import { FEATURES } from "@/lib/accessibility/features";
 import { saveAccessibilityAction } from "@/app/(app)/accessibility/actions";
 import { AppearanceTab, FeaturesTab, LibrasTab, NudgeTab } from "./tabs";
@@ -59,44 +60,54 @@ export function AccessibilityAdmin({
 }) {
   const router = useRouter();
   const toast = useToast();
-  const [enabled, setEnabled] = useState(initial.enabled);
+  /*
+    Dois estados, sempre separados na tela:
+     - `live`: o que está NO AR (a última versão salva) — é o que o cartão do topo descreve e o
+       que o botão Ligado/Desligado liga e desliga;
+     - `config`: o rascunho em edição nas abas. Só vai ao ar com "Publicar alterações".
+    Antes o botão do topo publicava o rascunho junto, e mudanças de escopo não salvas pareciam
+    ignoradas pelo produto.
+  */
+  const [live, setLive] = useState(initial);
   const [config, setConfig] = useState<A11yConfig>(initial.config);
-  const [baseline, setBaseline] = useState(() => JSON.stringify({ enabled: initial.enabled, config: initial.config }));
   const [tab, setTab] = useState<Tab>("activation");
   const [view, setView] = useState<PreviewView>("launcher");
   const [saving, startSaving] = useTransition();
 
   const patch = (fn: (c: A11yConfig) => A11yConfig) => setConfig((c) => fn(c));
 
-  // a prévia recebe o que o SDK receberia (normalizado, sem domínios nem lista de convidados)
+  // a prévia recebe o que o SDK receberia (normalizado, sem plataformas nem lista de convidados)
   const previewConfig = useMemo(() => publicA11yConfig(normalizeA11yConfig(config), inviteeCount > 0), [config, inviteeCount]);
-  const dirty = JSON.stringify({ enabled, config }) !== baseline;
+  const dirty = JSON.stringify(normalizeA11yConfig(config)) !== JSON.stringify(live.config);
+  const liveScope = scopeSummary(live.config.scope, { invitees: inviteeCount, projectHosts: hosts.length });
+  const draftNobody = scopeReachesNobody(normalizeA11yConfig(config).scope, inviteeCount);
 
   function changeTab(t: Tab) {
     setTab(t);
     setView(VIEW_FOR_TAB[t]);
   }
 
-  function save(nextEnabled = enabled) {
+  function persist(next: { enabled: boolean; config: A11yConfig }, message: string) {
     if (!canManage) return toast("error", "Só donos e administradores podem alterar o plugin.");
     startSaving(async () => {
-      const r = await saveAccessibilityAction({ enabled: nextEnabled, config });
+      const r = await saveAccessibilityAction(next);
       if (!r.ok) return toast("error", r.error);
-      setEnabled(nextEnabled);
-      setConfig(r.config);
-      setBaseline(JSON.stringify({ enabled: nextEnabled, config: r.config }));
-      toast("success", nextEnabled !== enabled ? (nextEnabled ? "Plugin ativado. Ele aparece no produto em até 1 minuto." : "Plugin desativado.") : "Configurações salvas.");
+      const wasDirty = dirty;
+      setLive({ enabled: next.enabled, config: r.config });
+      // publicar substitui o rascunho pela versão gravada; ligar/desligar não mexe no rascunho
+      if (next.config === config || !wasDirty) setConfig(r.config);
+      toast("success", message);
       router.refresh();
     });
   }
 
-  function discard() {
-    const base = JSON.parse(baseline) as { enabled: boolean; config: A11yConfig };
-    setEnabled(base.enabled);
-    setConfig(base.config);
-  }
+  /** Liga/desliga o que está no ar, sem publicar o rascunho. */
+  const toggleLive = (on: boolean) =>
+    persist({ enabled: on, config: live.config }, on ? "Plugin ligado. Ele aparece no produto em até 5 minutos." : "Plugin desligado. Ele some do produto em até 5 minutos.");
+  const publish = () => persist({ enabled: live.enabled, config }, live.enabled ? "Alterações publicadas. Elas chegam ao produto em até 5 minutos." : "Alterações salvas. Ligue o plugin para ele aparecer no produto.");
+  const discard = () => setConfig(live.config);
 
-  const featureCount = FEATURES.filter((f) => config.features[f.id]).length;
+  const featureCount = FEATURES.filter((f) => live.config.features[f.id]).length;
 
   return (
     <div className="flex flex-col gap-6">
@@ -132,35 +143,78 @@ export function AccessibilityAdmin({
         </div>
       </header>
 
-      {/* status */}
-      <section className={cn("flex flex-col gap-4 rounded-2xl border p-5 md:flex-row md:items-center", enabled ? "border-sucesso/40 bg-[#F0FDF4] dark:bg-sucesso/10" : "border-line bg-bg-elev")}>
-        <span className={cn("grid size-12 shrink-0 place-items-center rounded-2xl", enabled ? "bg-sucesso text-white" : "bg-bg-sunken text-fg-mut")}>
-          <Power className="size-5" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="font-bold">{enabled ? `Ativo em ${projectName}` : `Desligado em ${projectName}`}</p>
-          <p className="text-sm text-fg-mut">
-            {enabled
-              ? `O botão de acessibilidade aparece ${config.scope.mode === "all" ? "para todos os estudantes" : "para o público escolhido em Ativação"}, com ${featureCount} recursos${config.nudge.enabled ? " e o convite ligado" : ""}.`
-              : "Ninguém vê o botão no produto. Configure abaixo, confira na prévia e ative quando estiver pronto."}
-            {!sdkKey && " Este projeto ainda não tem o SDK instalado."}
-          </p>
-          {updatedAt && <p className="mt-1 text-xs text-fg-mut">Última alteração em {new Date(updatedAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</p>}
+      {/* o que está no ar */}
+      <section className={cn("overflow-hidden rounded-2xl border", live.enabled ? "border-sucesso/40" : "border-line")}>
+        <div className={cn("flex flex-col gap-4 p-5 md:flex-row md:items-center", live.enabled ? "bg-[#F0FDF4] dark:bg-sucesso/10" : "bg-bg-elev")}>
+          <span className={cn("grid size-12 shrink-0 place-items-center rounded-2xl", live.enabled ? "bg-sucesso text-white" : "bg-bg-sunken text-fg-mut")}>
+            <Power className="size-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="flex flex-wrap items-center gap-2 font-bold">
+              {live.enabled ? "No ar" : "Desligado"} em {projectName}
+              <Badge tone={live.enabled ? "success" : "neutral"}>{live.enabled ? "visível para os estudantes" : "ninguém vê"}</Badge>
+            </p>
+            {live.enabled ? (
+              <dl className="mt-1.5 grid gap-x-6 gap-y-0.5 text-sm sm:grid-cols-[auto_1fr]">
+                <dt className="text-fg-mut">Onde</dt>
+                <dd className="min-w-0 truncate font-medium" title={live.config.scope.hosts.join(", ")}>{liveScope.where}</dd>
+                <dt className="text-fg-mut">Para quem</dt>
+                <dd className="font-medium">{liveScope.who}</dd>
+                <dt className="text-fg-mut">Recursos</dt>
+                <dd className="font-medium">
+                  {featureCount} de {FEATURES.length}
+                  {live.config.nudge.enabled ? " · convite ligado" : ""}
+                </dd>
+              </dl>
+            ) : (
+              <p className="text-sm text-fg-mut">O botão não aparece em nenhuma plataforma. Configure abaixo, confira na prévia e ligue quando estiver pronto.</p>
+            )}
+            <p className="mt-1.5 text-xs text-fg-mut">
+              Ligar, desligar e publicar chegam ao produto em até 5 minutos.
+              {updatedAt && ` Última alteração em ${new Date(updatedAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}.`}
+              {!sdkKey && " Este projeto ainda não tem o SDK instalado."}
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            {!canManage && (
+              <span className="inline-flex items-center gap-1 text-xs font-semibold text-fg-mut">
+                <Lock className="size-3.5" /> Só leitura
+              </span>
+            )}
+            <label className="flex items-center gap-2 text-sm font-semibold">
+              {saving ? <Loader2 className="size-4 animate-spin text-fg-mut" /> : null}
+              {live.enabled ? "Ligado" : "Desligado"}
+              <span className={cn(!canManage && "pointer-events-none opacity-50")}>
+                <Switch checked={live.enabled} onChange={toggleLive} label="Plugin de acessibilidade no ar" />
+              </span>
+            </label>
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          {!canManage && (
-            <span className="inline-flex items-center gap-1 text-xs font-semibold text-fg-mut">
-              <Lock className="size-3.5" /> Só leitura
-            </span>
-          )}
-          <label className="flex items-center gap-2 text-sm font-semibold">
-            {saving ? <Loader2 className="size-4 animate-spin text-fg-mut" /> : null}
-            {enabled ? "Ativo" : "Ativar"}
-            <span className={cn(!canManage && "pointer-events-none opacity-50")}>
-              <Switch checked={enabled} onChange={(v) => save(v)} label="Plugin de acessibilidade ativo no produto" />
-            </span>
-          </label>
-        </div>
+        {dirty && (
+          <div className="flex flex-col gap-3 border-t border-aviso/40 bg-[#FFFBEB] px-5 py-3 dark:bg-aviso/10 md:flex-row md:items-center">
+            <p className="min-w-0 flex-1 text-sm">
+              <strong>Alterações ainda não publicadas.</strong>{" "}
+              <span className="text-fg-soft">
+                {live.enabled ? "O produto continua com a versão acima até você publicar." : "Elas ficam salvas e entram no ar quando o plugin for ligado."}
+                {draftNobody && " Atenção: do jeito que está, nenhum estudante veria o plugin."}
+              </span>
+            </p>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={discard} disabled={saving} className="inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-sm font-semibold text-fg-mut hover:text-fg">
+                <RotateCcw className="size-4" /> Descartar
+              </button>
+              <button
+                type="button"
+                onClick={publish}
+                disabled={saving || !canManage}
+                className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 [background:var(--grad-roxo)]"
+              >
+                {saving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
+                {live.enabled ? "Publicar alterações" : "Salvar alterações"}
+              </button>
+            </div>
+          </div>
+        )}
       </section>
 
       {/* editor + prévia */}
@@ -190,7 +244,8 @@ export function AccessibilityAdmin({
             </div>
             <LivePreview config={previewConfig} view={view} onView={setView} />
             <p className="text-xs leading-relaxed text-fg-mut">
-              A prévia roda o mesmo código que vai para o produto. Clique nos botões dela à vontade: as escolhas ficam só nesta tela.
+              A prévia roda o mesmo código que vai para o produto, como se fosse um estudante dentro do público escolhido em Ativação, e já
+              mostra o rascunho antes de publicar. Clique nos botões dela à vontade: as escolhas ficam só nesta tela.
               {view === "face" && " A navegação por rosto pede a câmera do seu computador."}
             </p>
           </div>
@@ -202,7 +257,7 @@ export function AccessibilityAdmin({
         <div className="sticky bottom-4 z-30 mx-auto w-full max-w-3xl animate-[luumuFade_.2s_ease-out]">
           <div className="flex items-center justify-between gap-3 rounded-2xl border border-line bg-bg-elev/95 px-4 py-3 shadow-[var(--shadow-lg)] backdrop-blur">
             <p className="flex items-center gap-2 text-sm font-semibold">
-              <span className="size-2 rounded-full bg-aviso" /> Alterações não salvas
+              <span className="size-2 rounded-full bg-aviso" /> Alterações ainda não publicadas
             </p>
             <div className="flex items-center gap-2">
               <button type="button" onClick={discard} disabled={saving} className="inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold text-fg-mut hover:text-fg">
@@ -210,12 +265,12 @@ export function AccessibilityAdmin({
               </button>
               <button
                 type="button"
-                onClick={() => save()}
+                onClick={publish}
                 disabled={saving || !canManage}
                 className="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-white shadow-[var(--shadow-glow)] transition hover:-translate-y-0.5 disabled:opacity-50 [background:var(--grad-roxo)]"
               >
                 {saving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
-                {enabled ? "Salvar e publicar" : "Salvar"}
+                {live.enabled ? "Publicar alterações" : "Salvar alterações"}
               </button>
             </div>
           </div>

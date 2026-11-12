@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Check, Copy, Eye, Globe, KeyRound, Loader2, RefreshCw, ShieldCheck, Target, Users } from "lucide-react";
+import { AlertTriangle, Check, Copy, Eye, Globe, KeyRound, Loader2, RefreshCw, ShieldCheck, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -10,6 +10,7 @@ import { CodeBlock } from "@/components/ui/CodeBlock";
 import { HostPicker } from "@/components/ui/HostPicker";
 import { useToast } from "@/components/ui/Toast";
 import type { A11yConfig } from "@/lib/accessibility/config";
+import { scopeReachesNobody } from "@/lib/accessibility/scope";
 import { revealIdentitySecretAction, setRequireVerifiedAction } from "@/app/(app)/accessibility/actions";
 import { SectionTitle, ToggleRow } from "./controls";
 import { GroupsEditor, IdentifyHint } from "./GroupsEditor";
@@ -34,71 +35,68 @@ export function ActivationTab({
 }) {
   const sc = config.scope;
   const scope = (p: Partial<A11yConfig["scope"]>) => patch((c) => ({ ...c, scope: { ...c.scope, ...p } }));
-  const targeted = sc.mode === "targeted";
+  const targeted = sc.audience === "targeted";
+  const nobody = scopeReachesNobody(sc, inviteeCount);
 
   return (
     <div className="flex flex-col gap-4">
       <Card>
-        <SectionTitle icon={<Target className="size-4.5" />} title="Onde o plugin aparece" description="Para todo o projeto ou só para alguns domínios, redes, escolas, turmas e estudantes." />
-        <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Escopo do plugin">
+        <SectionTitle
+          icon={<Globe className="size-4.5" />}
+          title="Plataformas"
+          description="Em quais endereços do projeto o botão de acessibilidade aparece. Nas outras, o plugin nem é carregado."
+          aside={<Badge tone="brand" dot={false}>{sc.hosts.length ? `${sc.hosts.length} de ${hosts.length}` : "Todas"}</Badge>}
+        />
+        <HostPicker hosts={hosts} selected={sc.hosts} onChange={(h) => scope({ hosts: h })} />
+      </Card>
+
+      <Card>
+        <SectionTitle icon={<Users className="size-4.5" />} title="Estudantes" description="Nas plataformas escolhidas, quem vê o botão de acessibilidade." />
+        <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Estudantes que veem o plugin">
           {[
-            { v: "all" as const, t: "Todo o projeto", d: "Todos os domínios e todos os estudantes." },
-            { v: "targeted" as const, t: "Só onde eu escolher", d: "Domínios, redes, escolas, turmas, anos ou convidados." },
+            { v: "all" as const, t: "Todos os estudantes", d: "Qualquer pessoa que acessar as plataformas escolhidas." },
+            { v: "targeted" as const, t: "Só alguns estudantes", d: "Redes, escolas, turmas, anos ou convidados da lista." },
           ].map((o) => (
             <button
               key={o.v}
               type="button"
               role="radio"
-              aria-checked={sc.mode === o.v}
-              onClick={() => scope({ mode: o.v })}
-              className={cn("rounded-xl border p-3.5 text-left transition", sc.mode === o.v ? "border-accent bg-surface-brand" : "border-line hover:border-line-strong")}
+              aria-checked={sc.audience === o.v}
+              onClick={() => scope({ audience: o.v })}
+              className={cn("rounded-xl border p-3.5 text-left transition", sc.audience === o.v ? "border-accent bg-surface-brand" : "border-line hover:border-line-strong")}
             >
               <span className="block text-sm font-semibold">{o.t}</span>
               <span className="mt-0.5 block text-xs text-fg-mut">{o.d}</span>
             </button>
           ))}
         </div>
-        {targeted && <p className="mt-3 rounded-xl bg-surface-brand px-3 py-2.5 text-xs leading-relaxed text-fg-soft">{scopeSummary(config, inviteeCount)}</p>}
+        {targeted && (
+          <div className="mt-5 flex flex-col gap-5">
+            {nobody && (
+              <p role="alert" className="flex gap-2 rounded-xl bg-[#FEF3C7] px-3 py-2.5 text-xs font-semibold text-[#92400e] dark:bg-aviso/15 dark:text-[#fde047]">
+                <AlertTriangle className="size-4 shrink-0" />
+                Do jeito que está, ninguém vê o plugin. Adicione um grupo abaixo ou convidados na aba Convite.
+              </p>
+            )}
+            <GroupsEditor groups={sc.groups} onChange={(groups) => scope({ groups })} />
+            <ToggleRow
+              title="Convidados da lista"
+              description={
+                inviteeCount
+                  ? `Os ${inviteeCount.toLocaleString("pt-BR")} estudantes da lista (aba Convite) também veem o plugin.`
+                  : "A lista da aba Convite está vazia. Quem for adicionado lá passa a ver o plugin."
+              }
+              checked={sc.includeInvitees}
+              onChange={(includeInvitees) => scope({ includeInvitees })}
+            />
+            <IdentifyHint />
+          </div>
+        )}
       </Card>
-
-      {targeted && (
-        <>
-          <Card>
-            <SectionTitle icon={<Globe className="size-4.5" />} title="Domínios" description="Plataformas do projeto onde o plugin aparece. Nenhuma marcada = todas." />
-            <HostPicker hosts={hosts} selected={sc.hosts} onChange={(h) => scope({ hosts: h })} />
-          </Card>
-          <Card>
-            <SectionTitle icon={<Users className="size-4.5" />} title="Estudantes" description="Dentro desses domínios, quem recebe o plugin." />
-            <div className="flex flex-col gap-5">
-              <GroupsEditor
-                groups={sc.groups}
-                onChange={(groups) => scope({ groups })}
-                emptyHint={sc.includeInvitees && inviteeCount ? "Sem grupos: o plugin aparece só para os convidados da lista." : "Sem grupos: todos os estudantes dos domínios escolhidos."}
-              />
-              <ToggleRow
-                title="Convidados da lista também recebem"
-                description={`Os ${inviteeCount.toLocaleString("pt-BR")} estudantes da lista do convite (aba Convite) têm o plugin mesmo fora dos grupos.`}
-                checked={sc.includeInvitees}
-                onChange={(includeInvitees) => scope({ includeInvitees })}
-              />
-              <IdentifyHint />
-            </div>
-          </Card>
-        </>
-      )}
 
       <IdentityCard canManage={canManage} initial={verification} />
     </div>
   );
-}
-
-function scopeSummary(config: A11yConfig, invitees: number): string {
-  const sc = config.scope;
-  const where = sc.hosts.length ? `em ${sc.hosts.length === 1 ? sc.hosts[0] : `${sc.hosts.length} domínios`}` : "em todos os domínios";
-  const who: string[] = [];
-  if (sc.groups.length) who.push(`${sc.groups.length} ${sc.groups.length === 1 ? "grupo" : "grupos"} de rede/escola/turma`);
-  if (sc.includeInvitees && invitees) who.push(`${invitees.toLocaleString("pt-BR")} ${invitees === 1 ? "convidado" : "convidados"} da lista`);
-  return `O plugin aparece ${where}, para ${who.length ? who.join(" e ") : "todos os estudantes"}.`;
 }
 
 const SNIPPETS = (secret: string) => ({

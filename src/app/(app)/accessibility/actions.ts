@@ -23,7 +23,7 @@ import { inviteeKey, isInviteeStatus, parseInvitees, parseProfile, type InviteeS
 type Fail = { ok: false; error: string };
 const PATH = "/accessibility";
 const NOT_ALLOWED: Fail = { ok: false, error: "Só donos e administradores podem alterar o plugin de acessibilidade." };
-const NO_TABLE = "Não foi possível salvar. A migração do plugin de acessibilidade (0044) já foi aplicada?";
+const NO_TABLE = "Não foi possível salvar. As migrações do plugin de acessibilidade (0044 e 0045) já foram aplicadas?";
 
 async function manager() {
   const session = await requireUser();
@@ -66,7 +66,7 @@ export async function listInviteesAction(input: { q?: string; status?: string | 
     });
     return { ok: true, ...page };
   } catch {
-    return { ok: false, error: "Não foi possível carregar os convidados. A migração 0044 já foi aplicada?" };
+    return { ok: false, error: "Não foi possível carregar os convidados. As migrações 0044 e 0045 já foram aplicadas?" };
   }
 }
 

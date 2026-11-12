@@ -46,7 +46,9 @@ export async function authorizeStudent<S extends typeof studentSchema>(req: Requ
   }
 
   const auth = await getAccessibilityAuth(resolved.projectId).catch(() => null);
-  if (!auth?.enabled) return { ok: false, res: jsonCors({ error: "Plugin desligado." }, { status: 404, origin: allowOrigin }) };
+  // 503 em falha do banco: o SDK trata 404 como "desligado" e tiraria o plugin da página
+  if (!auth) return { ok: false, res: jsonCors({ error: "Indisponível." }, { status: 503, origin: allowOrigin }) };
+  if (!auth.enabled) return { ok: false, res: jsonCors({ error: "Plugin desligado." }, { status: 404, origin: allowOrigin }) };
 
   const userKey = userKeyFrom(data);
   if (!userKey) return { ok: false, res: jsonCors({ error: "Estudante não identificado." }, { status: 422, origin: allowOrigin }) };

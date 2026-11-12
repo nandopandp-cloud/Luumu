@@ -56,6 +56,8 @@ export interface A11yBootConfig {
   identity: () => Record<string, unknown>;
   /** prévia do painel/demonstração: não grava no navegador e pode forçar o convite */
   preview?: { nudge?: boolean };
+  /** o servidor respondeu que o plugin está desligado: o core tira o widget e o catálogo guardado */
+  onDisabled?: () => void;
 }
 
 export type A11yView = "panel" | "nudge" | "libras" | "face";
@@ -184,7 +186,13 @@ function createWidget(): A11yWidget {
         keepalive,
       });
       // projeto exige verificação e o produto não mandou o user_hash: para de tentar nesta página
-      if (r.status === 403 || r.status === 404) remoteBlocked = true;
+      if (r.status === 403) remoteBlocked = true;
+      // plugin desligado no painel enquanto o catálogo guardado ainda dizia "ligado"
+      if (r.status === 404) {
+        remoteBlocked = true;
+        const off = boot!.onDisabled;
+        setTimeout(() => off?.(), 0);
+      }
       return r.ok ? ((await r.json()) as Record<string, unknown>) : null;
     } catch {
       return null;

@@ -257,14 +257,14 @@ test("convite pela lista de convidados: pergunta só pelo estudante logado, usa 
 test("escopo por grupo: fora dele o plugin não aparece e a página fica intacta", async () => {
   identity = { id: "fora-1", rede: "Outra rede" };
   localStorage.setItem("luumu_a11y_pk_test:fora-1", JSON.stringify({ p: { highlightLinks: true }, t: 1 }));
-  boot(cfg({ scope: { mode: "targeted", groups: [{ networks: ["Rede Aurora"] }], includeInvitees: false } }));
+  boot(cfg({ scope: { audience: "targeted", groups: [{ networks: ["Rede Aurora"] }], includeInvitees: false } }));
   await sleep(20);
   const host = document.querySelector('[data-luumu-ui="a11y"]') as HTMLElement;
   assert.equal(host.hidden, true);
   assert.equal(html().classList.contains("lu-a11y-links"), false, "escolhas guardadas não valem fora do escopo");
   w.destroy();
   identity = { id: "dentro-1", rede: "rede aurora" };
-  boot(cfg({ scope: { mode: "targeted", groups: [{ networks: ["Rede Aurora"] }], includeInvitees: false } }));
+  boot(cfg({ scope: { audience: "targeted", groups: [{ networks: ["Rede Aurora"] }], includeInvitees: false } }));
   await sleep(20);
   assert.equal((document.querySelector('[data-luumu-ui="a11y"]') as HTMLElement).hidden, false);
 });
@@ -272,7 +272,7 @@ test("escopo por grupo: fora dele o plugin não aparece e a página fica intacta
 test("escopo pela lista de convidados: o servidor confirma e o plugin aparece", async () => {
   identity = { id: "77" };
   server.match = true;
-  boot(publicA11yConfig(normalizeA11yConfig({ scope: { mode: "targeted", includeInvitees: true } }), true));
+  boot(publicA11yConfig(normalizeA11yConfig({ scope: { audience: "targeted", includeInvitees: true } }), true));
   const host = document.querySelector('[data-luumu-ui="a11y"]') as HTMLElement;
   assert.equal(host.hidden, true, "escondido enquanto decide");
   await sleep(30);

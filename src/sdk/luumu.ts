@@ -665,6 +665,13 @@ const isMessage = (q: Question) => MESSAGE_BLOCKS.indexOf(q.blockId) >= 0;
     chega sem cache (visitante novo) pega na hora.
   */
   const CATALOG_TTL_MS = 30 * 60 * 1000;
+  /*
+    Catálogo com o plugin de acessibilidade ligado: 5 min em vez de 30. O plugin é um botão
+    visível na tela do estudante — desligá-lo no painel precisa valer logo, e não meia hora
+    depois. O custo extra (uma ida ao /config a cada 5 min de uso) fica só nos projetos com o
+    plugin ligado: desligado, o catálogo volta a durar 30 min.
+  */
+  const A11Y_CATALOG_TTL_MS = 5 * 60 * 1000;
   const catalogKey = (key: string) => `luumu_catalog_${key}`;
 
   // aceita só o formato esperado; qualquer outra coisa vira "não sabemos" (null)
@@ -693,7 +700,8 @@ const isMessage = (q: Question) => MESSAGE_BLOCKS.indexOf(q.blockId) >= 0;
         hmFresh?: unknown;
       };
       if (!parsed || typeof parsed.t !== "number" || !Array.isArray(parsed.surveys)) return null;
-      if (Date.now() - parsed.t > CATALOG_TTL_MS) return null;
+      const ttl = parsed.a11y ? A11Y_CATALOG_TTL_MS : CATALOG_TTL_MS;
+      if (Date.now() - parsed.t > ttl) return null;
       return {
         surveys: parsed.surveys,
         events: parseEventCatalog(parsed.events),
@@ -789,6 +797,7 @@ const isMessage = (q: Question) => MESSAGE_BLOCKS.indexOf(q.blockId) >= 0;
     if (catalog.heatmaps && heatmapsSampled(catalog.hmRate)) safe(() => loadHeatmaps(key, catalog.hmRate, catalog.hmFresh));
     if (catalog.analytics) safe(() => loadAnalytics(key, catalog.idc));
     if (catalog.a11y) safe(() => loadA11y(key, catalog.a11y!));
+    else safe(unloadA11y); // desligado no painel (ou fora do escopo): sai da página
   }
 
   /* ---------- Product Tours: ponte com o runtime carregado sob demanda ----------
@@ -982,6 +991,24 @@ const isMessage = (q: Question) => MESSAGE_BLOCKS.indexOf(q.blockId) >= 0;
     return o && typeof o === "object" && o.brand && o.launcher && o.features && o.nudge ? o : null;
   }
 
+  /** Tira o plugin da página: o widget desfaz todos os efeitos (página volta como era). */
+  function unloadA11y() {
+    a11y?.destroy();
+    a11y = null;
+    a11yLoading = false;
+  }
+
+  /**
+   * O servidor disse que o plugin foi desligado (as rotas do plugin respondem 404): sai agora e
+   * descarta o catálogo guardado, para a próxima página não remontar o plugin a partir dele.
+   */
+  function a11yDisabled(key: string) {
+    unloadA11y();
+    try {
+      localStorage.removeItem(catalogKey(key));
+    } catch {}
+  }
+
   function loadA11y(key: string, config: PublicA11yConfig) {
     if (builderToken) return;
     if (a11y) return a11y.update(config);
@@ -990,7 +1017,9 @@ const isMessage = (q: Question) => MESSAGE_BLOCKS.indexOf(q.blockId) >= 0;
     loadScript("sdk-a11y.js")
       .then(() => {
         const wdg = (window as unknown as { __luumuA11y?: A11yWidget }).__luumuA11y || null;
-        wdg?.boot({ api: API, key, host: HOST, config, identity: audienceTraits });
+        // carregou depois de um catálogo novo dizer "desligado": não monta
+        if (!a11yLoading) return;
+        wdg?.boot({ api: API, key, host: HOST, config, identity: audienceTraits, onDisabled: () => a11yDisabled(key) });
         a11y = wdg;
         if (a11yPending) a11y?.open(a11yPending);
         a11yPending = null;

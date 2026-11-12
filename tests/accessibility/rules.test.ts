@@ -14,7 +14,7 @@ import {
   FEATURE_IDS,
 } from "@/lib/accessibility/features";
 import { matchesAnyGroup, matchesGroup, normalizeGroups, normalizeValue } from "@/lib/accessibility/audience";
-import { hostInScope, normalizeScope, scopeDecision } from "@/lib/accessibility/scope";
+import { hostInScope, normalizeScope, scopeDecision, scopeReachesNobody, scopeSummary } from "@/lib/accessibility/scope";
 import { inviteeKey, parseInvitees, parseProfile, userKeyFrom } from "@/lib/accessibility/invitees";
 import { prefsKey, userHashFor, verifyUserHash } from "@/lib/accessibility/verify";
 import { DEFAULT_A11Y_CONFIG, normalizeA11yConfig, publicA11yConfig, readableOn, safeImageUrl, librasLogoUrl, librasLook, shade } from "@/lib/accessibility/config";
@@ -131,26 +131,40 @@ test("grupo vazio nunca casa (e é removido na normalização)", () => {
 
 /* ---------------- escopo de ativação ---------------- */
 
-test("escopo: domínios filtram no servidor; vazio ou 'all' vale em todos", () => {
-  const sc = normalizeScope({ mode: "targeted", hosts: ["https://App.Escola.com/inicio", "app.escola.com", "lixo com espaço"] });
-  assert.deepEqual(sc.hosts, ["app.escola.com"]);
-  assert.equal(hostInScope(sc, "app.escola.com"), true);
-  assert.equal(hostInScope(sc, "outro.escola.com"), false);
+test("escopo: plataformas filtram no servidor; nenhuma marcada = todas", () => {
+  const sc = normalizeScope({ hosts: ["https://Prepara-SP.jovensgenios.com/inicio", "prepara-sp.jovensgenios.com", "lixo com espaço"] });
+  assert.deepEqual(sc.hosts, ["prepara-sp.jovensgenios.com"]);
+  assert.equal(hostInScope(sc, "prepara-sp.jovensgenios.com"), true);
+  assert.equal(hostInScope(sc, "fkpartners.jovensgenios.com"), false, "outra plataforma do mesmo projeto fica sem o plugin");
   assert.equal(hostInScope(sc, null), false);
-  assert.equal(hostInScope(normalizeScope({ mode: "all", hosts: ["a.com"] }), "b.com"), true);
-  assert.equal(hostInScope(normalizeScope({ mode: "targeted" }), "b.com"), true, "sem domínios marcados = todos");
+  assert.equal(hostInScope(normalizeScope({}), "qualquer.com"), true);
 });
 
-test("escopo: grupos decidem no navegador; a lista de convidados pede o servidor", () => {
-  const sc = normalizeScope({ mode: "targeted", groups: [{ networks: ["Rede Aurora"] }], includeInvitees: true });
+test("escopo: estudantes por grupo no navegador; a lista de convidados pede o servidor", () => {
+  const sc = normalizeScope({ audience: "targeted", groups: [{ networks: ["Rede Aurora"] }], includeInvitees: true });
   assert.equal(scopeDecision(sc, { rede: "rede aurora" }, true), "yes");
   assert.equal(scopeDecision(sc, { rede: "Outra", id: "9" }, true), "ask", "pode estar na lista");
   assert.equal(scopeDecision(sc, { rede: "Outra" }, true), "no", "sem id/e-mail não há o que perguntar");
   assert.equal(scopeDecision(sc, { rede: "Outra", id: "9" }, false), "no", "projeto sem convidados");
   assert.equal(scopeDecision({ ...sc, includeInvitees: false }, { id: "9" }, true), "no");
-  assert.equal(scopeDecision(normalizeScope({ mode: "targeted" }), {}, false), "yes", "só domínios: todos dentro deles");
-  assert.equal(scopeDecision(normalizeScope({ mode: "targeted", includeInvitees: true }), { id: "1" }, true), "ask", "só a lista");
+  assert.equal(scopeDecision(normalizeScope({ audience: "targeted" }), { id: "1" }, false), "no", "sem critério = ninguém");
   assert.equal(scopeDecision(normalizeScope({}), {}, true), "yes");
+});
+
+test("escopo: aviso de 'ninguém vê' e resumo do que está no ar", () => {
+  assert.equal(scopeReachesNobody(normalizeScope({ audience: "targeted" }), 0), true);
+  assert.equal(scopeReachesNobody(normalizeScope({ audience: "targeted" }), 3), false, "convidados contam");
+  assert.equal(scopeReachesNobody(normalizeScope({ audience: "targeted", includeInvitees: false }), 3), true);
+  assert.equal(scopeReachesNobody(normalizeScope({}), 0), false);
+  assert.deepEqual(scopeSummary(normalizeScope({}), { invitees: 0, projectHosts: 50 }), { where: "Todas as plataformas do projeto (50)", who: "Todos os estudantes" });
+  assert.equal(scopeSummary(normalizeScope({ hosts: ["prepara-sp.jovensgenios.com"] }), { invitees: 0, projectHosts: 50 }).where, "prepara-sp.jovensgenios.com");
+  assert.equal(scopeSummary(normalizeScope({ audience: "targeted", groups: [{ schools: ["X"] }] }), { invitees: 2, projectHosts: 1 }).who, "1 grupo de rede/escola/turma e 2 convidados");
+});
+
+test("escopo salvo na primeira versão (mode) continua valendo", () => {
+  const old = normalizeScope({ mode: "targeted", hosts: [], groups: [{ networks: ["Rede"] }] });
+  assert.equal(old.audience, "targeted");
+  assert.equal(normalizeScope({ mode: "all" }).audience, "all");
 });
 
 /* ---------------- convidados ---------------- */
@@ -231,7 +245,7 @@ test("normalizeA11yConfig cai no padrão com lixo e corta textos", () => {
 });
 
 test("recorte público: sem domínios e sem lista, só se há convidados", () => {
-  const c = normalizeA11yConfig({ scope: { mode: "targeted", hosts: ["app.escola.com"] } });
+  const c = normalizeA11yConfig({ scope: { hosts: ["app.escola.com"] } });
   const pub = publicA11yConfig(c, true);
   assert.equal(pub.nudge.hasList, true);
   assert.equal("hosts" in pub.scope, false);
