@@ -62,6 +62,9 @@ test("monta o launcher com os atalhos e abre o painel acessível", async () => {
   boot(cfg());
   const buttons = shadow().querySelectorAll(".launcher .lb");
   assert.equal(buttons.length, 3, "Acessibilidade + Libras + Navegação por rosto");
+  // só o botão principal fica à vista: os atalhos ficam no grupo revelado por hover/foco
+  assert.equal(shadow().querySelectorAll(".launcher .lb-more .lb").length, 2);
+  assert.equal(shadow().querySelector(".launcher .lb-pill > .lb-main")?.getAttribute("data-a"), "open");
   const main = $('[data-a="open"]')!;
   assert.equal(main.getAttribute("aria-expanded"), "false");
   click(main);
@@ -70,6 +73,17 @@ test("monta o launcher com os atalhos e abre o painel acessível", async () => {
   assert.equal($(".panel")!.getAttribute("role"), "dialog");
   assert.equal($('[data-a="open"]')!.getAttribute("aria-expanded"), "true");
   assert.ok($('[data-k="pf:foco"]'), "perfis rápidos aparecem");
+});
+
+test("cores da cápsula de atalhos vêm do painel (botão principal segue a cor de destaque)", () => {
+  boot(cfg({ brand: { accent: "#0F766E" }, launcher: { colors: { surface: "#FFFFFF", button: "#F1F2F8", icon: "#1F2340" } } }));
+  const style = ($(".launcher") as HTMLElement).style;
+  assert.equal(style.getPropertyValue("--lb-main"), "#0F766E", "sem cor própria, usa a de destaque");
+  assert.equal(style.getPropertyValue("--lb-surface-solid"), "#FFFFFF");
+  assert.equal(style.getPropertyValue("--lb-icon"), "#1F2340");
+  assert.equal(style.getPropertyValue("--lb-main-ink"), "#FFFFFF", "ícone do botão principal com contraste");
+  w.update(cfg({ brand: { accent: "#0F766E" }, launcher: { colors: { main: "#E11D48" } } }));
+  assert.equal(($(".launcher") as HTMLElement).style.getPropertyValue("--lb-main"), "#E11D48");
 });
 
 test("ligar um recurso muda a página, avisa e fica guardado para o usuário", async () => {
@@ -219,14 +233,42 @@ test("convite por grupo: estudante da turma vê, aceita e o perfil sugerido liga
   boot(cfg({ nudge: { enabled: true, audience: "targeted", delay: 0, profile: "leitura", groups: [{ id: "g1", networks: ["rede aurora"], classes: ["1ª Série B"] }] } }));
   await sleep(20);
   assert.ok($(".mwrap"), "convite exibido");
-  assert.match($(".sugg")!.textContent!, /Mais conforto na leitura/);
+  assert.match($('.n-card[aria-pressed="true"]')!.textContent!, /Mais conforto na leitura/, "perfil sugerido já vem marcado");
+  assert.equal(shadow().querySelectorAll(".n-card").length, 3, "até três perfis no convite");
+  assert.match($(".n-text strong")!.textContent!, /mais confortável/, "trecho em negrito");
+  assert.match(($(".n-art img") as HTMLImageElement).getAttribute("src")!, /^https:\/\/luumu\.test\/a11y\/convite-estudante\.png$/, "ilustração servida pela Luumu");
   assert.equal(calls("match").length, 0, "grupo decide no navegador, sem consultar a lista");
   click($('[data-n="accept"]'));
   assert.equal($(".mwrap"), null);
-  assert.ok($(".panel")!.classList.contains("open"), "painel abre depois de aceitar");
+  assert.equal($(".panel")!.classList.contains("open"), false, "com perfil marcado, ativa direto");
   assert.ok(html().classList.contains("lu-a11y-font"), "fonte legível do perfil ligada");
   const memo = JSON.parse(localStorage.getItem("luumu_a11y_nudge_pk_test:aluno-9")!);
   assert.equal(memo.s, "accepted");
+});
+
+test("convite: marcar perfis nos cartões e ativar; sem nada marcado, abre o painel", async () => {
+  identity = { id: "aluno-20" };
+  boot(cfg({ nudge: { enabled: true, audience: "all", delay: 0 } }));
+  await sleep(20);
+  assert.equal(shadow().querySelectorAll('.n-card[aria-pressed="true"]').length, 0);
+  click($('.n-card[data-id="foco"]'));
+  click($('.n-card[data-id="ritmo"]'));
+  click($('.n-card[data-id="ritmo"]')); // desmarca
+  assert.equal($('.n-card[data-id="foco"]')!.getAttribute("aria-pressed"), "true");
+  click($('[data-n="accept"]'));
+  assert.equal(($(".mask-top") as HTMLElement).hidden, false, "Mais foco ligado");
+  assert.equal(html().classList.contains("lu-a11y-cursor"), false, "ritmo desmarcado não liga");
+  assert.match($(".toast")!.textContent!, /Mais foco: ativado/);
+
+  w.destroy();
+  localStorage.clear();
+  sessionStorage.clear();
+  identity = { id: "aluno-21" };
+  boot(cfg({ nudge: { enabled: true, audience: "all", delay: 0, image: "none" } }));
+  await sleep(20);
+  assert.equal($(".n-art"), null, "sem ilustração");
+  click($('[data-n="accept"]'));
+  assert.ok($(".panel")!.classList.contains("open"), "nada marcado: abre o painel para escolher");
 });
 
 test("convite: fora do grupo e sem lista, nada aparece", async () => {
@@ -247,7 +289,7 @@ test("convite pela lista de convidados: pergunta só pelo estudante logado, usa 
   assert.equal(match.length, 1);
   assert.deepEqual(match[0].body, { key: "pk_test", id: "123", email: "ana@escola.br", h: "a".repeat(64) });
   assert.ok($(".mwrap"), "convite exibido");
-  assert.match($(".sugg")!.textContent!, /Tela mais calma/, "perfil do convidado vence o do convite");
+  assert.match($('.n-card[aria-pressed="true"]')!.textContent!, /Tela mais calma/, "perfil do convidado vence o do convite");
   click($('[data-n="dismiss"]'));
   await sleep(10);
   const events = calls("match").map((c) => c.body.event).filter(Boolean);

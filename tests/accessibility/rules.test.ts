@@ -17,7 +17,7 @@ import { matchesAnyGroup, matchesGroup, normalizeGroups, normalizeValue } from "
 import { hostInScope, normalizeScope, scopeDecision, scopeReachesNobody, scopeSummary } from "@/lib/accessibility/scope";
 import { inviteeKey, parseInvitees, parseProfile, userKeyFrom } from "@/lib/accessibility/invitees";
 import { prefsKey, userHashFor, verifyUserHash } from "@/lib/accessibility/verify";
-import { DEFAULT_A11Y_CONFIG, normalizeA11yConfig, publicA11yConfig, readableOn, safeImageUrl, librasLogoUrl, librasLook, shade } from "@/lib/accessibility/config";
+import { DEFAULT_A11Y_CONFIG, DEFAULT_NUDGE_IMAGE, messageHtml, normalizeA11yConfig, nudgeImageUrl, publicA11yConfig, readableOn, safeImageUrl, librasLogoUrl, librasLook, shade } from "@/lib/accessibility/config";
 import { nudgeDue, NUDGE_RETRY_MS, parseNudgeMemo } from "@/lib/accessibility/nudge";
 import { safePersonalizationUrl, vlibrasPersonalizationJson, vlibrasRequestEmail } from "@/lib/accessibility/vlibras";
 
@@ -250,6 +250,36 @@ test("recorte público: sem domínios e sem lista, só se há convidados", () =>
   assert.equal(pub.nudge.hasList, true);
   assert.equal("hosts" in pub.scope, false);
   assert.equal(publicA11yConfig(c).nudge.hasList, false);
+});
+
+test("convite: textos padrão antigos viram os novos; personalizados ficam", () => {
+  const old = normalizeA11yConfig({ nudge: { title: "Sua experiência pode ficar ainda melhor", cta: "Ativar recursos" } });
+  assert.equal(old.nudge.title, "Uma experiência mais personalizada para você!");
+  assert.equal(old.nudge.cta, "Ativar recursos agora");
+  assert.equal(normalizeA11yConfig({ nudge: { title: "Olá, turma!" } }).nudge.title, "Olá, turma!");
+});
+
+test("convite: negrito com ** sem abrir brecha para HTML", () => {
+  assert.equal(messageHtml("Fica **mais fácil** assim"), "Fica <strong>mais fácil</strong> assim");
+  assert.equal(messageHtml('<img src=x onerror="a()"> **ok**'), "&lt;img src=x onerror=&quot;a()&quot;&gt; <strong>ok</strong>");
+});
+
+test("convite: ilustração padrão, enviada ou nenhuma", () => {
+  assert.equal(nudgeImageUrl({ image: "default", imageUrl: "" }), DEFAULT_NUDGE_IMAGE);
+  assert.equal(nudgeImageUrl({ image: "custom", imageUrl: "https://cdn.x.com/a.png" }), "https://cdn.x.com/a.png");
+  assert.equal(nudgeImageUrl({ image: "custom", imageUrl: "" }), DEFAULT_NUDGE_IMAGE);
+  assert.equal(nudgeImageUrl({ image: "none", imageUrl: "https://cdn.x.com/a.png" }), "");
+  assert.equal(normalizeA11yConfig({ nudge: { image: "custom", imageUrl: "javascript:x" } }).nudge.imageUrl, "");
+});
+
+test("cápsula de atalhos: cores válidas, principal vazio = cor de destaque", () => {
+  const d = normalizeA11yConfig({});
+  assert.deepEqual(d.launcher.colors, { main: "", surface: "#141620", button: "#2B2E3B", icon: "#FFFFFF" });
+  const c = normalizeA11yConfig({ launcher: { colors: { main: "#e11d48", surface: "azul", button: "#fff", icon: "#0f172a" } } });
+  assert.equal(c.launcher.colors.main, "#E11D48");
+  assert.equal(c.launcher.colors.surface, "#141620", "cor inválida cai no padrão");
+  assert.equal(c.launcher.colors.button, "#2B2E3B", "só #RRGGBB");
+  assert.equal(c.launcher.colors.icon, "#0F172A");
 });
 
 test("imagens: só https ou caminho do próprio site", () => {

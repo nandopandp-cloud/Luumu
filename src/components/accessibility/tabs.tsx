@@ -18,6 +18,7 @@ import { ColorField, ImageField, Pills, SectionTitle, ToggleRow } from "./contro
 import { GroupsEditor, IdentifyHint } from "./GroupsEditor";
 import { InviteesManager } from "./InviteesManager";
 import { LibrasTab } from "./LibrasTab";
+import { LauncherStyleEditor } from "./LauncherStyleEditor";
 
 type Patch = (fn: (c: A11yConfig) => A11yConfig) => void;
 
@@ -164,8 +165,9 @@ export function AppearanceTab({ config, patch, projectLogo }: { config: A11yConf
       </Card>
 
       <Card>
-        <SectionTitle icon={<MousePointer2 className="size-4.5" />} title="Botão flutuante" description="Onde os botões ficam na tela do estudante." />
+        <SectionTitle icon={<MousePointer2 className="size-4.5" />} title="Botão flutuante" description="Estilo, cores e posição da cápsula de atalhos na tela do estudante." />
         <div className="grid gap-4">
+          <LauncherStyleEditor config={config} patch={patch} />
           <Field label="Posição">
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" role="radiogroup" aria-label="Posição do botão">
               {LAUNCHER_POSITIONS.map((p) => {
@@ -197,7 +199,7 @@ export function AppearanceTab({ config, patch, projectLogo }: { config: A11yConf
             </Field>
           </div>
           <div className="grid gap-2">
-            <ToggleRow title="Rótulos sempre visíveis" description="Desligado, o rótulo aparece ao passar o mouse ou focar pelo teclado." checked={config.launcher.showLabels} onChange={(showLabels) => launcher({ showLabels })} />
+            <ToggleRow title="Rótulo sempre visível" description="Mostra o nome ao lado do botão principal o tempo todo. Desligado, os nomes aparecem ao passar o mouse ou focar pelo teclado." checked={config.launcher.showLabels} onChange={(showLabels) => launcher({ showLabels })} />
             <ToggleRow
               icon={<Hand className="size-4.5" />}
               title="Atalho de Libras"
@@ -283,8 +285,23 @@ export function NudgeTab({ config, patch, canManage, inviteeCount }: { config: A
           <Field label="Título">
             <Input value={n.title} maxLength={80} onChange={(e) => nudge({ title: e.target.value })} />
           </Field>
-          <Field label="Texto">
-            <Textarea rows={3} maxLength={280} value={n.message} onChange={(e) => nudge({ message: e.target.value })} />
+          <Field label="Texto" hint="Use **dois asteriscos** em volta de um trecho para deixá-lo em negrito.">
+            <Textarea rows={3} maxLength={320} value={n.message} onChange={(e) => nudge({ message: e.target.value })} />
+          </Field>
+          <Field label="Ilustração" hint="Aparece à esquerda do texto. PNG com fundo transparente, na vertical (cerca de 335×446 px ou o dobro).">
+            <div className="flex flex-col gap-3">
+              <Pills
+                label="Ilustração do convite"
+                value={n.image}
+                onChange={(image) => nudge({ image })}
+                options={[
+                  { value: "default", label: "Padrão" },
+                  { value: "custom", label: "Enviar outra" },
+                  { value: "none", label: "Sem ilustração" },
+                ]}
+              />
+              {n.image === "custom" && <ImageField label="URL da ilustração" value={n.imageUrl} onChange={(imageUrl) => nudge({ imageUrl })} />}
+            </div>
           </Field>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Botão principal">
@@ -294,7 +311,7 @@ export function NudgeTab({ config, patch, canManage, inviteeCount }: { config: A
               <Input value={n.dismiss} maxLength={30} onChange={(e) => nudge({ dismiss: e.target.value })} />
             </Field>
           </div>
-          <Field label="Perfil sugerido" hint="Ao aceitar, o perfil já vem ligado e o painel abre. Sem sugestão, só o painel abre.">
+          <Field label="Perfil sugerido" hint="O convite mostra até três perfis para o estudante marcar; o sugerido já vem marcado. Sem nada marcado, o botão principal abre o painel.">
             <Select value={n.profile ?? ""} onChange={(e) => nudge({ profile: (e.target.value || null) as ProfileId | null })}>
               <option value="">Sem sugestão</option>
               {PROFILES.filter((p) => profileAvailable(p.id, config.features)).map((p) => (

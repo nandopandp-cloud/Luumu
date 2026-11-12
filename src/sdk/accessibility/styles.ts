@@ -24,19 +24,38 @@ button{font:inherit;color:inherit;cursor:pointer;border:0;background:none;paddin
 button:focus-visible,[tabindex]:focus-visible,a:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
 .sr{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
-/* ---------- launcher ---------- */
-.launcher{position:fixed;z-index:${Z};display:flex;flex-direction:column;gap:12px;align-items:flex-end}
-.launcher.left{align-items:flex-start}
-.lb{display:flex;align-items:center;position:relative}
-.launcher.left .lb{flex-direction:row-reverse}
-.lb-label{background:var(--bg);color:var(--fg);font-weight:800;font-size:15px;letter-spacing:.03em;height:46px;display:flex;align-items:center;padding:0 30px 0 20px;margin-right:-22px;border-radius:999px;box-shadow:0 6px 20px rgba(15,23,42,.14);white-space:nowrap;opacity:0;transform:translateX(10px);transition:opacity .2s,transform .2s;pointer-events:none}
-.launcher.left .lb-label{padding:0 20px 0 30px;margin:0 0 0 -22px;transform:translateX(-10px)}
-.launcher.labels .lb-label,.lb:hover .lb-label,.lb:focus-visible .lb-label{opacity:1;transform:none}
-.lb-icon{position:relative;width:58px;height:58px;border-radius:50%;background:var(--acc);color:var(--acc-ink);display:grid;place-items:center;box-shadow:0 0 0 3px var(--bg),0 10px 26px rgba(15,23,42,.3);transition:transform .2s}
-.lb:hover .lb-icon{transform:scale(1.06)}
-.lb.on .lb-icon{box-shadow:0 0 0 3px var(--bg),0 0 0 6px var(--acc),0 10px 26px rgba(15,23,42,.3)}
-.lb-badge{position:absolute;top:-5px;right:-5px;min-width:22px;height:22px;padding:0 5px;border-radius:11px;background:#16A34A;color:#fff;font-size:12px;font-weight:800;display:grid;place-items:center;box-shadow:0 0 0 2px var(--bg)}
-.launcher.left .lb-badge{right:auto;left:-5px}
+/* ---------- launcher: cápsula de atalhos ----------
+   Cores vêm do painel (launcher.colors) como variáveis --lb-* calculadas no widget. */
+.launcher{position:fixed;z-index:${Z};pointer-events:none}
+.lb-pill{position:relative;display:flex;flex-direction:column;align-items:center;padding:8px;border-radius:999px;background:var(--lb-surface);border:1px solid var(--lb-line);box-shadow:0 18px 44px var(--lb-shade),inset 0 1px 0 rgba(255,255,255,.05);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);pointer-events:auto}
+/* brilho na borda superior, do lado de fora da tela */
+.lb-pill::after{content:"";position:absolute;inset:-1px;border-radius:inherit;padding:1.5px;background:linear-gradient(205deg,var(--lb-main) 0%,transparent 34%);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none;opacity:.95}
+.launcher.left .lb-pill::after{background:linear-gradient(155deg,var(--lb-main) 0%,transparent 34%)}
+/* no meio da tela: botão principal em cima, atalhos abaixo (como na referência) */
+.launcher.mid .lb-pill{flex-direction:column-reverse}
+/* a cápsula cresce/encolhe pela altura dos atalhos; some com um atraso curto */
+.lb-more{display:grid;grid-template-rows:0fr;transition:grid-template-rows .3s cubic-bezier(.16,1,.3,1) .12s}
+.lb-more-in{min-height:0;overflow-x:visible;overflow-y:clip;display:flex;flex-direction:column;align-items:center;gap:10px;margin:-4px;padding:4px 4px 14px}
+.launcher.mid .lb-more-in{padding:14px 4px 4px}
+.launcher:hover .lb-more,.launcher:focus-within .lb-more{grid-template-rows:1fr;transition-delay:0s}
+.lb-x{opacity:0;visibility:hidden;transform:scale(.7);transition:opacity .18s ease,transform .25s cubic-bezier(.16,1,.3,1),visibility 0s linear .3s}
+.launcher:hover .lb-x,.launcher:focus-within .lb-x{opacity:1;visibility:visible;transform:none;transition:opacity .22s ease .06s,transform .3s cubic-bezier(.16,1,.3,1) .04s,visibility 0s}
+@media (hover:none){.lb-more{display:none}}
+.lb{position:relative;display:grid;place-items:center;width:58px;height:58px;border-radius:50%;flex:none;transition:transform .2s cubic-bezier(.16,1,.3,1),filter .2s,box-shadow .2s}
+.lb-main{color:var(--lb-main-ink);background:radial-gradient(circle at 32% 24%,var(--lb-main-hi) 0%,var(--lb-main) 52%,var(--lb-main-lo) 100%);box-shadow:inset 0 0 0 2px var(--lb-main-ring),0 0 22px var(--lb-main-glow),0 8px 18px rgba(0,0,0,.28)}
+.lb-main:hover{transform:scale(1.05);filter:brightness(1.06)}
+.lb-x{width:52px;height:52px;color:var(--lb-icon);background:linear-gradient(180deg,var(--lb-btn-hi) 0%,var(--lb-btn-lo) 100%);box-shadow:inset 0 0 0 1px var(--lb-line),inset 0 1px 0 rgba(255,255,255,.1),0 4px 12px rgba(0,0,0,.22)}
+.lb-x:hover{filter:brightness(1.12)}
+.lb-x.on{box-shadow:inset 0 0 0 2px var(--lb-main),0 0 16px var(--lb-main-glow)}
+.lb-main.on{box-shadow:inset 0 0 0 2px var(--lb-main-ring),0 0 0 4px var(--lb-main-glow),0 0 26px var(--lb-main-glow)}
+.lb:focus-visible{outline:3px solid var(--lb-main-ring);outline-offset:3px}
+.lb-badge{position:absolute;top:-4px;right:-4px;min-width:21px;height:21px;padding:0 5px;border-radius:11px;background:#16A34A;color:#fff;font-size:12px;font-weight:800;display:grid;place-items:center;box-shadow:0 0 0 2px var(--lb-surface-solid)}
+.launcher.left .lb-badge{right:auto;left:-4px}
+/* rótulo: dica ao lado do botão em foco ou sob o mouse */
+.lb-label{position:absolute;right:calc(100% + 18px);top:50%;transform:translate(6px,-50%);background:var(--lb-surface-solid);color:var(--lb-surface-ink);border:1px solid var(--lb-line);box-shadow:0 10px 24px var(--lb-shade);padding:8px 13px;border-radius:12px;font-size:14px;font-weight:700;letter-spacing:.01em;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .15s,transform .15s}
+.launcher.left .lb-label{right:auto;left:calc(100% + 18px);transform:translate(-6px,-50%)}
+.lb:hover .lb-label,.lb:focus-visible .lb-label,.launcher.labels .lb-main .lb-label{opacity:1;transform:translate(0,-50%)}
+@media (max-width:520px){.lb{width:52px;height:52px}.lb-x{width:46px;height:46px}}
 
 /* ---------- painel ---------- */
 .scrim{position:fixed;inset:0;background:rgba(15,23,42,.4);z-index:${Z + 1};opacity:0;transition:opacity .25s;pointer-events:none}
@@ -127,6 +146,48 @@ button:focus-visible,[tabindex]:focus-visible,a:focus-visible{outline:3px solid 
 .sugg span{display:block;font-size:13.5px;color:var(--mut)}
 .spin{width:18px;height:18px;border-radius:50%;border:2.5px solid currentColor;border-right-color:transparent;animation:lu-spin .8s linear infinite}
 
+/* ---------- convite (medidas do layout de referência, num modal de ~1000×613) ---------- */
+.mwrap:has(.nudge){background:rgba(17,19,48,.55)}
+.nudge{position:relative;display:grid;grid-template-columns:clamp(220px,24vw,335px) minmax(0,1fr);column-gap:22px;align-items:start;width:min(1000px,100%);max-height:calc(100vh - 32px);overflow:auto;padding:55px 40px 51px 36px;border-radius:28px;background:var(--n-bg);color:var(--n-ink);box-shadow:0 30px 80px rgba(15,17,40,.35);animation:lu-pop .3s cubic-bezier(.16,1,.3,1)}
+.nudge.no-art{grid-template-columns:minmax(0,1fr);width:min(700px,100%);padding:56px 48px 48px}
+.n-x{position:absolute;top:22px;right:22px;width:42px;height:42px;border-radius:12px;display:grid;place-items:center;color:var(--n-ink)}
+.n-x:hover{background:var(--acc-soft)}
+.n-art img{display:block;width:100%;height:auto}
+.n-body{min-width:0;padding-top:21px}
+.n-title{margin:0;padding-right:28px;font-size:clamp(28px,2.7vw,40px);line-height:1.25;font-weight:800;letter-spacing:-.015em;color:var(--n-ink);text-wrap:balance}
+.n-bar{display:block;width:84px;height:8px;border-radius:4px;background:#FE8916;margin:20px 0 26px}
+.n-text{margin:0;font-size:clamp(17px,1.5vw,22px);line-height:1.32;color:var(--n-ink2)}
+.n-text strong{font-weight:800;color:var(--n-ink)}
+.nudge:focus{outline:none}
+.n-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px;margin-top:34px}
+.n-card{position:relative;min-height:108px;padding:14px 16px;border-radius:18px;background:var(--acc-soft);color:var(--acc);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;transition:transform .15s,box-shadow .15s,background .15s}
+.n-card:hover{transform:translateY(-2px)}
+.n-card b{font-size:clamp(14px,1.2vw,17px);line-height:1.25;font-weight:700;color:var(--n-ink)}
+.n-card[aria-pressed="true"]{background:var(--n-bg);box-shadow:inset 0 0 0 2px var(--acc),0 6px 16px rgba(82,85,232,.18)}
+.n-ck{position:absolute;top:8px;right:8px;width:20px;height:20px;border-radius:50%;background:var(--acc);color:var(--acc-ink);display:none;place-items:center}
+.n-card[aria-pressed="true"] .n-ck{display:grid}
+.n-actions{grid-column:1 / -1;display:flex;justify-content:flex-end;gap:26px;margin-top:4px}
+.nudge.no-art .n-actions{margin-top:44px}
+.n-btn{height:58px;border-radius:14px;font-size:clamp(17px,1.4vw,20px);font-weight:700;display:inline-flex;align-items:center;justify-content:center;padding:0 24px;text-align:center}
+.n-btn.ghost{flex:0 1 215px;background:#fff;color:var(--n-ink);border:1.5px solid #ACAECA}
+.n-btn.ghost:hover{border-color:var(--acc)}
+.n-btn.primary{flex:0 1 375px;background:var(--acc);color:var(--acc-ink)}
+.n-btn.primary:hover{filter:brightness(1.07)}
+.root.dark .n-btn.ghost{background:transparent;border-color:var(--line)}
+@media (max-width:860px){
+  .nudge{grid-template-columns:minmax(0,1fr);padding:30px 22px 24px;border-radius:24px}
+  .n-art{justify-self:center;width:min(170px,46%);margin-bottom:6px}
+  .n-body{padding-top:0}
+  .n-title{font-size:26px;padding-right:36px}
+  .n-bar{margin:14px 0 16px}
+  .n-text{font-size:16.5px}
+  .n-cards{gap:10px;margin-top:22px}
+  .n-card{min-height:92px;padding:12px 8px}
+  .n-actions{flex-direction:column-reverse;gap:10px;margin-top:22px}
+  .n-actions .n-btn{flex:0 0 auto;width:100%;height:52px}
+  .n-card b{font-size:13.5px}
+}
+
 /* ---------- navegação por rosto ---------- */
 .fn-cursor{position:fixed;left:0;top:0;width:38px;height:38px;margin:-19px 0 0 -19px;border-radius:50%;pointer-events:none;z-index:${Z + 8};background:conic-gradient(var(--acc) calc(var(--p,0) * 1turn),rgba(255,255,255,.35) 0);box-shadow:0 0 0 3px #fff,0 4px 14px rgba(0,0,0,.35);transition:transform .12s}
 .fn-cursor::after{content:"";position:absolute;inset:9px;border-radius:50%;background:#fff;box-shadow:inset 0 0 0 3px var(--acc)}
@@ -144,7 +205,6 @@ button:focus-visible,[tabindex]:focus-visible,a:focus-visible{outline:3px solid 
 @keyframes lu-spin{to{transform:rotate(360deg)}}
 @media (max-width:520px){
   .profiles{grid-template-columns:repeat(2,1fr)}
-  .lb-icon{width:52px;height:52px}
   .chips{padding-left:0}
   .modal{padding:30px 20px 22px;border-radius:24px}
   .m-actions{flex-direction:column-reverse}

@@ -36,7 +36,7 @@ import {
   type PrefKey,
   type ProfileId,
 } from "../../lib/accessibility/features";
-import { readableOn, shade, type PublicA11yConfig } from "../../lib/accessibility/config";
+import { messageHtml, nudgeImageUrl, readableOn, shade, type PublicA11yConfig } from "../../lib/accessibility/config";
 import { matchesAnyGroup } from "../../lib/accessibility/audience";
 import { scopeDecision } from "../../lib/accessibility/scope";
 import { userKeyFrom } from "../../lib/accessibility/invitees";
@@ -337,6 +337,10 @@ function createWidget(): A11yWidget {
     rootEl.style.setProperty("--acc-ink", readableOn(acc));
     rootEl.style.setProperty("--acc-soft", dark ? shade(acc, -0.72) : shade(acc, 0.9));
     rootEl.style.setProperty("--acc-line", dark ? shade(acc, -0.4) : shade(acc, 0.65));
+    // convite: fundo levemente tingido pela cor de destaque e tinta navy (layout de referência)
+    rootEl.style.setProperty("--n-bg", dark ? "var(--bg)" : shade(acc, 0.975));
+    rootEl.style.setProperty("--n-ink", dark ? "#F1F5F9" : "#0E0D35");
+    rootEl.style.setProperty("--n-ink2", dark ? "#CBD5E1" : "#22213F");
   }
 
   /* ---------------- aviso ---------------- */
@@ -348,7 +352,8 @@ function createWidget(): A11yWidget {
   }
 
   /* ---------------- foco preso nos diálogos ---------------- */
-  function trapFocus(container: HTMLElement): () => void {
+  /** `focusSelf`: o foco inicial vai para o próprio diálogo (o leitor de tela anuncia o título) */
+  function trapFocus(container: HTMLElement, focusSelf = false): () => void {
     const before = (hostEl?.shadowRoot?.activeElement as HTMLElement | null) ?? (document.activeElement as HTMLElement | null);
     const focusables = () =>
       Array.from(container.querySelectorAll<HTMLElement>("button:not([disabled]),[href],input,select,textarea,[tabindex]:not([tabindex='-1'])")).filter(
@@ -369,7 +374,7 @@ function createWidget(): A11yWidget {
       }
     };
     container.addEventListener("keydown", onKey);
-    setTimeout(() => (focusables()[0] ?? container).focus?.(), 30);
+    setTimeout(() => (focusSelf ? container : focusables()[0] ?? container).focus?.(), 30);
     return () => {
       container.removeEventListener("keydown", onKey);
       before?.focus?.();
@@ -377,32 +382,61 @@ function createWidget(): A11yWidget {
   }
 
   /* ---------------- launcher ---------------- */
+  /** Cores da cápsula: as quatro escolhidas no painel viram gradientes, anel, brilho e contraste. */
+  function launcherVars(): string {
+    const c = cfg.launcher.colors;
+    const main = c.main || cfg.brand.accent;
+    const darkSurface = readableOn(c.surface) === "#FFFFFF";
+    const vars: Record<string, string> = {
+      "--lb-main": main,
+      "--lb-main-hi": shade(main, 0.22),
+      "--lb-main-lo": shade(main, -0.22),
+      "--lb-main-ring": shade(main, 0.42),
+      "--lb-main-glow": `${main}8C`,
+      "--lb-main-ink": readableOn(main),
+      "--lb-surface": `${c.surface}F0`,
+      "--lb-surface-solid": c.surface,
+      "--lb-surface-ink": readableOn(c.surface),
+      "--lb-btn-hi": shade(c.button, darkSurface ? 0.1 : 0.4),
+      "--lb-btn-lo": shade(c.button, darkSurface ? -0.18 : -0.05),
+      "--lb-icon": c.icon,
+      "--lb-line": darkSurface ? "rgba(255,255,255,.09)" : "rgba(15,23,42,.09)",
+      "--lb-shade": darkSurface ? "rgba(6,8,18,.45)" : "rgba(15,23,42,.16)",
+    };
+    return Object.entries(vars)
+      .map(([k, v]) => `${k}:${v}`)
+      .join(";");
+  }
+
   function renderLauncher() {
     const pos = cfg.launcher.position;
     const left = pos.endsWith("left");
     const middle = pos.startsWith("middle");
-    launcher.className = `launcher${left ? " left" : ""}${cfg.launcher.showLabels ? " labels" : ""}`;
+    launcher.className = `launcher${left ? " left" : ""}${middle ? " mid" : ""}${cfg.launcher.showLabels ? " labels" : ""}`;
+    launcher.setAttribute("style", launcherVars());
     launcher.style.left = left ? "20px" : "auto";
     launcher.style.right = left ? "auto" : "20px";
-    launcher.style.top = middle ? "50%" : "auto";
+    // no meio da tela o botão principal fica parado e a cápsula cresce para baixo
+    launcher.style.top = middle ? "calc(50% - 40px)" : "auto";
     launcher.style.bottom = middle ? "auto" : `${cfg.launcher.offset}px`;
-    launcher.style.transform = middle ? "translateY(-50%)" : "none";
     const eff = effective(prefs);
     const count = activeCount(eff);
-    const items: string[] = [
-      `<button type="button" class="lb${panelOpen ? " on" : ""}" data-a="open" aria-haspopup="dialog" aria-expanded="${panelOpen}" aria-label="${esc(cfg.launcher.label)}${count ? `, ${count} ${count === 1 ? "ajuste ativo" : "ajustes ativos"}` : ""}">
-        <span class="lb-label" aria-hidden="true">${esc(cfg.launcher.label)}</span>
-        <span class="lb-icon">${icon("access", 30, 2.2)}${count ? `<span class="lb-badge" aria-hidden="true">${count}</span>` : ""}</span></button>`,
-    ];
-    if (enabled("libras") && cfg.launcher.librasShortcut)
-      items.push(`<button type="button" class="lb${eff.libras ? " on" : ""}" data-a="libras" aria-pressed="${eff.libras}" aria-label="Libras">
-        <span class="lb-label" aria-hidden="true">Libras</span>
-        <span class="lb-icon">${icon("hands", 28, 2)}${eff.libras ? `<span class="lb-badge" aria-hidden="true">${icon("check", 13, 3.2)}</span>` : ""}</span></button>`);
-    if (enabled("faceNav") && cfg.launcher.faceShortcut)
-      items.push(`<button type="button" class="lb${face.active ? " on" : ""}" data-a="face" aria-pressed="${face.active}" aria-label="Navegação por rosto">
-        <span class="lb-label" aria-hidden="true">Navegação por rosto</span>
-        <span class="lb-icon">${icon("face", 28, 2)}${face.active ? `<span class="lb-badge" aria-hidden="true">${icon("check", 13, 3.2)}</span>` : ""}</span></button>`);
-    launcher.innerHTML = items.join("");
+    /*
+      Cápsula de atalhos: só o botão de acessibilidade fica à vista; Libras e navegação por rosto
+      aparecem quando a cápsula cresce (mouse em cima ou foco pelo teclado — Tab no botão
+      principal já revela os atalhos). Em telas de toque (sem hover) eles ficam no painel.
+    */
+    const extra = (a: string, label: string, ico: string, on: boolean) =>
+      `<button type="button" class="lb lb-x${on ? " on" : ""}" data-a="${a}" aria-pressed="${on}" aria-label="${label}">
+        ${icon(ico, 27, 2.3)}<span class="lb-label" aria-hidden="true">${label}</span>${on ? `<span class="lb-badge" aria-hidden="true">${icon("check", 12, 3.4)}</span>` : ""}</button>`;
+    const extras: string[] = [];
+    if (enabled("libras") && cfg.launcher.librasShortcut) extras.push(extra("libras", "Libras", "hands", eff.libras));
+    if (enabled("faceNav") && cfg.launcher.faceShortcut) extras.push(extra("face", "Navegação por rosto", "face", face.active));
+    launcher.innerHTML = `<div class="lb-pill">
+      ${extras.length ? `<div class="lb-more"><div class="lb-more-in">${extras.join("")}</div></div>` : ""}
+      <button type="button" class="lb lb-main${panelOpen ? " on" : ""}" data-a="open" aria-haspopup="dialog" aria-expanded="${panelOpen}" aria-label="${esc(cfg.launcher.label)}${count ? `, ${count} ${count === 1 ? "ajuste ativo" : "ajustes ativos"}` : ""}">
+        ${icon("access", 30, 2.3)}<span class="lb-label" aria-hidden="true">${esc(cfg.launcher.label)}</span>${count ? `<span class="lb-badge" aria-hidden="true">${count}</span>` : ""}</button>
+    </div>`;
   }
 
   /* ---------------- painel ---------------- */
@@ -581,28 +615,59 @@ function createWidget(): A11yWidget {
     if (invited) void post("match", { event: s }, true);
   }
 
+  /** Caminho relativo (ex.: a ilustração padrão) é da Luumu, não do site do cliente. */
+  function asset(url: string): string {
+    if (!url.startsWith("/")) return url;
+    try {
+      return new URL(url, boot!.api).href;
+    } catch {
+      return url;
+    }
+  }
+
   function showNudge() {
     if (nudgeEl) return;
     const n = cfg.nudge;
     const pid = inviteeProfile ?? n.profile;
-    const profile = pid && profileAvailable(pid, cfg.features) ? profileInfo(pid) : null;
+    const suggested = pid && profileAvailable(pid, cfg.features) ? pid : null;
+    // até três perfis no convite (os primeiros do painel); o sugerido entra e já vem marcado
+    const available = cfg.profiles.filter((p) => profileAvailable(p, cfg.features));
+    const cards = (suggested ? [suggested, ...available.filter((p) => p !== suggested)] : available).slice(0, 3);
+    const picked = new Set<ProfileId>(suggested ? [suggested] : []);
+    const img = nudgeImageUrl(n);
     nudgeEl = document.createElement("div");
     nudgeEl.className = "mwrap";
     nudgeEl.innerHTML = `
-<div class="modal" role="dialog" aria-modal="true" aria-labelledby="lu-n-t" aria-describedby="lu-n-d">
-  <button type="button" class="x" data-n="dismiss" aria-label="Fechar">${icon("close", 22)}</button>
-  <div class="m-icon">${cfg.brand.logoUrl ? `<img src="${esc(cfg.brand.logoUrl)}" alt="" style="width:64%;height:64%;object-fit:contain;border-radius:50%;background:#fff;padding:10px">` : icon("access", 56, 2)}</div>
-  <h2 class="m-title" id="lu-n-t">${esc(n.title)}</h2>
-  <p class="m-text" id="lu-n-d">${esc(n.message)}</p>
-  ${profile ? `<div class="sugg"><span class="pi">${icon(profile.icon, 24)}</span><div><small>Sugestão para você</small><b>${esc(profile.label)}</b><span>${esc(profile.description)}</span></div></div>` : ""}
-  <div class="m-actions">
-    <button type="button" class="btn ghost" data-n="dismiss">${esc(n.dismiss)}</button>
-    <button type="button" class="btn primary" data-n="accept">${icon("sparkles", 20)}<span>${esc(n.cta)}</span></button>
+<div class="nudge${img ? "" : " no-art"}" role="dialog" aria-modal="true" aria-labelledby="lu-n-t" aria-describedby="lu-n-d" tabindex="-1">
+  <button type="button" class="n-x" data-n="dismiss" aria-label="Fechar">${icon("close", 26, 2.4)}</button>
+  ${img ? `<div class="n-art"><img src="${esc(asset(img))}" alt="" decoding="async"></div>` : ""}
+  <div class="n-body">
+    <h2 class="n-title" id="lu-n-t">${esc(n.title)}</h2>
+    <span class="n-bar" aria-hidden="true"></span>
+    <p class="n-text" id="lu-n-d">${messageHtml(n.message)}</p>
+    ${cards.length ? `<div class="n-cards" role="group" aria-label="Escolha o que ativar">${cards
+      .map((id) => {
+        const p = profileInfo(id);
+        return `<button type="button" class="n-card" data-n="pick" data-id="${id}" aria-pressed="${picked.has(id)}" title="${esc(p.description)}"><span class="n-ck">${icon("check", 12, 3.4)}</span>${icon(p.icon, 30, 2.2)}<b>${esc(p.label)}</b></button>`;
+      })
+      .join("")}</div>` : ""}
+  </div>
+  <div class="n-actions">
+    <button type="button" class="n-btn ghost" data-n="dismiss">${esc(n.dismiss)}</button>
+    <button type="button" class="n-btn primary" data-n="accept">${esc(n.cta)}</button>
   </div>
 </div>`;
     nudgeEl.addEventListener("click", (e) => {
       const t = e.target as HTMLElement;
-      const a = t === nudgeEl ? "dismiss" : (t.closest("[data-n]") as HTMLElement | null)?.dataset.n;
+      const btn = t.closest("[data-n]") as HTMLElement | null;
+      const a = t === nudgeEl ? "dismiss" : btn?.dataset.n;
+      if (a === "pick" && btn) {
+        const id = btn.dataset.id as ProfileId;
+        if (picked.has(id)) picked.delete(id);
+        else picked.add(id);
+        btn.setAttribute("aria-pressed", String(picked.has(id)));
+        return;
+      }
       if (a === "dismiss") {
         remember("dismissed");
         closeNudge();
@@ -611,11 +676,13 @@ function createWidget(): A11yWidget {
       if (a === "accept") {
         remember("accepted");
         closeNudge();
-        if (profile && !prefs.profiles.includes(profile.id)) {
-          setPrefs(toggleProfile(prefs, profile.id, cfg.features));
-          toast(`${profile.label}: ativado`);
-        }
-        openPanel();
+        // nada marcado: abre o painel para o estudante escolher
+        if (!picked.size) return openPanel();
+        let next = prefs;
+        for (const id of picked) if (!next.profiles.includes(id)) next = toggleProfile(next, id, cfg.features);
+        setPrefs(next);
+        const names = [...picked].map((id) => profileInfo(id).label);
+        toast(`${names.length === 1 ? names[0] : `${names.length} perfis`}: ativado${names.length === 1 ? "" : "s"}. Ajuste quando quiser no botão ${cfg.launcher.label}.`);
       }
     });
     nudgeEl.addEventListener("keydown", (e) => {
@@ -625,7 +692,7 @@ function createWidget(): A11yWidget {
       }
     });
     rootEl.appendChild(nudgeEl);
-    releaseNudgeTrap = trapFocus(nudgeEl.querySelector(".modal") as HTMLElement);
+    releaseNudgeTrap = trapFocus(nudgeEl.querySelector(".nudge") as HTMLElement, true);
     remember("shown");
     sessionFlag("luumu_a11y_nudged", "1");
   }

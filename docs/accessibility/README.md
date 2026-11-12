@@ -102,6 +102,21 @@ plugin), porque ligar, desligar ou mudar onde ele aparece precisa chegar logo. S
   que tira o plugin da página na hora e descarta o catálogo guardado. Falha do banco responde
   503, para não desligar o plugin por engano.
 
+## Atalhos e convite (aparência)
+
+- **Cápsula de atalhos**: em repouso só o botão de acessibilidade aparece; ao passar o mouse (ou
+  focar pelo teclado — Tab no botão principal já revela o resto) a cápsula cresce e mostra Libras
+  e Navegação por rosto, com o nome de cada um ao lado. Em telas de toque os atalhos ficam no
+  painel. Na posição "meio", o botão principal fica em cima e a cápsula cresce para baixo.
+- **Cores** (`launcher.colors`): botão principal (vazio = cor de destaque da marca), fundo da
+  cápsula, botões de atalho e ícones; estilos prontos Noite, Grafite, Claro e Lavanda. O widget
+  deriva gradientes, anel, brilho e a cor de texto com contraste; o painel avisa quando o ícone
+  fica com menos de 3:1 sobre o botão.
+- **Convite**: layout com ilustração à esquerda (`nudge.image`: padrão em
+  `public/a11y/convite-estudante.png`, uma enviada pelo cliente ou nenhuma), título, texto com
+  `**negrito**`, até três perfis para o estudante marcar (o sugerido já vem marcado) e os botões.
+  Com perfis marcados, "Ativar" liga direto; sem nada marcado, abre o painel.
+
 ## Login e logout no produto
 
 O plugin reavalia quem é o estudante sempre que o produto chama `Luumu.identify` ou
