@@ -239,7 +239,7 @@ function IdentityCard({ canManage, initial }: { canManage: boolean; initial: { r
       if (!r.ok) return toast("error", r.error);
       setSecret(r.secret);
       setConfirmRotate(false);
-      if (rotate) toast("success", "Novo segredo gerado. Atualize o servidor do produto.");
+      if (rotate) toast("success", "Novo segredo gerado. Atualize o backend do produto.");
     });
 
   return (
@@ -252,7 +252,7 @@ function IdentityCard({ canManage, initial }: { canManage: boolean; initial: { r
       />
       <div className="flex flex-col gap-4">
         <p className="text-xs leading-relaxed text-fg-mut">
-          Sem verificação, quem souber o ID de um estudante consegue ver as preferências dele, que podem indicar uma deficiência. Com ela, o servidor do
+          Sem verificação, quem souber o ID de um estudante consegue ver as preferências dele, que podem indicar uma deficiência. Com ela, o backend do
           produto assina o ID com o segredo abaixo e manda a assinatura no <code>Luumu.identify</code> como <code>user_hash</code>. Ligue a exigência
           depois que o produto já estiver enviando a assinatura: antes disso, as escolhas ficam só no aparelho do estudante.
         </p>
@@ -320,7 +320,7 @@ function IdentityCard({ canManage, initial }: { canManage: boolean; initial: { r
                 </span>
               )}
             </div>
-            <p className="text-xs text-fg-mut">Guarde no servidor do produto (variável de ambiente). Nunca coloque o segredo no código da página.</p>
+            <p className="text-xs text-fg-mut">Guarde no backend do produto (variável de ambiente). Nunca coloque o segredo no código da página.</p>
             <Tabs
               tabs={[
                 { value: "node", label: "Node.js" },

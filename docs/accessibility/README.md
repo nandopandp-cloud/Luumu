@@ -213,7 +213,7 @@ nesta página depois do último `setUser` (um eco antigo não desfaz a mudança)
 ## Verificação de identidade
 
 Sem ela, quem souber o ID de um estudante consegue pedir as preferências dele (que podem indicar
-uma deficiência) e saber se ele é convidado. Com ela, o servidor do produto assina o ID:
+uma deficiência) e saber se ele é convidado. Com ela, o backend do produto assina o ID:
 
 ```
 user_hash = HMAC-SHA256(segredo do projeto, id em minúsculas e sem espaços)   // hex

@@ -314,15 +314,15 @@ td code{ white-space:normal }
     <div class="arrow">${I.arrow}</div>
     <div class="card"><div class="ic">${I.plugin}</div><small>Plugin</small><b>Aplica e convida</b><p>A página já abre com as escolhas do estudante. O convite aparece quando for o caso.</p></div>
     <div class="arrow">${I.arrow}</div>
-    <div class="card dark"><div class="ic">${I.zap}</div><small>SDK → Plataforma</small><b>Avisa na hora</b><p>Cada ajuste vira um evento no navegador e um webhook assinado para o servidor da plataforma.</p></div>
+    <div class="card dark"><div class="ic">${I.zap}</div><small>SDK → Plataforma</small><b>Avisa na hora</b><p>Cada ajuste vira um evento no navegador e um webhook assinado para o backend.</p></div>
   </div>
   <div class="callout">${I.shield}<p><strong>Vale sempre a última configuração aplicada pelo estudante</strong>, em qualquer aparelho. Guarde a do evento mais recente e devolva no próximo <code>setUser</code>. Neste modo a Luumu não guarda convidados nem preferências.</p></div>
 
   <h3>Configuração em 4 passos</h3>
   <div class="steps">
     <div class="card"><b>Escolha o modo</b><p>Painel da Luumu → Acessibilidade → <strong>Ativação → Integração</strong> → <strong>Plataforma externa</strong>.</p></div>
-    <div class="card"><b>Cadastre o webhook</b><p>Informe a URL https do servidor da plataforma e clique em <strong>Testar webhook</strong>. Ele precisa responder 2xx.</p></div>
-    <div class="card"><b>Guarde o segredo</b><p><strong>Ativação → Verificação de identidade</strong>: copie o segredo do projeto para uma variável de ambiente do servidor.</p></div>
+    <div class="card"><b>Cadastre o webhook</b><p>Informe a URL https do backend e clique em <strong>Testar webhook</strong>. Ele precisa responder 2xx.</p></div>
+    <div class="card"><b>Guarde o segredo</b><p><strong>Ativação → Verificação de identidade</strong>: copie o segredo do projeto para uma variável de ambiente do backend.</p></div>
     <div class="card"><b>Ligue o convite e publique</b><p>Aba <strong>Convite → Mostrar o convite</strong>. Texto e ilustração continuam no painel. Clique em <strong>Publicar</strong>.</p></div>
   </div>
 
@@ -356,7 +356,7 @@ td code{ white-space:normal }
     [
       ["id", "texto ou número", "sim¹", "Identificador estável do estudante (o mesmo em todos os aparelhos). Volta em `user.id` nos eventos."],
       ["email", "texto", "sim¹", "E-mail do estudante."],
-      ["user_hash", "texto (hexadecimal)", "se exigido", "HMAC-SHA256 do segredo do projeto sobre o `id` em minúsculas e sem espaços. Gere no servidor, nunca na página."],
+      ["user_hash", "texto (hex)", "se exigido", "HMAC-SHA256 do segredo do projeto sobre o `id` em minúsculas e sem espaços. Gere no backend, nunca na página."],
       ["invite", "booleano", "sim", "`true` = recebe o convite. `false` = não recebe (o botão de acessibilidade continua lá)."],
       ["profiles", "lista de ids", "não", "Perfis sugeridos no convite, na ordem (até 3 aparecem). Vazio = os perfis escolhidos no painel."],
       ["status", "texto", "não", "`pending` · `shown` · `accepted` · `dismissed`. Com `accepted` ou `dismissed` o convite não volta. Padrão: `pending`."],
@@ -420,13 +420,13 @@ td code{ white-space:normal }
   <p class="sub">Todo ajuste no plugin gera um evento no mesmo instante, por dois canais, com o mesmo conteúdo e o mesmo <code>id</code>.</p>
   </div>
   <div class="grid2 channels">
-    <div class="card"><div class="ic">${I.monitor}</div><small>Na página</small><b>Evento no navegador</b>
+    <div class="card"><div class="ic">${I.monitor}</div><small>Front-end</small><b>Evento no navegador</b>
       <ul><li><code>window</code> → <code>"luumu:accessibility"</code> (<code>e.detail</code>)</li><li><code>Luumu.accessibility.onChange(fn)</code> devolve a função para parar de ouvir</li><li><code>Luumu.accessibility.getState()</code> mostra o estado atual</li></ul></div>
-    <div class="card dark"><div class="ic">${I.server}</div><small>No servidor · recomendado</small><b>Webhook assinado</b>
+    <div class="card dark"><div class="ic">${I.server}</div><small>Back-end · recomendado</small><b>Webhook assinado</b>
       <ul><li><code>POST</code> JSON para a URL do painel</li><li>Chega mesmo se a página não tratar o evento</li><li>Até 3 tentativas: na hora, +1 s e +4 s</li></ul></div>
   </div>
   ${code(`window.addEventListener("luumu:accessibility", (e) => {
-  enviarParaOServidor(e.detail);  // mesmo formato do webhook
+  enviarParaOBackend(e.detail);  // mesmo formato do webhook
 });`, "Navegador")}
 
   <h3>Tipos de evento</h3>
@@ -489,7 +489,7 @@ td code{ white-space:normal }
   <div class="grid4" style="margin-bottom:5mm">
     <div class="card trigger"><div class="ic">${I.send}</div><b>Responda 2xx</b><p>Em até 5 s. Processe depois de responder.</p></div>
     <div class="card trigger"><div class="ic">${I.key}</div><b>Confira a assinatura</b><p>HMAC sobre o corpo <strong>bruto</strong>, em tempo constante.</p></div>
-    <div class="card trigger"><div class="ic">${I.shield}</div><b>Janela de 5 min</b><p>Recuse envios com horário (X-Luumu-Timestamp) mais antigo que isso.</p></div>
+    <div class="card trigger"><div class="ic">${I.shield}</div><b>Janela de 5 min</b><p>Recuse timestamps mais velhos que isso.</p></div>
     <div class="card trigger"><div class="ic">${I.database}</div><b>Sem duplicados</b><p>Ignore um <code>id</code> já processado.</p></div>
   </div>
   ${code(NODE, "Node.js (Express)")}
@@ -517,7 +517,7 @@ td code{ white-space:normal }
     ]
   )}
 
-  <div class="keep"><h3>Lista de verificação</h3>
+  <div class="keep"><h3>Checklist de entrega</h3>
   <div class="end">
     <ul class="checks todo" style="flex:1">
       <li><span class="b">${I.check}</span><span>SDK instalado com a chave do projeto em todas as páginas logadas.</span></li>
