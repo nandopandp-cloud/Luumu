@@ -12,7 +12,7 @@ import { normalizeA11yConfig, publicA11yConfig, type PublicA11yConfig } from "@/
 
 installDom("https://app.escola.com/inicio");
 const g = globalThis as Record<string, unknown>;
-type Widget = { boot(c: object): void; update(c: PublicA11yConfig): void; open(v?: string): void; close(): void; destroy(): void };
+type Widget = { boot(c: object): void; update(c: PublicA11yConfig): void; open(v?: string): void; close(): void; identify(): void; destroy(): void };
 let w: Widget;
 let fetches: { url: string; body: any }[] = [];
 // "servidor" das rotas do plugin
@@ -328,6 +328,30 @@ test("estudante não identificado: escolhas só no aparelho, nenhuma chamada ao 
   await sleep(900);
   assert.equal(fetches.length, 0);
   assert.ok(localStorage.getItem("luumu_a11y_pk_test:anon"));
+});
+
+test("login sem recarregar a página (SPA): o identify faz o plugin e o convite aparecerem", async () => {
+  server.match = true;
+  // tela de login: ninguém identificado, plugin só para convidados
+  boot(publicA11yConfig(normalizeA11yConfig({ scope: { audience: "targeted", includeInvitees: true }, nudge: { enabled: true, audience: "targeted", delay: 0 } }), true));
+  await sleep(20);
+  const host = document.querySelector('[data-luumu-ui="a11y"]') as HTMLElement;
+  assert.equal(host.hidden, true, "na tela de login o plugin não aparece");
+  assert.equal(calls("match").length, 0);
+
+  // o produto faz o login e chama Luumu.identify, sem recarregar
+  identity = { id: "convidado-1" };
+  w.identify();
+  await sleep(40);
+  assert.equal(host.hidden, false, "o plugin aparece para o convidado");
+  assert.ok($(".mwrap"), "e o convite também");
+
+  // logout (Luumu.reset): tudo sai da tela
+  identity = {};
+  w.identify();
+  await sleep(20);
+  assert.equal(host.hidden, true);
+  assert.equal($(".mwrap"), null);
 });
 
 test("prévia não grava nada no navegador", () => {

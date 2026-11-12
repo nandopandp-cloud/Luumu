@@ -173,6 +173,7 @@ const isMessage = (q: Question) => MESSAGE_BLOCKS.indexOf(q.blockId) >= 0;
     analytics: boolean; // coleta de analytics de produto ativa no projeto
     idc: { n: string; a: string } | null; // ler nome/foto da página (configuração da workspace)
     a11y: PublicA11yConfig | null; // plugin de acessibilidade ligado (config pública) ou null
+    a11yWatch: boolean; // o projeto usa o plugin (mesmo desligado agora): catálogo dura menos
   };
   let eventsOpen: boolean | null = null;
   let serverKnown: Record<string, 1> = {};
@@ -666,10 +667,10 @@ const isMessage = (q: Question) => MESSAGE_BLOCKS.indexOf(q.blockId) >= 0;
   */
   const CATALOG_TTL_MS = 30 * 60 * 1000;
   /*
-    Catálogo com o plugin de acessibilidade ligado: 5 min em vez de 30. O plugin é um botão
-    visível na tela do estudante — desligá-lo no painel precisa valer logo, e não meia hora
-    depois. O custo extra (uma ida ao /config a cada 5 min de uso) fica só nos projetos com o
-    plugin ligado: desligado, o catálogo volta a durar 30 min.
+    Catálogo de projeto que usa o plugin de acessibilidade: 5 min em vez de 30. O plugin é um
+    botão visível na tela do estudante — ligar, desligar ou mudar onde ele aparece precisa
+    valer logo, e não meia hora depois. O custo extra (uma ida ao /config a cada 5 min de uso)
+    fica só nos projetos que configuraram o plugin (`a11yWatch`); os outros seguem com 30 min.
   */
   const A11Y_CATALOG_TTL_MS = 5 * 60 * 1000;
   const catalogKey = (key: string) => `luumu_catalog_${key}`;
@@ -696,11 +697,13 @@ const isMessage = (q: Question) => MESSAGE_BLOCKS.indexOf(q.blockId) >= 0;
         analytics?: unknown;
         idc?: unknown;
         a11y?: unknown;
+        a11yWatch?: unknown;
         hmRate?: unknown;
         hmFresh?: unknown;
       };
       if (!parsed || typeof parsed.t !== "number" || !Array.isArray(parsed.surveys)) return null;
-      const ttl = parsed.a11y ? A11Y_CATALOG_TTL_MS : CATALOG_TTL_MS;
+      // vale também para o plugin DESLIGADO num projeto que o usa: religar precisa chegar logo
+      const ttl = parsed.a11y || parsed.a11yWatch === true ? A11Y_CATALOG_TTL_MS : CATALOG_TTL_MS;
       if (Date.now() - parsed.t > ttl) return null;
       return {
         surveys: parsed.surveys,
@@ -712,6 +715,7 @@ const isMessage = (q: Question) => MESSAGE_BLOCKS.indexOf(q.blockId) >= 0;
         analytics: parsed.analytics === true,
         idc: parseCapture(parsed.idc),
         a11y: parseA11y(parsed.a11y),
+        a11yWatch: parsed.a11yWatch === true,
         hmRate: typeof parsed.hmRate === "number" ? parsed.hmRate : 1,
         hmFresh: Array.isArray(parsed.hmFresh) ? (parsed.hmFresh as string[]) : [],
       };
@@ -737,6 +741,7 @@ const isMessage = (q: Question) => MESSAGE_BLOCKS.indexOf(q.blockId) >= 0;
           analytics: catalog.analytics,
           idc: catalog.idc,
           a11y: catalog.a11y,
+          a11yWatch: catalog.a11yWatch,
           hmRate: catalog.hmRate,
           hmFresh: catalog.hmFresh,
         })
@@ -766,6 +771,7 @@ const isMessage = (q: Question) => MESSAGE_BLOCKS.indexOf(q.blockId) >= 0;
           analytics: d.analytics === true,
           idc: parseCapture(d.idc),
           a11y: parseA11y(d.a11y),
+          a11yWatch: d.a11yWatch === true,
           hmRate: typeof d.hmRate === "number" ? d.hmRate : 1,
           hmFresh: Array.isArray(d.hmFresh) ? d.hmFresh : [],
         },
@@ -1837,6 +1843,8 @@ const isMessage = (q: Question) => MESSAGE_BLOCKS.indexOf(q.blockId) >= 0;
       try {
         localStorage.setItem("luumu_identity", JSON.stringify(identity));
       } catch {}
+      // login sem recarregar a página (SPA): o plugin reavalia quem é o estudante na hora
+      safe(() => a11y?.identify());
     },
     // Diagnóstico do ano escolar, para rodar no console do produto logado: Luumu.debugGrade()
     debugGrade() {
@@ -1891,6 +1899,8 @@ const isMessage = (q: Question) => MESSAGE_BLOCKS.indexOf(q.blockId) >= 0;
       try {
         localStorage.removeItem("luumu_identity");
       } catch {}
+      // logout: as escolhas e o convite do estudante anterior saem da tela
+      safe(() => a11y?.identify());
     },
   };
 

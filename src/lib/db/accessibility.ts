@@ -69,6 +69,12 @@ export async function getAccessibilityForSdk(projectId: string, host: string | n
   return publicA11yConfig(s.config, s.invitees > 0);
 }
 
+/** O projeto configurou o plugin (ligado ou não): o SDK guarda o catálogo por menos tempo. */
+export async function accessibilityConfigured(projectId: string): Promise<boolean> {
+  const s = await load(projectId);
+  return s.updatedAt !== null;
+}
+
 /** Para as rotas do SDK: configuração + segredo de verificação. */
 export async function getAccessibilityAuth(projectId: string) {
   const s = await load(projectId);

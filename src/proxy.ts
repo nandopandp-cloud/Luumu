@@ -62,6 +62,15 @@ export async function proxy(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  /*
+    Server Action com a sessão já inválida: segue para a própria action, que confere a sessão
+    (requireUser/guards — toda action do painel faz isso) e manda para /login pelo protocolo das
+    actions. Redirecionar aqui (307) devolvia a página de login como resposta da action, e o
+    Next mostrava "Ops! Algo deu errado" antes de cair no login. Não abre nada: uma action é
+    alcançável por qualquer caminho, inclusive os que este proxy nem intercepta.
+  */
+  if (!valid && req.method === "POST" && req.headers.has("next-action")) return NextResponse.next();
+
   if (!valid) {
     const url = req.nextUrl.clone();
     url.pathname = "/login";

@@ -92,14 +92,23 @@ O que se edita nas abas é um rascunho: aparece como "Alterações ainda não pu
 já o mostra, e só vai ao produto com **Publicar alterações**.
 
 **Tempo até chegar ao produto: até ~5 minutos.** O SDK guarda o catálogo do `/config` no
-navegador para não buscá-lo a cada página: 30 min normalmente, **5 min quando o plugin está
-ligado** no catálogo guardado (um botão visível precisa sumir logo quando é desligado). Somam-se
-até ~1 min de cache de borda e ~1 min de cache em memória do servidor. Além disso:
+navegador para não buscá-lo a cada página: 30 min normalmente, **5 min em projetos que usam o
+plugin** — ligado ou desligado (o `/config` marca `a11yWatch` quando o projeto já configurou o
+plugin), porque ligar, desligar ou mudar onde ele aparece precisa chegar logo. Somam-se até
+~1 min de cache de borda e ~1 min de cache em memória do servidor. Além disso:
 
 - se um catálogo novo chega sem o plugin, o core desmonta o widget (a página volta como era);
 - se uma rota do plugin (`/prefs`, `/match`) responde 404 ("desligado"), o widget avisa o core,
   que tira o plugin da página na hora e descarta o catálogo guardado. Falha do banco responde
   503, para não desligar o plugin por engano.
+
+## Login e logout no produto
+
+O plugin reavalia quem é o estudante sempre que o produto chama `Luumu.identify` ou
+`Luumu.reset` — inclusive em login sem recarregar a página (SPA): o plugin e o convite aparecem
+na hora para quem tem direito, e somem no logout. O SDK lembra o último estudante identificado
+naquele navegador até o `reset()`: o produto deve chamar `Luumu.reset()` no logout (computador
+de escola é compartilhado).
 
 ## Convidados
 

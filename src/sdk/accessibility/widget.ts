@@ -67,6 +67,8 @@ export interface A11yWidget {
   update(config: PublicA11yConfig): void;
   open(view?: A11yView): void;
   close(): void;
+  /** o produto chamou Luumu.identify/reset: reavalia estudante, escolhas, escopo e convite */
+  identify(): void;
   destroy(): void;
 }
 
@@ -770,6 +772,17 @@ function createWidget(): A11yWidget {
     close() {
       closePanel();
       closeNudge();
+    },
+    identify() {
+      if (!boot || preview()) return;
+      const before = owner;
+      syncOwner();
+      if (owner === before) return;
+      // outro estudante: o convite pendente era do anterior
+      closeNudge();
+      invited = false;
+      inviteeProfile = null;
+      if (owner !== "anon") timers.push(setTimeout(() => void maybeNudge(false), Math.max(0, cfg.nudge.delay) * 1000));
     },
     destroy() {
       timers.forEach(clearTimeout);

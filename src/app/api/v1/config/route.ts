@@ -5,7 +5,7 @@ import { listPublishedToursForSdk } from "@/lib/db/tours";
 import { heatmapPlan, isHeatmapsEnabled } from "@/lib/db/heatmaps";
 import { getIdentityCapture, listCaptureRules, resolveCaptureRule } from "@/lib/db/identity-capture";
 import { getAnalyticsSettings } from "@/lib/db/analytics";
-import { getAccessibilityForSdk } from "@/lib/db/accessibility";
+import { accessibilityConfigured, getAccessibilityForSdk } from "@/lib/db/accessibility";
 import { SDK_BUNDLE_VERSION } from "@/lib/tours/sdk-version";
 import { normalizeAppearance } from "@/lib/surveys/builder";
 import { resolveKey } from "@/lib/api/keys";
@@ -73,7 +73,7 @@ export async function GET(req: Request) {
   }
 
   const host = normalizeHost(searchParams.get("host"));
-  const [active, eventCatalog, hostState, tours, heatmaps, analytics, capture, captureRules, a11y] = await Promise.all([
+  const [active, eventCatalog, hostState, tours, heatmaps, analytics, capture, captureRules, a11y, a11yWatch] = await Promise.all([
     listActiveSurveysForSdk(resolved.projectId),
     eventCatalogForSdk(resolved.projectId, host),
     hostStateForSdk(resolved.projectId, host),
@@ -92,6 +92,8 @@ export async function GET(req: Request) {
     // plugin de acessibilidade (sem a migração 0044 = desligado). Recorte público: a lista
     // de convidados nunca sai aqui; fora dos domínios do escopo de ativação vem null
     getAccessibilityForSdk(resolved.projectId, host).catch(() => null),
+    // projeto que usa o plugin (mesmo desligado): o SDK guarda o catálogo por 5 min, não 30
+    accessibilityConfigured(resolved.projectId).catch(() => false),
   ]);
   // heatmaps: taxa de amostragem (cota do plano) + páginas que já têm cópia (o SDK não pergunta)
   const plan = heatmaps ? await heatmapPlan(resolved.workspaceId, resolved.projectId, host).catch(() => null) : null;
@@ -131,6 +133,7 @@ export async function GET(req: Request) {
       idc: analytics && capture?.enabled ? resolveCaptureRule(captureRules, host ?? "") : null,
       // plugin de acessibilidade ligado: o SDK baixa sdk-a11y.js só se vier preenchido
       a11y,
+      a11yWatch,
       // versão atual de sdk-tours.js / sdk-builder.js (o core pode estar em cache e ser mais velho)
       sdk: SDK_BUNDLE_VERSION,
     },
