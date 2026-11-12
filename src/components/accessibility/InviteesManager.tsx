@@ -43,7 +43,8 @@ export function InviteesManager({ canManage }: { canManage: boolean }) {
 
   const load = useCallback(async (opts: { q: string; status: InviteeStatus | null; page: number }) => {
     const id = ++reqId.current;
-    const r = await listInviteesAction(opts);
+    // a action pode falhar sem resposta (rede, sessão expirada): mostra o erro em vez de ficar carregando
+    const r = await listInviteesAction(opts).catch(() => ({ ok: false as const, error: "Não foi possível carregar os convidados. Tente de novo." }));
     if (id !== reqId.current) return; // resposta de uma busca antiga
     if (!r.ok) return setError(r.error);
     setError(null);

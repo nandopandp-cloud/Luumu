@@ -3,7 +3,7 @@
 import {
   Accessibility, Bolt, Building2, CaseSensitive, Contrast, Droplet, Eye, Hand, Heading, Keyboard, Link2, Lock, Megaphone,
   Moon, MousePointer2, Palette, Pause, Rows3, ScanFace, ScanLine, SlidersHorizontal, Sparkles, Sun, SunMoon,
-  Type, Users, Volume2, ZoomIn, EyeOff, EarOff, Brain, Target, BookOpen,
+  Type, Users, Volume2, ZoomIn, EyeOff, EarOff, Brain, Target, BookOpen, Plug,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/Card";
@@ -268,10 +268,26 @@ export function NudgeTab({ config, patch, canManage, inviteeCount }: { config: A
           </p>
         </Card>
       ) : (
-        <Card>
-          <SectionTitle icon={<Users className="size-4.5" />} title="Convidados" description="Estudantes que recebem o convite, um a um ou em lote. Cada um pode ter o próprio perfil sugerido." />
-          <InviteesManager canManage={canManage} />
-        </Card>
+        <>
+          <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-dashed border-line-strong px-4 py-3">
+            <Plug className="size-4.5 shrink-0 text-accent" />
+            <p className="min-w-0 flex-1 text-xs text-fg-mut">
+              <span className="font-semibold text-fg">Quem decide os convidados é outra plataforma?</span> No modo plataforma externa, a lista e os grupos abaixo
+              saem de cena e o convite passa a seguir o <code>setUser</code> dela. A mensagem continua sendo editada aqui.
+            </p>
+            <button
+              type="button"
+              onClick={() => patch((c) => ({ ...c, integration: { ...c.integration, mode: "external" } }))}
+              className="shrink-0 rounded-lg border border-accent px-3 py-1.5 text-xs font-semibold text-accent hover:bg-surface-brand"
+            >
+              Usar plataforma externa
+            </button>
+          </div>
+          <Card>
+            <SectionTitle icon={<Users className="size-4.5" />} title="Convidados" description="Estudantes que recebem o convite, um a um ou em lote. Cada um pode ter o próprio perfil sugerido." />
+            <InviteesManager canManage={canManage} />
+          </Card>
+        </>
       )}
 
       {!external && <Card className={cn(!n.enabled && "opacity-60")}>
@@ -334,7 +350,14 @@ export function NudgeTab({ config, patch, canManage, inviteeCount }: { config: A
               <Input value={n.dismiss} maxLength={30} onChange={(e) => nudge({ dismiss: e.target.value })} />
             </Field>
           </div>
-          <Field label="Perfil sugerido" hint="O convite mostra até três perfis, todos já marcados; o estudante só aceita (liga todos) ou dispensa. O sugerido aparece primeiro.">
+          <Field
+            label="Perfil sugerido"
+            hint={
+              external
+                ? "Vale quando a plataforma externa não manda perfis no setUser. O convite mostra até três perfis, todos já marcados; o estudante só aceita (liga todos) ou dispensa."
+                : "O convite mostra até três perfis, todos já marcados; o estudante só aceita (liga todos) ou dispensa. O sugerido aparece primeiro."
+            }
+          >
             <Select value={n.profile ?? ""} onChange={(e) => nudge({ profile: (e.target.value || null) as ProfileId | null })}>
               <option value="">Sem sugestão</option>
               {PROFILES.filter((p) => profileAvailable(p.id, config.features)).map((p) => (
@@ -344,7 +367,8 @@ export function NudgeTab({ config, patch, canManage, inviteeCount }: { config: A
               ))}
             </Select>
           </Field>
-          <Field label="Frequência">
+          {/* no modo externo, quem decide se o convite volta é o status enviado pela plataforma */}
+          {!external && <Field label="Frequência">
             <div className="grid gap-2 sm:grid-cols-3" role="radiogroup" aria-label="Frequência do convite">
               {NUDGE_FREQUENCIES.map((f) => (
                 <button
@@ -360,7 +384,7 @@ export function NudgeTab({ config, patch, canManage, inviteeCount }: { config: A
                 </button>
               ))}
             </div>
-          </Field>
+          </Field>}
           <Field label="Atraso para aparecer (segundos)">
             <Input type="number" min={0} max={30} value={n.delay} onChange={(e) => nudge({ delay: Number(e.target.value) || 0 })} className="w-28" />
           </Field>

@@ -117,7 +117,6 @@ const pill = (t, tone = "") => `<span class="pill ${tone}">${esc(t)}</span>`;
 /* ---------------------------------------------------------------- conteúdo */
 
 const logoWhite = dataUri(path.join(ROOT, "public/mascot/logo-horizontal-white.png"), "image/png");
-const mascotWave = dataUri(path.join(ROOT, "public/mascot/Feliz.svg"), "image/svg+xml");
 const mascotDone = dataUri(path.join(ROOT, "public/mascot/Aprovando.svg"), "image/svg+xml");
 const today = new Date().toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
 
@@ -215,12 +214,11 @@ code{ font:600 .9em var(--mono); color:var(--brand); background:var(--lilac); pa
 .shot.panel{ right:16mm; top:-14mm; width:74mm; aspect-ratio:920/1720; border-radius:5mm; transform:rotate(2.5deg) }
 .shot.panel img{ width:195.652%; left:-95.652%; top:0 }
 /* convite real: recorte x 32–1768 / y 332–1388 */
-.shot.invite{ left:16mm; top:30mm; width:118mm; aspect-ratio:1736/1056; border-radius:4.2mm; transform:rotate(-2deg) }
+.shot.invite{ left:16mm; top:30mm; width:100mm; aspect-ratio:1736/1056; border-radius:4.2mm; transform:rotate(-2deg) }
 .shot.invite img{ width:103.687%; left:-1.843%; top:-31.439% }
-.mascot{ position:absolute; left:104mm; top:-34mm; width:44mm }
 .tag{ position:absolute; display:flex; align-items:center; gap:2mm; padding:2.4mm 3.6mm; border-radius:99px; background:#fff; color:var(--deep); font:700 8pt/1 var(--display); border:1.5px solid #C9A8FF }
 .tag svg{ color:var(--brand); width:14px; height:14px }
-.tag.t1{ left:16mm; top:14mm } .tag.t2{ left:88mm; top:112mm } .tag.t3{ right:20mm; top:118mm }
+.tag.t1{ left:16mm; top:14mm } .tag.t2{ left:30mm; top:100mm } .tag.t3{ right:20mm; top:118mm }
 .cover footer{ position:absolute; left:18mm; right:18mm; bottom:14mm; display:flex; justify-content:space-between; align-items:flex-end; font:500 8pt/1.4 var(--body); color:rgba(255,255,255,.6) }
 .cover footer b{ display:block; font:700 9pt/1.3 var(--display); color:#fff }
 
@@ -290,10 +288,9 @@ td code{ white-space:normal }
     <p class="lead">O que enviar ao SDK para mostrar o convite certo a cada estudante e como receber, em tempo real, cada ajuste que ele faz no plugin.</p>
   </div>
   <div class="stage">
-    <div class="plate" style="left:19mm;top:34mm;width:118mm;aspect-ratio:1736/1056;border-radius:4.2mm;transform:rotate(-2deg)"></div>
+    <div class="plate" style="left:19mm;top:34mm;width:100mm;aspect-ratio:1736/1056;border-radius:4.2mm;transform:rotate(-2deg)"></div>
     <div class="plate" style="right:13mm;top:-10mm;width:74mm;aspect-ratio:920/1720;border-radius:5mm;transform:rotate(2.5deg)"></div>
     <div class="shot panel"><img src="${shotPanel}" alt="Painel do plugin"></div>
-    <img class="mascot" src="${mascotWave}" alt="">
     <div class="shot invite"><img src="${shotInvite}" alt="Convite de acessibilidade"></div>
     <div class="tag t1">${I.user} setUser: quem é convidado</div>
     <div class="tag t2">${I.zap} Eventos em tempo real</div>
