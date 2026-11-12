@@ -465,6 +465,49 @@ test("leitura da conta que falha tenta de novo e aplica as escolhas", async () =
   assert.ok(html().classList.contains("lu-a11y-still"), "segunda tentativa aplicou");
 });
 
+test("desligar tudo (ou Restaurar padrão) também vale nos outros aparelhos", async () => {
+  // aparelho A: tinha recursos ligados e desliga tudo
+  identity = { id: "aluno-50" };
+  boot(cfg());
+  await sleep(20);
+  click($('[data-a="open"]'));
+  click($('[data-k="sw:highlightLinks"]'));
+  click($('[data-k="sw:spacing"]'));
+  await sleep(900);
+  assert.equal(accounts["aluno-50"].prefs.spacing, true);
+
+  // aparelho B (outro navegador) abre com os recursos ligados
+  w.destroy();
+  localStorage.clear();
+  sessionStorage.clear();
+  boot(cfg());
+  await sleep(40);
+  assert.ok(html().classList.contains("lu-a11y-spacing"));
+
+  // ...e de volta ao A, o estudante restaura o padrão
+  click($('[data-a="open"]'));
+  click($('[data-k="reset"]'));
+  await sleep(900);
+  assert.equal(accounts["aluno-50"].prefs.spacing, false, "a conta guarda o 'tudo desligado'");
+
+  // aparelho C / janela anônima: abre sem nenhum recurso
+  w.destroy();
+  localStorage.clear();
+  sessionStorage.clear();
+  boot(cfg());
+  await sleep(40);
+  assert.equal(html().classList.contains("lu-a11y-spacing"), false);
+  assert.equal(html().classList.contains("lu-a11y-links"), false);
+
+  // aparelho B de novo, com o cache antigo (recursos ligados) ainda no navegador: adota a conta
+  w.destroy();
+  localStorage.clear();
+  localStorage.setItem("luumu_a11y_pk_test:aluno-50", JSON.stringify({ p: { spacing: true, highlightLinks: true }, t: Date.now(), d: false }));
+  boot(cfg());
+  await sleep(40);
+  assert.equal(html().classList.contains("lu-a11y-spacing"), false, "o cache antigo não vence a conta");
+});
+
 test("estudante não identificado: escolhas só no aparelho, nenhuma chamada ao servidor", async () => {
   boot(cfg());
   click($('[data-a="open"]'));
