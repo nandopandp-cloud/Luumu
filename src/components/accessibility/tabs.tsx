@@ -320,7 +320,7 @@ export function NudgeTab({ config, patch, canManage, inviteeCount }: { config: A
               <Input value={n.dismiss} maxLength={30} onChange={(e) => nudge({ dismiss: e.target.value })} />
             </Field>
           </div>
-          <Field label="Perfil sugerido" hint="O convite mostra até três perfis para o estudante marcar; o sugerido já vem marcado. Sem nada marcado, o botão principal abre o painel.">
+          <Field label="Perfil sugerido" hint="O convite mostra até três perfis, todos já marcados; o estudante só aceita (liga todos) ou dispensa. O sugerido aparece primeiro.">
             <Select value={n.profile ?? ""} onChange={(e) => nudge({ profile: (e.target.value || null) as ProfileId | null })}>
               <option value="">Sem sugestão</option>
               {PROFILES.filter((p) => profileAvailable(p.id, config.features)).map((p) => (

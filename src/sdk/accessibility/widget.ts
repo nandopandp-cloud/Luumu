@@ -801,7 +801,8 @@ function createWidget(): A11yWidget {
     // até três perfis no convite (os primeiros do painel); o sugerido entra e já vem marcado
     const available = NUDGE_PROFILE_ORDER.filter((p) => cfg.profiles.includes(p) && profileAvailable(p, cfg.features));
     const cards = (suggested ? [suggested, ...available.filter((p) => p !== suggested)] : available).slice(0, 3);
-    const picked = new Set<ProfileId>(suggested ? [suggested] : []);
+    // todos os perfis mostrados vêm marcados e não se desmarcam: o estudante só aceita ou dispensa
+    const picked = new Set<ProfileId>(cards);
     const img = nudgeImageUrl(n);
     nudgeEl = document.createElement("div");
     nudgeEl.className = "mwrap";
@@ -813,12 +814,12 @@ function createWidget(): A11yWidget {
     <h2 class="n-title" id="lu-n-t">${esc(n.title)}</h2>
     <span class="n-bar" aria-hidden="true"></span>
     <p class="n-text" id="lu-n-d">${messageHtml(n.message)}</p>
-    ${cards.length ? `<div class="n-cards" role="group" aria-label="Escolha o que ativar">${cards
+    ${cards.length ? `<ul class="n-cards" aria-label="Recursos que serão ativados">${cards
       .map((id) => {
         const p = profileInfo(id);
-        return `<button type="button" class="n-card" data-n="pick" data-id="${id}" aria-pressed="${picked.has(id)}" title="${esc(p.description)}"><span class="n-ck">${icon("check", 12, 3.4)}</span>${icon(NUDGE_ICON[id] ?? p.icon, 30, 2.2)}<b>${esc(p.nudgeLabel)}</b></button>`;
+        return `<li class="n-card on" data-id="${id}" title="${esc(p.description)}"><span class="n-ck" aria-hidden="true">${icon("check", 12, 3.4)}</span><span aria-hidden="true">${icon(NUDGE_ICON[id] ?? p.icon, 30, 2.2)}</span><b>${esc(p.nudgeLabel)}</b></li>`;
       })
-      .join("")}</div>` : ""}
+      .join("")}</ul>` : ""}
   </div>
   <div class="n-actions">
     <button type="button" class="n-btn ghost" data-n="dismiss">${esc(n.dismiss)}</button>
@@ -829,13 +830,6 @@ function createWidget(): A11yWidget {
       const t = e.target as HTMLElement;
       const btn = t.closest("[data-n]") as HTMLElement | null;
       const a = t === nudgeEl ? "dismiss" : btn?.dataset.n;
-      if (a === "pick" && btn) {
-        const id = btn.dataset.id as ProfileId;
-        if (picked.has(id)) picked.delete(id);
-        else picked.add(id);
-        btn.setAttribute("aria-pressed", String(picked.has(id)));
-        return;
-      }
       if (a === "dismiss") {
         remember("dismissed");
         closeNudge();
@@ -844,7 +838,7 @@ function createWidget(): A11yWidget {
       if (a === "accept") {
         remember("accepted");
         closeNudge();
-        // nada marcado: abre o painel para o estudante escolher
+        // nenhum perfil disponível para mostrar: abre o painel para o estudante escolher
         if (!picked.size) return openPanel();
         let next = prefs;
         for (const id of picked) if (!next.profiles.includes(id)) next = toggleProfile(next, id, cfg.features);

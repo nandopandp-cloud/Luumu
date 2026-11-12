@@ -174,19 +174,20 @@ button:focus-visible,[tabindex]:focus-visible,a:focus-visible{outline:3px solid 
 .n-x{position:absolute;top:22px;right:22px;width:42px;height:42px;border-radius:12px;display:grid;place-items:center;color:var(--n-ink)}
 .n-x:hover{background:var(--acc-soft)}
 .n-art img{display:block;width:100%;height:auto}
-.n-body{min-width:0;padding-top:21px}
+/* padding-bottom: quando o texto fica mais alto que a ilustração (telas menores), os botões não encostam nos cartões */
+.n-body{min-width:0;padding-top:21px;padding-bottom:28px}
 .n-title{margin:0;padding-right:28px;font-size:clamp(28px,2.7vw,40px);line-height:1.25;font-weight:800;letter-spacing:-.015em;color:var(--n-ink);text-wrap:balance}
 .n-bar{display:block;width:84px;height:8px;border-radius:4px;background:#FE8916;margin:20px 0 26px}
 .n-text{margin:0;font-size:clamp(17px,1.5vw,22px);line-height:1.32;color:var(--n-ink2)}
 .n-text strong{font-weight:800;color:var(--n-ink)}
 .nudge:focus{outline:none}
-.n-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px;margin-top:34px}
+.n-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px;margin:34px 0 0;padding:0;list-style:none}
 .n-card{position:relative;min-height:108px;padding:14px 16px;border-radius:18px;background:var(--acc-soft);color:var(--acc);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;transition:transform .15s,box-shadow .15s,background .15s}
-.n-card:hover{transform:translateY(-2px)}
 .n-card b{font-size:clamp(14px,1.2vw,17px);line-height:1.25;font-weight:700;color:var(--n-ink)}
-.n-card[aria-pressed="true"]{background:var(--n-bg);box-shadow:inset 0 0 0 2px var(--acc),0 6px 16px rgba(82,85,232,.18)}
+/* os perfis do convite já vêm marcados (não são clicáveis): o estudante só aceita ou dispensa */
+.n-card.on{background:var(--n-bg);box-shadow:inset 0 0 0 2px var(--acc),0 6px 16px rgba(82,85,232,.18)}
 .n-ck{position:absolute;top:8px;right:8px;width:20px;height:20px;border-radius:50%;background:var(--acc);color:var(--acc-ink);display:none;place-items:center}
-.n-card[aria-pressed="true"] .n-ck{display:grid}
+.n-card.on .n-ck{display:grid}
 .n-actions{grid-column:1 / -1;display:flex;justify-content:flex-end;gap:26px;margin-top:4px}
 .nudge.no-art .n-actions{margin-top:44px}
 .n-btn{height:58px;border-radius:14px;font-size:clamp(17px,1.4vw,20px);font-weight:700;display:inline-flex;align-items:center;justify-content:center;padding:0 24px;text-align:center}

@@ -270,7 +270,7 @@ test("convite por grupo: estudante da turma vê, aceita e o perfil sugerido liga
   boot(cfg({ nudge: { enabled: true, audience: "targeted", delay: 0, profile: "leitura", groups: [{ id: "g1", networks: ["rede aurora"], classes: ["1ª Série B"] }] } }));
   await sleep(20);
   assert.ok($(".mwrap"), "convite exibido");
-  assert.match($('.n-card[aria-pressed="true"]')!.textContent!, /Mais conforto na leitura/, "perfil sugerido já vem marcado");
+  assert.match($(".n-card")!.textContent!, /Mais conforto na leitura/, "perfil sugerido aparece primeiro");
   assert.equal(shadow().querySelectorAll(".n-card").length, 3, "até três perfis no convite");
   assert.match($(".n-text strong")!.textContent!, /mais confortável/, "trecho em negrito");
   assert.match(($(".n-art img") as HTMLImageElement).getAttribute("src")!, /^https:\/\/luumu\.test\/a11y\/convite-estudante\.png$/, "ilustração servida pela Luumu");
@@ -283,29 +283,33 @@ test("convite por grupo: estudante da turma vê, aceita e o perfil sugerido liga
   assert.equal(memo.s, "accepted");
 });
 
-test("convite: marcar perfis nos cartões e ativar; sem nada marcado, abre o painel", async () => {
+test("convite: perfis já vêm marcados e sem clique; aceitar liga todos", async () => {
   identity = { id: "aluno-20" };
   boot(cfg({ nudge: { enabled: true, audience: "all", delay: 0 } }));
   await sleep(20);
-  assert.equal(shadow().querySelectorAll('.n-card[aria-pressed="true"]').length, 0);
-  click($('.n-card[data-id="foco"]'));
-  click($('.n-card[data-id="ritmo"]'));
-  click($('.n-card[data-id="ritmo"]')); // desmarca
-  assert.equal($('.n-card[data-id="foco"]')!.getAttribute("aria-pressed"), "true");
+  const cards = [...shadow().querySelectorAll(".n-card")];
+  assert.equal(cards.length, 3);
+  assert.ok(cards.every((c) => c.classList.contains("on")), "todos marcados");
+  assert.ok(cards.every((c) => c.tagName === "LI" && !c.hasAttribute("data-n")), "não são botões");
+  click(cards[0]); // clicar no cartão não desmarca
+  assert.ok(cards[0].classList.contains("on"));
   click($('[data-n="accept"]'));
   assert.equal(($(".mask-top") as HTMLElement).hidden, false, "Mais foco ligado");
-  assert.equal(html().classList.contains("lu-a11y-cursor"), false, "ritmo desmarcado não liga");
-  assert.match($(".toast")!.textContent!, /Mais foco: ativado/);
+  assert.ok(html().classList.contains("lu-a11y-font"), "Mais conforto na leitura ligado");
+  assert.ok(html().classList.contains("lu-a11y-cursor"), "Uma navegação no seu ritmo ligado");
+  assert.match($(".toast")!.textContent!, /3 perfis: ativados/);
 
+  // sem perfis disponíveis: não há cartões e o botão principal abre o painel
   w.destroy();
   localStorage.clear();
   sessionStorage.clear();
   identity = { id: "aluno-21" };
-  boot(cfg({ nudge: { enabled: true, audience: "all", delay: 0, image: "none" } }));
+  boot(cfg({ profiles: [], nudge: { enabled: true, audience: "all", delay: 0, image: "none" } }));
   await sleep(20);
   assert.equal($(".n-art"), null, "sem ilustração");
+  assert.equal($(".n-card"), null);
   click($('[data-n="accept"]'));
-  assert.ok($(".panel")!.classList.contains("open"), "nada marcado: abre o painel para escolher");
+  assert.ok($(".panel")!.classList.contains("open"), "abre o painel para escolher");
 });
 
 test("convite: fora do grupo e sem lista, nada aparece", async () => {
@@ -326,7 +330,7 @@ test("convite pela lista de convidados: pergunta só pelo estudante logado, usa 
   assert.equal(match.length, 1);
   assert.deepEqual(match[0].body, { key: "pk_test", id: "123", email: "ana@escola.br", h: "a".repeat(64) });
   assert.ok($(".mwrap"), "convite exibido");
-  assert.match($('.n-card[aria-pressed="true"]')!.textContent!, /Tela mais calma/, "perfil do convidado vence o do convite");
+  assert.match($(".n-card")!.textContent!, /Tela mais calma/, "perfil do convidado vence o do convite");
   click($('[data-n="dismiss"]'));
   await sleep(10);
   const events = calls("match").map((c) => c.body.event).filter(Boolean);
@@ -460,13 +464,13 @@ test("mudanças depois de aceitar o convite também ficam na conta", async () =>
   boot(cfg({ nudge: { enabled: true, audience: "all", delay: 0, profile: "foco" } }));
   await sleep(30);
   click($('[data-n="accept"]'));
-  // depois troca: desliga a máscara do perfil e liga o cursor grande
+  // depois troca: desliga a máscara do perfil e liga destacar títulos
   click($('[data-a="open"]'));
   click($('[data-k="sw:readingMask"]'));
-  click($('[data-k="sw:bigCursor"]'));
+  click($('[data-k="sw:highlightHeadings"]'));
   await sleep(900);
   assert.equal(server.prefs.readingMask, false);
-  assert.equal(server.prefs.bigCursor, true);
+  assert.equal(server.prefs.highlightHeadings, true);
   assert.equal(server.nudge.s, "accepted");
 
   w.destroy();
@@ -474,7 +478,7 @@ test("mudanças depois de aceitar o convite também ficam na conta", async () =>
   sessionStorage.clear();
   boot(cfg({ nudge: { enabled: true, audience: "all", delay: 0, profile: "foco" } }));
   await sleep(40);
-  assert.ok(html().classList.contains("lu-a11y-cursor"), "a escolha mais nova vale no aparelho novo");
+  assert.ok(html().classList.contains("lu-a11y-headings"), "a escolha mais nova vale no aparelho novo");
   assert.equal(($(".mask-top") as HTMLElement).hidden, true, "o que ele desligou continua desligado");
   assert.equal($(".mwrap"), null);
 });
