@@ -20,6 +20,8 @@ let server: { match: boolean; profile: string | null; status?: string | null; pr
 // contas por estudante; `server.prefs/t` pré-carregados valem para o primeiro estudante identificado do teste
 let accounts: Record<string, { prefs: any; t: number; nudge?: any }> = {};
 let seededFor: string | null = null;
+let clock = 10_000; // "hora do servidor" dos testes
+let failNextGets = 0;
 const calls = (path: string) => fetches.filter((f) => f.url.endsWith(`/accessibility/${path}`));
 let identity: Record<string, unknown> = {};
 
@@ -41,22 +43,29 @@ before(async () => {
   g.fetch = async (url: string, init: { body: string }) => {
     const body = JSON.parse(init.body);
     fetches.push({ url, body });
-    // o "servidor" guarda o que recebe, uma conta por estudante (como o de verdade)
-    const who = String(body.id ?? body.email ?? "");
-    const acc = (accounts[who] ??= who === seededFor ? { prefs: server.prefs, t: server.t, nudge: server.nudge } : { prefs: null, t: 0 });
-    if (url.endsWith("/prefs") && body.op === "set" && body.t >= acc.t) {
-      acc.prefs = body.prefs;
-      acc.t = body.t;
-      if (body.nudge) acc.nudge = body.nudge;
-      server.prefs = acc.prefs;
-      server.t = acc.t;
-      server.nudge = acc.nudge;
+    // o "servidor" guarda o que recebe (hora do servidor: a última gravação vale), por ID e por e-mail
+    if (failNextGets > 0 && url.endsWith("/prefs") && body.op === "get") {
+      failNextGets--;
+      return new Response("{}", { status: 503 });
     }
+    const keys = [body.id, body.email].filter((k) => k !== null && k !== undefined && k !== "").map((k: unknown) => String(k).toLowerCase());
+    if (seededFor && keys.includes(seededFor) && !accounts[seededFor]) accounts[seededFor] = { prefs: server.prefs, t: server.t, nudge: server.nudge };
+    if (url.endsWith("/prefs") && body.op === "set") {
+      clock++;
+      for (const k of keys) {
+        const prev = accounts[k];
+        accounts[k] = { prefs: body.prefs, t: clock, nudge: body.nudge ?? prev?.nudge };
+      }
+      server.prefs = body.prefs;
+      server.t = clock;
+      if (body.nudge) server.nudge = body.nudge;
+    }
+    const found = keys.map((k) => accounts[k]).filter(Boolean).sort((x, y) => y.t - x.t)[0];
     const reply = url.endsWith("/match")
       ? { match: server.match, profile: server.profile, status: server.status ?? null }
       : body.op === "get"
-        ? acc.prefs || acc.nudge ? { prefs: acc.prefs, t: acc.t, nudge: acc.nudge ?? null } : { prefs: null, nudge: null }
-        : { ok: true, t: body.t };
+        ? found && (found.prefs || found.nudge) ? { prefs: found.prefs ?? null, t: found.t, nudge: found.nudge ?? null } : { prefs: null, nudge: null }
+        : { ok: true, t: clock };
     return new Response(JSON.stringify(reply), { status: 200 });
   };
   await import("@/sdk/accessibility/widget");
@@ -71,6 +80,7 @@ beforeEach(() => {
   server = { match: false, profile: null, prefs: null, t: 0 };
   accounts = {};
   seededFor = null;
+  failNextGets = 0;
   identity = {};
 });
 
@@ -397,12 +407,62 @@ test("preferências: escolhas feitas antes de entrar na conta sobem quando o ser
   const sets = calls("prefs").filter((c) => c.body.op === "set");
   assert.equal(sets.length, 1);
   assert.equal(sets[0].body.prefs.focusRing, true);
-  // a leitura da conta acontece uma vez por sessão do navegador
+  // a conta é relida no máximo uma vez por minuto (a cada página, não a cada render)
   w.destroy();
   fetches = [];
   boot(cfg());
   await sleep(20);
   assert.equal(calls("prefs").filter((c) => c.body.op === "get").length, 0);
+});
+
+test("relógio do aparelho não decide: sem mudança pendente, o aparelho adota a conta", async () => {
+  // aparelho com relógio adiantado e escolhas antigas já sincronizadas
+  identity = { id: "aluno-40" };
+  localStorage.setItem("luumu_a11y_pk_test:aluno-40", JSON.stringify({ p: { spacing: true }, t: Date.now() + 36e6, d: false }));
+  accounts["aluno-40"] = { prefs: { highlightLinks: true }, t: 20_000 };
+  boot(cfg());
+  await sleep(40);
+  assert.ok(html().classList.contains("lu-a11y-links"), "a última necessidade da conta vale");
+  assert.equal(html().classList.contains("lu-a11y-spacing"), false);
+  assert.equal(calls("prefs").filter((c) => c.body.op === "set").length, 0, "não sobrescreve a conta com dado velho");
+});
+
+test("mudança feita aqui e ainda não confirmada vence a conta (ex.: estava sem internet)", async () => {
+  identity = { id: "aluno-41" };
+  localStorage.setItem("luumu_a11y_pk_test:aluno-41", JSON.stringify({ p: { bigCursor: true }, t: 1, d: true }));
+  accounts["aluno-41"] = { prefs: { highlightLinks: true }, t: 20_000 };
+  boot(cfg());
+  await sleep(40);
+  assert.ok(html().classList.contains("lu-a11y-cursor"));
+  assert.equal(accounts["aluno-41"].prefs.bigCursor, true, "enviada para a conta");
+  assert.equal(JSON.parse(localStorage.getItem("luumu_a11y_pk_test:aluno-41")!).d, false, "pendência resolvida");
+});
+
+test("aparelho que identifica só com o e-mail encontra as escolhas salvas com ID e e-mail", async () => {
+  identity = { id: "77", email: "Ana@Escola.br" };
+  boot(cfg());
+  await sleep(20);
+  click($('[data-a="open"]'));
+  click($('[data-k="sw:highlightHeadings"]'));
+  await sleep(900);
+  w.destroy();
+  localStorage.clear();
+  sessionStorage.clear();
+  identity = { email: "ana@escola.br" }; // outro aparelho: o produto só manda o e-mail
+  boot(cfg());
+  await sleep(40);
+  assert.ok(html().classList.contains("lu-a11y-headings"));
+});
+
+test("leitura da conta que falha tenta de novo e aplica as escolhas", async () => {
+  identity = { id: "aluno-42" };
+  accounts["aluno-42"] = { prefs: { stopAnimations: true }, t: 20_000 };
+  failNextGets = 1;
+  boot(cfg());
+  await sleep(60);
+  assert.equal(html().classList.contains("lu-a11y-still"), false, "primeira leitura falhou");
+  await sleep(3200);
+  assert.ok(html().classList.contains("lu-a11y-still"), "segunda tentativa aplicou");
 });
 
 test("estudante não identificado: escolhas só no aparelho, nenhuma chamada ao servidor", async () => {

@@ -121,6 +121,9 @@ function createWidget(): A11yWidget {
   let nudgeMemo: NudgeMemo | null = null;
   // leitura da conta em andamento: o convite espera por ela antes de decidir se aparece
   let pulling: Promise<void> = Promise.resolve();
+  // mudança feita neste aparelho que a conta ainda não confirmou (só ela pode sobrescrever a conta)
+  let dirty = false;
+  let changeSeq = 0;
   let remoteBlocked = false;
   let panelOpen = false;
   let releasePanelTrap: ((restore?: boolean) => void) | null = null;
@@ -184,9 +187,10 @@ function createWidget(): A11yWidget {
     return { key: boot!.key, id, email, h };
   }
   async function post(path: string, body: object, keepalive = false): Promise<Record<string, unknown> | null> {
-    if (preview() || remoteBlocked) return null;
+    if (!boot || preview() || remoteBlocked) return null;
+    const b0 = boot;
     try {
-      const r = await fetch(`${boot!.api}/accessibility/${path}`, {
+      const r = await fetch(`${b0.api}/accessibility/${path}`, {
         method: "POST",
         headers: { "Content-Type": SIMPLE_CONTENT_TYPE },
         body: JSON.stringify({ ...who(), ...body }),
@@ -197,7 +201,7 @@ function createWidget(): A11yWidget {
       // plugin desligado no painel enquanto o catálogo guardado ainda dizia "ligado"
       if (r.status === 404) {
         remoteBlocked = true;
-        const off = boot!.onDisabled;
+        const off = b0.onDisabled;
         setTimeout(() => off?.(), 0);
       }
       return r.ok ? ((await r.json()) as Record<string, unknown>) : null;
@@ -213,25 +217,43 @@ function createWidget(): A11yWidget {
     com o servidor acontece uma vez por sessão do navegador (custa uma request por visita, não
     por página) e a cada mudança; a escolha mais recente vence.
   */
+  /*
+    Regra de sincronização (a conta guarda sempre a última necessidade aplicada pelo estudante):
+     - toda mudança aqui fica "pendente" até a conta confirmar que recebeu;
+     - ao ler a conta: sem nada pendente, este aparelho ADOTA a conta (mesmo que os dados locais
+       pareçam mais novos — relógio de aparelho não decide nada); com algo pendente, envia;
+     - a conta é lida a cada página e ao voltar para a aba (no máximo 1×/min), e a leitura tenta
+       de novo se falhar.
+  */
+  const PULL_EVERY_MS = 60_000;
   function loadPrefs() {
     owner = currentOwner();
-    const raw = json(get(prefsKey())) as { p?: unknown; t?: unknown } | null;
+    const raw = json(get(prefsKey())) as { p?: unknown; t?: unknown; d?: unknown } | null;
     // formato antigo (só as preferências) ainda é aceito
     const wrapped = raw && typeof raw === "object" && "p" in raw;
     prefs = normalizePrefs(wrapped ? raw!.p : raw);
     prefsAt = wrapped && typeof raw!.t === "number" ? raw!.t : 0;
+    dirty = wrapped ? raw!.d === true : false;
     nudgeMemo = parseNudgeMemo(json(get(nudgeKey())));
     pulling = pullPrefs();
   }
   function storeLocal() {
-    set(prefsKey(), JSON.stringify({ p: prefs, t: prefsAt }));
+    set(prefsKey(), JSON.stringify({ p: prefs, t: prefsAt, d: dirty }));
   }
   /** Envia preferências + desfecho do convite para a conta (keepalive: sobrevive ao fechar a aba). */
   function pushNow() {
     if (pushTimer) clearTimeout(pushTimer);
     pushTimer = null;
-    if (owner === "anon") return;
-    void post("prefs", { op: "set", prefs, t: prefsAt, nudge: nudgeMemo }, true);
+    if (owner === "anon" || preview()) return;
+    const seq = changeSeq;
+    const who0 = owner;
+    void post("prefs", { op: "set", prefs, t: prefsAt, nudge: nudgeMemo }, true).then((r) => {
+      // confirmado e nada mudou enquanto ia: não há mais pendência (widget pode ter sido desmontado)
+      if (r && boot && who0 === owner && seq === changeSeq && dirty) {
+        dirty = false;
+        storeLocal();
+      }
+    });
   }
   // junta cliques seguidos numa gravação só; ao sair da página, envia o que estiver pendente
   function schedulePush() {
@@ -244,36 +266,64 @@ function createWidget(): A11yWidget {
   };
   const onHidden = () => {
     if (document.visibilityState === "hidden") flushPending();
+    // de volta à aba: pode ter havido mudança em outro aparelho
+    else if (document.visibilityState === "visible" && !pushTimer) pulling = pullPrefs();
   };
   function savePrefs() {
     prefsAt = Date.now();
+    dirty = true;
+    changeSeq++;
     storeLocal();
     schedulePush();
   }
-  async function pullPrefs() {
+  const pulledKey = () => `luumu_a11y_pulled_${boot!.key}:${owner}`;
+  async function pullPrefs(attempt = 0): Promise<void> {
     if (owner === "anon" || preview()) return;
-    const flag = `luumu_a11y_synced_${boot!.key}:${owner}`;
-    if (sessionFlag(flag) === "1") return;
+    const last = Number(get(pulledKey()) || 0);
+    if (!attempt && Date.now() - last < PULL_EVERY_MS) {
+      // leu há pouco: só envia o que estiver pendente
+      if (dirty) pushNow();
+      return;
+    }
     const who0 = owner;
     const r = await post("prefs", { op: "get" });
-    if (!r || who0 !== owner) return;
-    sessionFlag(flag, "1");
-    const remoteAt = typeof r.t === "number" ? r.t : 0;
+    // a resposta pode chegar depois de o widget ser desmontado (plugin desligado) ou de trocar o estudante
+    if (!boot || who0 !== owner) return;
+    if (!r) {
+      // falhou (rede, limite, servidor): tenta de novo antes de desistir nesta página
+      if (attempt < 2 && !remoteBlocked) {
+        await new Promise((res) => timers.push(setTimeout(res, attempt ? 10_000 : 3_000)));
+        if (boot && who0 === owner) return pullPrefs(attempt + 1);
+      }
+      return;
+    }
+    set(pulledKey(), String(Date.now()));
     const remoteMemo = parseNudgeMemo(r.nudge);
     let push = false;
-    if (r.prefs && remoteAt > prefsAt) {
-      // outro aparelho (ou antes de limpar o navegador) mudou depois: a conta vence
-      prefs = normalizePrefs(r.prefs);
-      prefsAt = remoteAt;
-      storeLocal();
-      applyAll();
-    } else if (prefsAt > remoteAt) push = true; // escolhas feitas aqui antes do login: sobem
-    // o convite segue a mesma regra: o desfecho mais recente vale
-    if (remoteMemo && (!nudgeMemo || remoteMemo.at > nudgeMemo.at)) {
-      nudgeMemo = remoteMemo;
-      set(nudgeKey(), JSON.stringify(nudgeMemo));
-    } else if (nudgeMemo && (!remoteMemo || nudgeMemo.at > remoteMemo.at)) push = true;
+    if (dirty) push = true; // mudança daqui ainda não confirmada: ela é a mais nova
+    else if (r.prefs) {
+      // a conta vale: é a última necessidade aplicada, em qualquer aparelho
+      const next = normalizePrefs(r.prefs);
+      if (JSON.stringify(next) !== JSON.stringify(prefs)) {
+        prefs = next;
+        prefsAt = typeof r.t === "number" ? r.t : Date.now();
+        storeLocal();
+        applyAll();
+      }
+    } else if (prefsAt > 0) push = true; // conta vazia e há escolhas aqui (antes do login): sobem
+    // convite: "aceito" vale de qualquer lado; senão, o desfecho mais recente
+    const merged = mergeMemo(nudgeMemo, remoteMemo);
+    if (merged !== nudgeMemo) {
+      nudgeMemo = merged;
+      if (nudgeMemo) set(nudgeKey(), JSON.stringify(nudgeMemo));
+    }
+    if (merged && (!remoteMemo || merged.s !== remoteMemo.s || merged.at !== remoteMemo.at)) push = true;
     if (push) pushNow();
+  }
+  function mergeMemo(a: NudgeMemo | null, b: NudgeMemo | null): NudgeMemo | null {
+    if (!a || !b) return a ?? b;
+    if (a.s === "accepted" || b.s === "accepted") return a.s === "accepted" && (b.s !== "accepted" || a.at <= b.at) ? a : b;
+    return a.at >= b.at ? a : b;
   }
 
   /** identify chegou depois do boot (ou trocou o usuário): carrega as escolhas e o escopo dele */
@@ -1054,6 +1104,7 @@ function createWidget(): A11yWidget {
       if (pushTimer) clearTimeout(pushTimer);
       prefs = { ...DEFAULT_PREFS };
       prefsAt = 0;
+      dirty = false;
       nudgeMemo = null;
       pulling = Promise.resolve();
       inScope = null;

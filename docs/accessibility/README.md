@@ -147,27 +147,29 @@ atrás.
 
 ## Preferências em qualquer aparelho
 
-As escolhas do estudante ficam na conta dele (`accessibility_user_prefs`, por projeto e pela
-chave do estudante), não só no navegador:
+Regra do projeto: **vale sempre a última necessidade aplicada pelo estudante**, em qualquer
+aparelho, navegador ou janela anônima. As escolhas ficam na conta dele
+(`accessibility_user_prefs`, chave pseudonimizada):
 
-- o `localStorage` é o cache que deixa a página certa já no primeiro desenho;
-- a conta é lida **uma vez por sessão do navegador** (uma request por visita, não por página) e
-  gravada a cada mudança (com 800 ms de espera para juntar cliques seguidos);
-- a escolha mais recente vence: se outro aparelho mudou depois, a conta vale; se o estudante
-  mudou aqui antes de entrar (ou offline), as escolhas sobem para a conta. O servidor ignora uma
-  gravação mais velha que a guardada;
-- estudante não identificado: só no aparelho, nenhuma chamada ao servidor.
-- **o convite também**: o desfecho (visto/aceito/dispensado) é guardado na mesma linha das
-  preferências (chave `_nudge` do JSON, sem coluna nova). Aceitar vale em qualquer aparelho e
-  depois de limpar o navegador; gravação sem desfecho preserva o que já estava na conta. Para
-  convidados da lista, o status registrado no painel também impede o convite de reaparecer;
-- o convite **espera a leitura da conta** antes de decidir se aparece (quem aceitou em outro
-  aparelho não o vê de novo enquanto a conta ainda responde);
-- mudança pendente é enviada **na hora** ao esconder ou fechar a aba (`pagehide`/`visibilitychange`,
-  com `keepalive`), sem esperar os 800 ms;
-- **pré-requisitos**: o produto precisa chamar `Luumu.identify` com o `id` (ou `email`) do
-  estudante. Com "Exigir verificação" ligado, também o `user_hash` — sem ele o servidor recusa
-  (403) e as escolhas ficam só no aparelho.
+- **a conta guarda a última mudança que chegou ao servidor**, com a hora do servidor (relógio de
+  aparelho adiantado ou atrasado não decide nada);
+- **toda mudança no aparelho fica pendente** até a conta confirmar o recebimento (`d` no cache
+  local). Ao ler a conta, um aparelho **sem pendência adota a conta**; com pendência (ex.: estava
+  sem internet), envia a dele;
+- a conta é **lida a cada página e ao voltar para a aba**, no máximo uma vez por minuto; leitura
+  que falha tenta de novo (3 s e 10 s);
+- **ID e e-mail**: a conta é gravada nas duas chaves e lida por qualquer uma (vale a mais
+  recente) — o mesmo estudante pode chegar com ID e e-mail num aparelho e só com e-mail em outro.
+  Com "exigir verificação", só a chave assinada é usada;
+- o `localStorage` é só o cache que deixa a página certa já no primeiro desenho; mudança pendente
+  é enviada na hora ao esconder ou fechar a aba (`keepalive`);
+- estudante não identificado: só no aparelho, nenhuma chamada ao servidor;
+- **o convite também**: o desfecho fica na mesma linha (chave `_nudge` do JSON). "Aceito" nunca é
+  rebaixado (`mergeNudge`); para convidados da lista, o status do painel também conta. O convite
+  espera a leitura da conta antes de decidir se aparece;
+- **pré-requisitos**: o produto chama `Luumu.identify` com o `id` e/ou `email` do estudante (o
+  mesmo valor em todos os aparelhos). Com "Exigir verificação", também o `user_hash` — sem ele o
+  servidor recusa (403) e as escolhas ficam só no aparelho.
 
 ## Verificação de identidade
 

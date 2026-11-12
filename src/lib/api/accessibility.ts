@@ -20,7 +20,8 @@ export const studentSchema = z.object({
   h: z.string().max(128).nullish(),
 });
 
-type Ok<T> = { ok: true; data: T; projectId: string; userKey: string; keys: string[]; origin: string | null; config: Awaited<ReturnType<typeof getAccessibilityAuth>>["config"] };
+/** `verified`: o projeto exige verificação e a assinatura do `userKey` conferiu (só ele é confiável). */
+type Ok<T> = { ok: true; data: T; projectId: string; userKey: string; keys: string[]; verified: boolean; origin: string | null; config: Awaited<ReturnType<typeof getAccessibilityAuth>>["config"] };
 type Fail = { ok: false; res: Response };
 
 export async function authorizeStudent<S extends typeof studentSchema>(req: Request, schema: S, limit: number, bucket: string): Promise<Ok<z.infer<S>> | Fail> {
@@ -56,5 +57,5 @@ export async function authorizeStudent<S extends typeof studentSchema>(req: Requ
     return { ok: false, res: jsonCors({ error: "Identidade não verificada." }, { status: 403, origin: allowOrigin }) };
   }
   const keys = [...new Set([inviteeKey(data.id), inviteeKey(data.email)].filter(Boolean))];
-  return { ok: true, data, projectId: resolved.projectId, userKey, keys, origin: allowOrigin, config: auth.config };
+  return { ok: true, data, projectId: resolved.projectId, userKey, keys, verified: auth.requireVerified, origin: allowOrigin, config: auth.config };
 }

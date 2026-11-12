@@ -220,44 +220,74 @@ export async function recordInviteeEvent(projectId: string, key: string, status:
 /* ---------- preferências por estudante ---------- */
 
 /*
-  O desfecho do convite (visto/aceito/dispensado) fica na mesma linha das preferências, na
-  chave `_nudge` do JSON: aceitar o convite vale para o estudante em qualquer aparelho, e o
-  convite não volta depois de limpar o navegador. Sem coluna nova (nenhuma migração).
+  Preferências de cada estudante, na conta (accessibility_user_prefs).
+
+  Regra: a conta guarda SEMPRE a última mudança que chegou ao servidor — com a hora do
+  servidor, não a do aparelho (relógio de celular/computador adiantado ou atrasado decidia
+  quem vencia e fazia a mudança mais nova ser recusada em silêncio). Quem decide se um
+  aparelho sobrescreve a conta é o próprio aparelho: só quando tem mudança ainda não enviada
+  (sdk/accessibility/widget.ts).
+
+  Chaves: o mesmo estudante pode chegar com ID e e-mail num aparelho e só com o e-mail em
+  outro. A conta é gravada em todas as chaves que vierem (ID e e-mail) e lida por qualquer
+  uma — vale a linha mais recente. Com "exigir verificação", só a chave assinada é usada.
+
+  O desfecho do convite (visto/aceito/dispensado) fica na mesma linha, na chave `_nudge` do
+  JSON: "aceito" nunca volta atrás; entre os outros, vale o mais recente.
 */
-export async function getUserPrefs(projectId: string, userKey: string): Promise<{ prefs: A11yPrefs; t: number; nudge: NudgeMemo | null } | null> {
-  const [row] = await db
+/** Desfecho do convite que vale entre dois: "aceito" vence; senão o mais recente. */
+export function mergeNudge(a: NudgeMemo | null, b: NudgeMemo | null): NudgeMemo | null {
+  if (!a || !b) return a ?? b;
+  if (a.s === "accepted" || b.s === "accepted") return a.s === "accepted" && (b.s !== "accepted" || a.at <= b.at) ? a : b;
+  return a.at >= b.at ? a : b;
+}
+
+export async function getUserPrefs(projectId: string, userKeys: string[]): Promise<{ prefs: A11yPrefs | null; t: number; nudge: NudgeMemo | null } | null> {
+  const hashes = [...new Set(userKeys.filter(Boolean))].map((k) => prefsKey(projectId, k));
+  if (!hashes.length) return null;
+  const rows = await db
     .select({ prefs: accessibilityUserPrefs.prefs, updatedAt: accessibilityUserPrefs.updatedAt })
     .from(accessibilityUserPrefs)
-    .where(and(eq(accessibilityUserPrefs.projectId, projectId), eq(accessibilityUserPrefs.userHash, prefsKey(projectId, userKey))))
-    .limit(1);
-  if (!row) return null;
-  const raw = (row.prefs ?? {}) as Record<string, unknown>;
-  return { prefs: normalizePrefs(raw), t: row.updatedAt.getTime(), nudge: parseNudgeMemo(raw._nudge) };
+    .where(and(eq(accessibilityUserPrefs.projectId, projectId), inArray(accessibilityUserPrefs.userHash, hashes)))
+    .orderBy(desc(accessibilityUserPrefs.updatedAt));
+  if (!rows.length) return null;
+  const newest = rows[0];
+  const raw = (newest.prefs ?? {}) as Record<string, unknown>;
+  // só o desfecho do convite é somado entre as chaves (aceitar em qualquer uma vale)
+  const nudge = rows.reduce<NudgeMemo | null>((m, r) => mergeNudge(m, parseNudgeMemo(((r.prefs ?? {}) as Record<string, unknown>)._nudge)), null);
+  // linha só com o desfecho do convite (sem escolhas) não sobrescreve nada no aparelho
+  const hasPrefs = Object.keys(raw).some((k) => k !== "_nudge");
+  return { prefs: hasPrefs ? normalizePrefs(raw) : null, t: newest.updatedAt.getTime(), nudge };
 }
 
 /**
- * Grava as escolhas (e o desfecho do convite, quando vier). `t` é quando o estudante mudou
- * (relógio do navegador, limitado ao do servidor): uma gravação mais velha que a guardada é
- * ignorada — dois aparelhos abertos não se sobrescrevem com estado antigo. Sem `nudge`, o
- * desfecho já guardado é mantido.
+ * Grava as escolhas (e o desfecho do convite, quando vier) em todas as chaves do estudante.
+ * A hora é a do servidor: a última gravação que chega é a que vale. Sem `nudge`, o desfecho
+ * já guardado é mantido; com ele, "aceito" nunca é rebaixado.
  */
-export async function saveUserPrefs(projectId: string, userKey: string, prefs: unknown, t: number, nudge?: NudgeMemo | null): Promise<number> {
-  const at = new Date(Math.min(Date.now(), Math.max(0, t)));
-  const userHash = prefsKey(projectId, userKey);
+export async function saveUserPrefs(projectId: string, userKeys: string[], prefs: unknown, nudge?: NudgeMemo | null): Promise<number> {
+  const at = new Date();
   const memo = parseNudgeMemo(nudge);
-  const value = { ...normalizePrefs(prefs), ...(memo ? { _nudge: memo } : {}) };
-  await db
-    .insert(accessibilityUserPrefs)
-    .values({ projectId, userHash, prefs: value, updatedAt: at })
-    .onConflictDoUpdate({
-      target: [accessibilityUserPrefs.projectId, accessibilityUserPrefs.userHash],
-      set: {
-        prefs: memo
-          ? sql`excluded.prefs`
-          : sql`excluded.prefs || jsonb_strip_nulls(jsonb_build_object('_nudge', ${accessibilityUserPrefs.prefs} -> '_nudge'))`,
-        updatedAt: sql`excluded.updated_at`,
-      },
-      setWhere: sql`${accessibilityUserPrefs.updatedAt} <= excluded.updated_at`,
-    });
+  const base = normalizePrefs(prefs);
+  for (const key of [...new Set(userKeys.filter(Boolean))]) {
+    const userHash = prefsKey(projectId, key);
+    const value = { ...base, ...(memo ? { _nudge: memo } : {}) };
+    const keepNudge = sql`jsonb_strip_nulls(jsonb_build_object('_nudge', ${accessibilityUserPrefs.prefs} -> '_nudge'))`;
+    await db
+      .insert(accessibilityUserPrefs)
+      .values({ projectId, userHash, prefs: value, updatedAt: at })
+      .onConflictDoUpdate({
+        target: [accessibilityUserPrefs.projectId, accessibilityUserPrefs.userHash],
+        set: {
+          // desfecho novo vale, exceto rebaixar um "aceito" já guardado; sem desfecho, mantém o guardado
+          prefs: !memo
+            ? sql`excluded.prefs || ${keepNudge}`
+            : memo.s === "accepted"
+              ? sql`excluded.prefs`
+              : sql`excluded.prefs || case when ${accessibilityUserPrefs.prefs} -> '_nudge' ->> 's' = 'accepted' then ${keepNudge} else '{}'::jsonb end`,
+          updatedAt: sql`excluded.updated_at`,
+        },
+      });
+  }
   return at.getTime();
 }

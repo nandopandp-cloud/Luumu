@@ -21,18 +21,21 @@ const schema = studentSchema.extend({
  * POST /api/v1/accessibility/prefs
  * Preferências de acessibilidade do estudante logado, para valerem em qualquer aparelho.
  *  - op "get": { prefs, t, nudge } ou { prefs: null, nudge: null } se ele ainda não escolheu nada;
- *  - op "set": grava preferências e, se vier, o desfecho do convite (a mais recente vence).
+ *  - op "set": grava preferências e, se vier, o desfecho do convite. A última gravação que chega
+ *    vale (hora do servidor); o aparelho só envia quando tem mudança dele (widget.ts).
  * POST também na leitura: o ID do estudante não vai para a URL (logs, cache de borda).
  * Com "exigir verificação" ligado, só o próprio estudante (user_hash válido) lê e grava.
  */
 export async function POST(req: Request) {
   const a = await authorizeStudent(req, schema, 60, "a11y-prefs");
   if (!a.ok) return a.res;
+  // ID e e-mail: o mesmo estudante pode chegar com um ou os dois. Com verificação, só a chave assinada.
+  const keys = a.verified ? [a.userKey] : a.keys;
   if (a.data.op === "get") {
-    const saved = await getUserPrefs(a.projectId, a.userKey);
+    const saved = await getUserPrefs(a.projectId, keys);
     return jsonCors(saved ?? { prefs: null, nudge: null }, { origin: a.origin });
   }
   if (!a.data.prefs) return jsonCors({ error: "Sem preferências." }, { status: 422, origin: a.origin });
-  const t = await saveUserPrefs(a.projectId, a.userKey, a.data.prefs, a.data.t ?? Date.now(), a.data.nudge);
+  const t = await saveUserPrefs(a.projectId, keys, a.data.prefs, a.data.nudge);
   return jsonCors({ ok: true, t }, { origin: a.origin });
 }
