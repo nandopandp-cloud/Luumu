@@ -9,7 +9,6 @@ import { ColorField, ToggleRow } from "./controls";
 type Patch = (fn: (c: A11yConfig) => A11yConfig) => void;
 
 const MAIN_PRESETS = ["#5B3DF5", "#4F46E5", "#6B2BD9", "#0E7490", "#0F766E", "#15803D", "#E11D48", "#F59E0B"];
-const SURFACE_PRESETS = ["#141620", "#1F2937", "#0F172A", "#FFFFFF", "#F3F0FF", "#F1F5F9"];
 const BUTTON_PRESETS = ["#2B2E3B", "#374151", "#1E293B", "#F1F2F8", "#E4DEFF", "#E2E8F0"];
 const ICON_PRESETS = ["#FFFFFF", "#F9FAFB", "#1F2340", "#3B2A8C", "#0F172A"];
 
@@ -19,6 +18,7 @@ const ICON_PRESETS = ["#FFFFFF", "#F9FAFB", "#1F2340", "#3B2A8C", "#0F172A"];
  */
 export function LauncherMini({ colors, accent, size = 1, expanded = true }: { colors: LauncherColors; accent: string; size?: number; expanded?: boolean }) {
   const main = colors.main || accent;
+  // mesmas contas do SDK: o contorno sutil dos atalhos segue o fundo das dicas (estilo pronto)
   const dark = readableOn(colors.surface) === "#FFFFFF";
   const btn = (n: number) => n * size;
   const circle = (bg: string, fg: string, Icon: React.ElementType, isMain = false) => (
@@ -29,24 +29,17 @@ export function LauncherMini({ colors, accent, size = 1, expanded = true }: { co
         height: btn(isMain ? 40 : 36),
         color: fg,
         background: bg,
-        boxShadow: isMain ? `inset 0 0 0 2px ${shade(main, 0.42)}, 0 0 14px ${main}8C` : `inset 0 0 0 1px ${dark ? "rgba(255,255,255,.09)" : "rgba(15,23,42,.09)"}`,
+        boxShadow: isMain
+          ? `inset 0 0 0 2px ${shade(main, 0.42)}, 0 0 14px ${main}8C, 0 6px 14px rgba(15,17,40,.25)`
+          : `inset 0 0 0 1px ${dark ? "rgba(255,255,255,.09)" : "rgba(15,23,42,.09)"}, 0 6px 14px rgba(15,17,40,.25)`,
       }}
     >
       <Icon style={{ width: btn(isMain ? 20 : 17), height: btn(isMain ? 20 : 17) }} strokeWidth={2.3} />
     </span>
   );
   return (
-    <span
-      className="relative inline-flex flex-col items-center rounded-full"
-      style={{
-        gap: btn(7),
-        padding: btn(6),
-        background: colors.surface,
-        border: `1px solid ${dark ? "rgba(255,255,255,.09)" : "rgba(15,23,42,.09)"}`,
-        boxShadow: `0 10px 24px ${dark ? "rgba(6,8,18,.35)" : "rgba(15,23,42,.12)"}`,
-      }}
-    >
-      {circle(`radial-gradient(circle at 32% 24%, ${shade(main, 0.22)}, ${main} 52%, ${shade(main, -0.22)})`, readableOn(main), Accessibility, true)}
+    <span className="relative inline-flex flex-col items-center" style={{ gap: btn(9) }}>
+      {circle(`linear-gradient(180deg, ${shade(main, 0.22)}, ${main} 48%, ${shade(main, -0.22)})`, readableOn(main), Accessibility, true)}
       {expanded && circle(`linear-gradient(180deg, ${shade(colors.button, dark ? 0.1 : 0.4)}, ${shade(colors.button, dark ? -0.18 : -0.05)})`, colors.icon, Hand)}
       {expanded && circle(`linear-gradient(180deg, ${shade(colors.button, dark ? 0.1 : 0.4)}, ${shade(colors.button, dark ? -0.18 : -0.05)})`, colors.icon, ScanFace)}
     </span>
@@ -62,7 +55,7 @@ export function LauncherStyleEditor({ config, patch }: { config: A11yConfig; pat
 
   return (
     <div className="flex flex-col gap-4">
-      <Field label="Estilo dos atalhos" hint="Ao passar o mouse, a cápsula cresce e mostra Libras e Navegação por rosto.">
+      <Field label="Estilo dos atalhos" hint="Só o botão de acessibilidade fica à vista; ao passar o mouse aparecem Libras e Navegação por rosto.">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" role="radiogroup" aria-label="Estilo pronto dos atalhos">
           {LAUNCHER_PRESETS.map((p) => {
             const on = presetOn(p);
@@ -100,9 +93,6 @@ export function LauncherStyleEditor({ config, patch }: { config: A11yConfig; pat
           />
           {c.main && <ColorField label="Botão principal" value={c.main} onChange={(main) => set({ main })} presets={MAIN_PRESETS} />}
         </div>
-        <Field label="Fundo da cápsula">
-          <ColorField label="Fundo da cápsula" value={c.surface} onChange={(surface) => set({ surface })} presets={SURFACE_PRESETS} />
-        </Field>
         <Field label="Botões de atalho">
           <ColorField label="Botões de atalho" value={c.button} onChange={(button) => set({ button })} presets={BUTTON_PRESETS} />
         </Field>

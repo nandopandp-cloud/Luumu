@@ -13,13 +13,15 @@ const schema = studentSchema.extend({
   op: z.enum(["get", "set"]),
   prefs: z.record(z.string(), z.unknown()).nullish(),
   t: z.number().int().nonnegative().nullish(),
+  // desfecho do convite, guardado com as preferências (vale em qualquer aparelho)
+  nudge: z.object({ s: z.enum(["shown", "accepted", "dismissed"]), at: z.number().int().nonnegative() }).nullish(),
 });
 
 /**
  * POST /api/v1/accessibility/prefs
  * Preferências de acessibilidade do estudante logado, para valerem em qualquer aparelho.
- *  - op "get": { prefs, t } ou { prefs: null } se ele ainda não escolheu nada;
- *  - op "set": grava (a mais recente vence; ver saveUserPrefs).
+ *  - op "get": { prefs, t, nudge } ou { prefs: null, nudge: null } se ele ainda não escolheu nada;
+ *  - op "set": grava preferências e, se vier, o desfecho do convite (a mais recente vence).
  * POST também na leitura: o ID do estudante não vai para a URL (logs, cache de borda).
  * Com "exigir verificação" ligado, só o próprio estudante (user_hash válido) lê e grava.
  */
@@ -28,9 +30,9 @@ export async function POST(req: Request) {
   if (!a.ok) return a.res;
   if (a.data.op === "get") {
     const saved = await getUserPrefs(a.projectId, a.userKey);
-    return jsonCors(saved ?? { prefs: null }, { origin: a.origin });
+    return jsonCors(saved ?? { prefs: null, nudge: null }, { origin: a.origin });
   }
   if (!a.data.prefs) return jsonCors({ error: "Sem preferências." }, { status: 422, origin: a.origin });
-  const t = await saveUserPrefs(a.projectId, a.userKey, a.data.prefs, a.data.t ?? Date.now());
+  const t = await saveUserPrefs(a.projectId, a.userKey, a.data.prefs, a.data.t ?? Date.now(), a.data.nudge);
   return jsonCors({ ok: true, t }, { origin: a.origin });
 }

@@ -151,7 +151,11 @@ function IdentityCard({ canManage, initial }: { canManage: boolean; initial: { r
           <ToggleRow
             icon={<KeyRound className="size-4.5" />}
             title="Exigir verificação"
-            description={required ? "Só chamadas com user_hash válido leem e gravam preferências e conferem a lista de convidados." : "Desligada: o ID do identify basta."}
+            description={
+              required
+                ? "Ligada: só chamadas com user_hash válido leem e gravam as escolhas. Se o produto ainda não envia o user_hash, as escolhas e o aceite do convite NÃO ficam salvos na conta — o estudante perde tudo ao limpar o navegador."
+                : "Desligada: o ID do identify basta para salvar as escolhas na conta."
+            }
             checked={required}
             onChange={(on) =>
               start(async () => {

@@ -36,11 +36,12 @@ export type FeatureId = (typeof FEATURE_IDS)[number];
 
 export type FeatureGroup = "leitura" | "visual" | "navegacao" | "comunicacao";
 
-export const FEATURE_GROUPS: { id: FeatureGroup; label: string }[] = [
-  { id: "leitura", label: "Leitura" },
-  { id: "visual", label: "Cores e contraste" },
-  { id: "navegacao", label: "Navegação" },
-  { id: "comunicacao", label: "Comunicação" },
+/** Ordem e nomes das seções do painel do estudante (layout de referência). */
+export const FEATURE_GROUPS: { id: FeatureGroup; label: string; icon: string }[] = [
+  { id: "navegacao", label: "Navegação e interação", icon: "cursor" },
+  { id: "leitura", label: "Leitura", icon: "book" },
+  { id: "visual", label: "Cores e contraste", icon: "contrast" },
+  { id: "comunicacao", label: "Comunicação", icon: "hands" },
 ];
 
 export interface FeatureInfo {
@@ -53,19 +54,19 @@ export interface FeatureInfo {
 }
 
 export const FEATURES: FeatureInfo[] = [
-  { id: "textSize", group: "leitura", label: "Tamanho do texto", description: "Aumenta as letras da página", icon: "type" },
-  { id: "readingMask", group: "leitura", label: "Máscara de leitura", description: "Escurece a tela e destaca só a linha em que você está", icon: "mask" },
+  { id: "readingMask", group: "leitura", label: "Máscara de leitura", description: "Escurece a tela e destaca apenas a linha de leitura", icon: "mask" },
   { id: "readingGuide", group: "leitura", label: "Guia de leitura", description: "Uma régua que acompanha o cursor", icon: "guide" },
-  { id: "textReader", group: "leitura", label: "Leitor de texto", description: "Clique em um texto para ouvir", icon: "speaker" },
+  { id: "textReader", group: "leitura", label: "Leitor de texto", description: "Clique em um texto para ouvir o conteúdo", icon: "speaker" },
   { id: "legibleFont", group: "leitura", label: "Fonte legível", description: "Letras mais fáceis de diferenciar", icon: "font" },
   { id: "spacing", group: "leitura", label: "Espaçamento", description: "Mais espaço entre letras, palavras e linhas", icon: "spacing" },
+  { id: "textSize", group: "leitura", label: "Tamanho do texto", description: "Aumenta as letras da página", icon: "type" },
   { id: "contrast", group: "visual", label: "Contraste", description: "Realça a diferença entre texto e fundo", icon: "contrast" },
   { id: "saturation", group: "visual", label: "Saturação", description: "Cores mais suaves, mais vivas ou em preto e branco", icon: "drop" },
   { id: "colorBlind", group: "visual", label: "Modo daltonismo", description: "Ajusta as cores para ficarem mais fáceis de distinguir", icon: "eye" },
   { id: "highlightLinks", group: "visual", label: "Destacar links", description: "Sublinha e realça tudo que é clicável", icon: "link" },
   { id: "highlightHeadings", group: "visual", label: "Destacar títulos", description: "Marca os títulos para achar as seções", icon: "heading" },
-  { id: "bigCursor", group: "navegacao", label: "Cursor grande", description: "Um cursor maior e mais fácil de achar", icon: "cursor" },
-  { id: "stopAnimations", group: "navegacao", label: "Pausar animações", description: "Para movimentos e efeitos da tela", icon: "pause" },
+  { id: "bigCursor", group: "navegacao", label: "Cursor grande", description: "Um cursor maior e mais fácil de encontrar", icon: "cursor" },
+  { id: "stopAnimations", group: "navegacao", label: "Pausar animações", description: "Reduz movimentos e efeitos da tela", icon: "pause" },
   { id: "focusRing", group: "navegacao", label: "Navegação por teclado", description: "Mostra com clareza onde está o foco ao usar Tab", icon: "keyboard" },
   { id: "faceNav", group: "navegacao", label: "Navegação por rosto", description: "Controle o cursor com movimentos da cabeça", icon: "face" },
   { id: "libras", group: "comunicacao", label: "Libras", description: "Tradutor VLibras (gov.br): clique num texto e um avatar traduz", icon: "hands" },

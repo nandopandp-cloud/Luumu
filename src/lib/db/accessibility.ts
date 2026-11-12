@@ -6,6 +6,7 @@ import { normalizeA11yConfig, publicA11yConfig, type A11yConfig, type PublicA11y
 import { hostInScope } from "@/lib/accessibility/scope";
 import { normalizePrefs, type A11yPrefs } from "@/lib/accessibility/features";
 import { isInviteeStatus, type InviteeInput, type InviteeStatus } from "@/lib/accessibility/invitees";
+import { parseNudgeMemo, type NudgeMemo } from "@/lib/accessibility/nudge";
 import { newIdentitySecret, prefsKey } from "@/lib/accessibility/verify";
 
 /*
@@ -218,29 +219,44 @@ export async function recordInviteeEvent(projectId: string, key: string, status:
 
 /* ---------- preferências por estudante ---------- */
 
-export async function getUserPrefs(projectId: string, userKey: string): Promise<{ prefs: A11yPrefs; t: number } | null> {
+/*
+  O desfecho do convite (visto/aceito/dispensado) fica na mesma linha das preferências, na
+  chave `_nudge` do JSON: aceitar o convite vale para o estudante em qualquer aparelho, e o
+  convite não volta depois de limpar o navegador. Sem coluna nova (nenhuma migração).
+*/
+export async function getUserPrefs(projectId: string, userKey: string): Promise<{ prefs: A11yPrefs; t: number; nudge: NudgeMemo | null } | null> {
   const [row] = await db
     .select({ prefs: accessibilityUserPrefs.prefs, updatedAt: accessibilityUserPrefs.updatedAt })
     .from(accessibilityUserPrefs)
     .where(and(eq(accessibilityUserPrefs.projectId, projectId), eq(accessibilityUserPrefs.userHash, prefsKey(projectId, userKey))))
     .limit(1);
-  return row ? { prefs: normalizePrefs(row.prefs), t: row.updatedAt.getTime() } : null;
+  if (!row) return null;
+  const raw = (row.prefs ?? {}) as Record<string, unknown>;
+  return { prefs: normalizePrefs(raw), t: row.updatedAt.getTime(), nudge: parseNudgeMemo(raw._nudge) };
 }
 
 /**
- * Grava as escolhas. `t` é quando o estudante mudou (relógio do navegador, limitado ao do
- * servidor): uma gravação mais velha que a guardada é ignorada — dois aparelhos abertos não
- * se sobrescrevem com estado antigo.
+ * Grava as escolhas (e o desfecho do convite, quando vier). `t` é quando o estudante mudou
+ * (relógio do navegador, limitado ao do servidor): uma gravação mais velha que a guardada é
+ * ignorada — dois aparelhos abertos não se sobrescrevem com estado antigo. Sem `nudge`, o
+ * desfecho já guardado é mantido.
  */
-export async function saveUserPrefs(projectId: string, userKey: string, prefs: unknown, t: number): Promise<number> {
+export async function saveUserPrefs(projectId: string, userKey: string, prefs: unknown, t: number, nudge?: NudgeMemo | null): Promise<number> {
   const at = new Date(Math.min(Date.now(), Math.max(0, t)));
   const userHash = prefsKey(projectId, userKey);
+  const memo = parseNudgeMemo(nudge);
+  const value = { ...normalizePrefs(prefs), ...(memo ? { _nudge: memo } : {}) };
   await db
     .insert(accessibilityUserPrefs)
-    .values({ projectId, userHash, prefs: normalizePrefs(prefs), updatedAt: at })
+    .values({ projectId, userHash, prefs: value, updatedAt: at })
     .onConflictDoUpdate({
       target: [accessibilityUserPrefs.projectId, accessibilityUserPrefs.userHash],
-      set: { prefs: sql`excluded.prefs`, updatedAt: sql`excluded.updated_at` },
+      set: {
+        prefs: memo
+          ? sql`excluded.prefs`
+          : sql`excluded.prefs || jsonb_strip_nulls(jsonb_build_object('_nudge', ${accessibilityUserPrefs.prefs} -> '_nudge'))`,
+        updatedAt: sql`excluded.updated_at`,
+      },
       setWhere: sql`${accessibilityUserPrefs.updatedAt} <= excluded.updated_at`,
     });
   return at.getTime();

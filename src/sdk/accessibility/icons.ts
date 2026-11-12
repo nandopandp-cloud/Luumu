@@ -3,7 +3,7 @@
   Desenhados aqui para o bundle do SDK não depender de nenhuma biblioteca.
 */
 const P: Record<string, string> = {
-  access: '<circle cx="12" cy="4.6" r="1.9" fill="currentColor" stroke="none"/><path d="M5 8.6l7 1.6 7-1.6M12 10.2v4.6M8.8 21l3.2-6.2 3.2 6.2"/>',
+  access: '<circle cx="12" cy="4.4" r="2.1" fill="currentColor" stroke="none"/><path d="M4.6 8.7h14.8M12 8.7v5.3M12 14l-3.4 6.6M12 14l3.4 6.6"/>',
   close: '<path d="M6 6l12 12M18 6L6 18"/>',
   type: '<path d="M3 18l5-12 5 12M5 14h6M17 9v8M14.5 11.5L17 9l2.5 2.5"/>',
   mask: '<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M3 10h18M3 14h18"/>',
@@ -19,8 +19,9 @@ const P: Record<string, string> = {
   cursor: '<path d="M5 3l14 7-6.2 2L11 18.5z"/>',
   pause: '<rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/>',
   keyboard: '<rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/>',
-  face: '<path d="M4 8V6a2 2 0 012-2h2M16 4h2a2 2 0 012 2v2M20 16v2a2 2 0 01-2 2h-2M8 20H6a2 2 0 01-2-2v-2"/><path d="M9 9.5v.5M15 9.5v.5M9 14.5a4 4 0 006 0"/>',
-  hands: '<path d="M8 13V5.6a1.5 1.5 0 013 0V11M11 10.4V4.1a1.5 1.5 0 013 0v6.3M14 10.4V5.6a1.5 1.5 0 013 0V14a7 7 0 01-7 7h-.6a6 6 0 01-4.6-2.2L3.3 16a1.6 1.6 0 012.5-2L8 16"/>',
+  face: '<path d="M3 7.5V5.5A2.5 2.5 0 0 1 5.5 3h2M16.5 3h2A2.5 2.5 0 0 1 21 5.5v2M21 16.5v2a2.5 2.5 0 0 1-2.5 2.5h-2M7.5 21h-2A2.5 2.5 0 0 1 3 18.5v-2"/><circle cx="12" cy="12.6" r="5.4"/><path d="M7.4 10.6c1.6-.2 2.9-1.2 3.4-2.6.9 1.1 2.6 1.8 4.4 1.6.5 0 1-.1 1.4-.3"/><path d="M10.1 12.6h.01M13.9 12.6h.01"/><path d="M10.4 14.9a2.3 2.3 0 0 0 3.2 0"/>',
+  hands: '<path d="M18 11V6a2 2 0 0 0-4 0"/><path d="M14 10V4a2 2 0 0 0-4 0v2"/><path d="M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/>',
+  book: '<path d="M2.5 5.2c2.6-1.3 6-1.1 8.5.8v13.4c-2.5-1.9-5.9-2.1-8.5-.8z"/><path d="M21.5 5.2c-2.6-1.3-6-1.1-8.5.8v13.4c2.5-1.9 5.9-2.1 8.5-.8z"/>',
   bolt: '<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>',
   sliders: '<path d="M4 6h9M19 6h1M4 12h3M13 12h7M4 18h11M21 18h-1"/><circle cx="16" cy="6" r="2.4"/><circle cx="10" cy="12" r="2.4"/><circle cx="18" cy="18" r="2.4"/>',
   zoom: '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.6-4.6M11 8v6M8 11h6"/>',

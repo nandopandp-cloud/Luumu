@@ -26,5 +26,7 @@ export async function POST(req: Request) {
   if (!a.ok) return a.res;
   const invitee = await findInvitee(a.projectId, a.keys);
   if (invitee && a.data.event) await recordInviteeEvent(a.projectId, invitee.key, a.data.event);
-  return jsonCors({ match: !!invitee, profile: invitee?.profile ?? null }, { origin: a.origin });
+  // status: o painel da Luumu já sabe que ele aceitou/dispensou — o SDK não reabre o convite
+  const status = a.data.event && invitee ? a.data.event : invitee?.status ?? null;
+  return jsonCors({ match: !!invitee, profile: invitee?.profile ?? null, status }, { origin: a.origin });
 }

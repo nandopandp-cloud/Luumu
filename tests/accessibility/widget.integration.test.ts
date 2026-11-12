@@ -16,7 +16,10 @@ type Widget = { boot(c: object): void; update(c: PublicA11yConfig): void; open(v
 let w: Widget;
 let fetches: { url: string; body: any }[] = [];
 // "servidor" das rotas do plugin
-let server: { match: boolean; profile: string | null; prefs: any; t: number } = { match: false, profile: null, prefs: null, t: 0 };
+let server: { match: boolean; profile: string | null; status?: string | null; prefs: any; t: number; nudge?: any } = { match: false, profile: null, prefs: null, t: 0 };
+// contas por estudante; `server.prefs/t` pré-carregados valem para o primeiro estudante identificado do teste
+let accounts: Record<string, { prefs: any; t: number; nudge?: any }> = {};
+let seededFor: string | null = null;
 const calls = (path: string) => fetches.filter((f) => f.url.endsWith(`/accessibility/${path}`));
 let identity: Record<string, unknown> = {};
 
@@ -38,10 +41,21 @@ before(async () => {
   g.fetch = async (url: string, init: { body: string }) => {
     const body = JSON.parse(init.body);
     fetches.push({ url, body });
+    // o "servidor" guarda o que recebe, uma conta por estudante (como o de verdade)
+    const who = String(body.id ?? body.email ?? "");
+    const acc = (accounts[who] ??= who === seededFor ? { prefs: server.prefs, t: server.t, nudge: server.nudge } : { prefs: null, t: 0 });
+    if (url.endsWith("/prefs") && body.op === "set" && body.t >= acc.t) {
+      acc.prefs = body.prefs;
+      acc.t = body.t;
+      if (body.nudge) acc.nudge = body.nudge;
+      server.prefs = acc.prefs;
+      server.t = acc.t;
+      server.nudge = acc.nudge;
+    }
     const reply = url.endsWith("/match")
-      ? { match: server.match, profile: server.profile }
+      ? { match: server.match, profile: server.profile, status: server.status ?? null }
       : body.op === "get"
-        ? server.prefs ? { prefs: server.prefs, t: server.t } : { prefs: null }
+        ? acc.prefs || acc.nudge ? { prefs: acc.prefs, t: acc.t, nudge: acc.nudge ?? null } : { prefs: null, nudge: null }
         : { ok: true, t: body.t };
     return new Response(JSON.stringify(reply), { status: 200 });
   };
@@ -55,6 +69,8 @@ beforeEach(() => {
   sessionStorage.clear();
   fetches = [];
   server = { match: false, profile: null, prefs: null, t: 0 };
+  accounts = {};
+  seededFor = null;
   identity = {};
 });
 
@@ -72,7 +88,10 @@ test("monta o launcher com os atalhos e abre o painel acessível", async () => {
   assert.ok($(".panel")!.classList.contains("open"));
   assert.equal($(".panel")!.getAttribute("role"), "dialog");
   assert.equal($('[data-a="open"]')!.getAttribute("aria-expanded"), "true");
-  assert.ok($('[data-k="pf:foco"]'), "perfis rápidos aparecem");
+  // seções na ordem do layout de referência; os perfis rápidos ficam no convite
+  const secs = [...shadow().querySelectorAll(".sec-t")].map((h) => h.textContent!.trim());
+  assert.deepEqual(secs, ["Navegação e interação", "Leitura", "Cores e contraste", "Comunicação"]);
+  assert.equal($('[data-k^="pf:"]'), null);
 });
 
 test("cores da cápsula de atalhos vêm do painel (botão principal segue a cor de destaque)", () => {
@@ -109,14 +128,14 @@ test("ligar um recurso muda a página, avisa e fica guardado para o usuário", a
   assert.equal(html().classList.contains("lu-a11y-links"), false);
 });
 
-test("perfil rápido liga vários recursos (máscara visível, animações pausadas)", () => {
+test("máscara e pausar animações pelas chaves do painel; restaurar desliga tudo", () => {
   boot(cfg());
   click($('[data-a="open"]'));
-  click($('[data-k="pf:foco"]'));
-  assert.equal($('[data-k="pf:foco"]')!.getAttribute("aria-pressed"), "true");
+  click($('[data-k="sw:readingMask"]'));
+  click($('[data-k="sw:stopAnimations"]'));
   assert.equal(($(".mask-top") as HTMLElement).hidden, false);
-  assert.equal(($(".guide") as HTMLElement).hidden, false);
   assert.ok(html().classList.contains("lu-a11y-still"));
+  assert.ok($('[data-row="readingMask"]')!.classList.contains("on"));
   click($('[data-k="reset"]'));
   assert.equal(($(".mask-top") as HTMLElement).hidden, true);
   assert.equal(html().classList.contains("lu-a11y-still"), false);
@@ -130,7 +149,7 @@ test("tamanho do texto escala os elementos com texto e volta ao restaurar", () =
   click($('[data-k="size+"]'));
   click($('[data-k="size+"]'));
   assert.equal(p.style.getPropertyValue("font-size"), `${Math.round(before * 1.3 * 10) / 10}px`);
-  assert.match($(".pct")!.textContent!, /130%/);
+  assert.match($('[data-row="textSize"], .row:has([data-k="size+"])')!.textContent!, /130%/);
   click($('[data-k="reset"]'));
   assert.equal(p.style.getPropertyValue("font-size"), "");
 });
@@ -138,12 +157,17 @@ test("tamanho do texto escala os elementos com texto e volta ao restaurar", () =
 test("contraste e daltonismo viram filtro no <html>", () => {
   boot(cfg());
   click($('[data-a="open"]'));
-  click($('[data-k="contrast:high"]'));
-  click($('[data-k="colorBlind:deutan"]'));
+  // a chave liga a variação mais comum; as outras aparecem logo abaixo
+  assert.equal($('[data-k="contrast:dark"]'), null, "variações só aparecem com a chave ligada");
+  click($('[data-k="sw:contrast"]'));
+  click($('[data-k="sw:colorBlind"]'));
+  click($('[data-k="colorBlind:protan"]'));
   const f = html().style.getPropertyValue("filter");
   assert.match(f, /contrast\(1\.35\)/);
-  assert.match(f, /url\(#lu-a11y-cb-deutan\)/);
-  assert.ok(document.getElementById("lu-a11y-cb-deutan"), "filtro SVG inserido na página");
+  assert.match(f, /url\(#lu-a11y-cb-protan\)/);
+  assert.ok(document.getElementById("lu-a11y-cb-protan"), "filtro SVG inserido na página");
+  click($('[data-k="sw:contrast"]'));
+  assert.doesNotMatch(html().style.getPropertyValue("filter"), /contrast/, "desligar a chave volta ao normal");
 });
 
 test("recurso desligado no painel da Luumu não aparece para o estudante", () => {
@@ -154,7 +178,6 @@ test("recurso desligado no painel da Luumu não aparece para o estudante", () =>
   assert.equal(shadow().querySelectorAll(".launcher .lb").length, 2, "sem atalho de Libras");
   click($('[data-a="open"]'));
   assert.equal($('[data-k="sw:textReader"]'), null);
-  assert.equal($('[data-k="pf:libras"]'), null, "perfil sem recurso disponível some");
 });
 
 test("Libras com o VLibras já instalado no site: reaproveita o tradutor e acompanha o fechamento", async () => {
@@ -328,6 +351,7 @@ test("preferências seguem o estudante entre aparelhos: a conta mais recente ven
   localStorage.setItem("luumu_a11y_pk_test:aluno-5", JSON.stringify({ p: { spacing: true }, t: 1000 }));
   server.prefs = { highlightLinks: true, textSize: 1 };
   server.t = 5000;
+  seededFor = "aluno-5";
   boot(cfg());
   await sleep(30);
   assert.ok(html().classList.contains("lu-a11y-links"), "veio da conta");
@@ -393,6 +417,71 @@ test("login sem recarregar a página (SPA): o identify faz o plugin e o convite 
   w.identify();
   await sleep(20);
   assert.equal(host.hidden, true);
+  assert.equal($(".mwrap"), null);
+});
+
+test("convite aceito vale na conta: limpar o navegador ou trocar de aparelho não pede de novo", async () => {
+  identity = { id: "aluno-30" };
+  boot(cfg({ nudge: { enabled: true, audience: "all", delay: 0, profile: "leitura" } }));
+  await sleep(30);
+  assert.ok($(".mwrap"), "primeiro acesso: convite aparece");
+  click($('[data-n="accept"]'));
+  assert.ok(html().classList.contains("lu-a11y-font"), "perfil sugerido ligado");
+  await sleep(900);
+  assert.equal(server.nudge?.s, "accepted", "o aceite foi para a conta");
+  assert.equal(server.prefs?.legibleFont, true, "as escolhas também");
+
+  // outro aparelho / navegador limpo / janela anônima: nada guardado localmente
+  w.destroy();
+  localStorage.clear();
+  sessionStorage.clear();
+  boot(cfg({ nudge: { enabled: true, audience: "all", delay: 0, profile: "leitura" } }));
+  await sleep(40);
+  assert.ok(html().classList.contains("lu-a11y-font"), "a plataforma já abre com as necessidades confirmadas");
+  assert.equal($(".mwrap"), null, "o convite não reaparece");
+});
+
+test("mudanças depois de aceitar o convite também ficam na conta", async () => {
+  identity = { id: "aluno-31" };
+  boot(cfg({ nudge: { enabled: true, audience: "all", delay: 0, profile: "foco" } }));
+  await sleep(30);
+  click($('[data-n="accept"]'));
+  // depois troca: desliga a máscara do perfil e liga o cursor grande
+  click($('[data-a="open"]'));
+  click($('[data-k="sw:readingMask"]'));
+  click($('[data-k="sw:bigCursor"]'));
+  await sleep(900);
+  assert.equal(server.prefs.readingMask, false);
+  assert.equal(server.prefs.bigCursor, true);
+  assert.equal(server.nudge.s, "accepted");
+
+  w.destroy();
+  localStorage.clear();
+  sessionStorage.clear();
+  boot(cfg({ nudge: { enabled: true, audience: "all", delay: 0, profile: "foco" } }));
+  await sleep(40);
+  assert.ok(html().classList.contains("lu-a11y-cursor"), "a escolha mais nova vale no aparelho novo");
+  assert.equal(($(".mask-top") as HTMLElement).hidden, true, "o que ele desligou continua desligado");
+  assert.equal($(".mwrap"), null);
+});
+
+test("fechar a aba logo depois de mudar não perde a mudança", async () => {
+  identity = { id: "aluno-32" };
+  boot(cfg());
+  await sleep(20);
+  click($('[data-a="open"]'));
+  click($('[data-k="sw:spacing"]'));
+  window.dispatchEvent(new (window as any).Event("pagehide"));
+  await sleep(10);
+  assert.equal(server.prefs?.spacing, true, "enviado na hora, sem esperar o intervalo");
+});
+
+test("convidado que já aceitou (registrado no painel) não vê o convite num navegador novo", async () => {
+  identity = { id: "convidado-9" };
+  server.match = true;
+  server.status = "accepted";
+  boot(publicA11yConfig(normalizeA11yConfig({ nudge: { enabled: true, audience: "targeted", delay: 0 } }), true));
+  await sleep(40);
   assert.equal($(".mwrap"), null);
 });
 

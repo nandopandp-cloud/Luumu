@@ -122,7 +122,7 @@ export const DEFAULT_A11Y_CONFIG: A11yConfig = {
   scope: DEFAULT_SCOPE,
   brand: {
     title: "Acessibilidade",
-    subtitle: "Ajuste a plataforma do seu jeito. Suas escolhas ficam salvas na sua conta.",
+    subtitle: "Personalize a plataforma do seu jeito. Suas escolhas ficam salvas na sua conta.",
     accent: "#4F46E5",
     logoUrl: "",
     theme: "light",
@@ -178,6 +178,10 @@ const OLD_NUDGE_DEFAULTS: Record<string, string> = {
   cta: "Ativar recursos",
 };
 const upgradeDefault = (k: string, v: unknown) => (typeof v === "string" && v.trim() === OLD_NUDGE_DEFAULTS[k] ? undefined : v);
+const OLD_SUBTITLES = [
+  "Ajuste a plataforma do seu jeito. Suas escolhas ficam salvas neste dispositivo.",
+  "Ajuste a plataforma do seu jeito. Suas escolhas ficam salvas na sua conta.",
+];
 
 const HEX = /^#[0-9a-f]{6}$/i;
 const color = (v: unknown, fallback: string) => (typeof v === "string" && HEX.test(v.trim()) ? v.trim().toUpperCase() : fallback);
@@ -219,7 +223,7 @@ export function normalizeA11yConfig(input: unknown): A11yConfig {
     scope: normalizeScope(o.scope),
     brand: {
       title: text(brand.title, d.brand.title, 40),
-      subtitle: optText(brand.subtitle, d.brand.subtitle, 160),
+      subtitle: optText(typeof brand.subtitle === "string" && OLD_SUBTITLES.includes(brand.subtitle.trim()) ? undefined : brand.subtitle, d.brand.subtitle, 160),
       accent: color(brand.accent, d.brand.accent),
       logoUrl: safeImageUrl(brand.logoUrl),
       theme: oneOf(brand.theme, ["light", "dark", "auto"] as const, d.brand.theme),

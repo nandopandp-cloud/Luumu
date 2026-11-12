@@ -116,6 +116,10 @@ function createWidget(): A11yWidget {
   // o plugin vale para este estudante? (escopo de ativação; null = ainda decidindo)
   let inScope: boolean | null = null;
   let pushTimer: ReturnType<typeof setTimeout> | null = null;
+  // desfecho do convite (visto/aceito/dispensado): guardado no aparelho E na conta do estudante
+  let nudgeMemo: NudgeMemo | null = null;
+  // leitura da conta em andamento: o convite espera por ela antes de decidir se aparece
+  let pulling: Promise<void> = Promise.resolve();
   let remoteBlocked = false;
   let panelOpen = false;
   let releasePanelTrap: (() => void) | null = null;
@@ -215,17 +219,35 @@ function createWidget(): A11yWidget {
     const wrapped = raw && typeof raw === "object" && "p" in raw;
     prefs = normalizePrefs(wrapped ? raw!.p : raw);
     prefsAt = wrapped && typeof raw!.t === "number" ? raw!.t : 0;
-    void pullPrefs();
+    nudgeMemo = parseNudgeMemo(json(get(nudgeKey())));
+    pulling = pullPrefs();
   }
   function storeLocal() {
     set(prefsKey(), JSON.stringify({ p: prefs, t: prefsAt }));
   }
+  /** Envia preferências + desfecho do convite para a conta (keepalive: sobrevive ao fechar a aba). */
+  function pushNow() {
+    if (pushTimer) clearTimeout(pushTimer);
+    pushTimer = null;
+    if (owner === "anon") return;
+    void post("prefs", { op: "set", prefs, t: prefsAt, nudge: nudgeMemo }, true);
+  }
+  // junta cliques seguidos numa gravação só; ao sair da página, envia o que estiver pendente
+  function schedulePush() {
+    if (owner === "anon" || preview()) return;
+    if (pushTimer) clearTimeout(pushTimer);
+    pushTimer = setTimeout(pushNow, 800);
+  }
+  const flushPending = () => {
+    if (pushTimer) pushNow();
+  };
+  const onHidden = () => {
+    if (document.visibilityState === "hidden") flushPending();
+  };
   function savePrefs() {
     prefsAt = Date.now();
     storeLocal();
-    if (owner === "anon") return;
-    if (pushTimer) clearTimeout(pushTimer);
-    pushTimer = setTimeout(() => void post("prefs", { op: "set", prefs, t: prefsAt }, true), 800);
+    schedulePush();
   }
   async function pullPrefs() {
     if (owner === "anon" || preview()) return;
@@ -236,16 +258,21 @@ function createWidget(): A11yWidget {
     if (!r || who0 !== owner) return;
     sessionFlag(flag, "1");
     const remoteAt = typeof r.t === "number" ? r.t : 0;
+    const remoteMemo = parseNudgeMemo(r.nudge);
+    let push = false;
     if (r.prefs && remoteAt > prefsAt) {
-      // outro aparelho mudou depois: a conta vence
+      // outro aparelho (ou antes de limpar o navegador) mudou depois: a conta vence
       prefs = normalizePrefs(r.prefs);
       prefsAt = remoteAt;
       storeLocal();
       applyAll();
-    } else if (prefsAt > remoteAt) {
-      // escolhas feitas aqui antes do login (ou offline): sobem para a conta
-      void post("prefs", { op: "set", prefs, t: prefsAt });
-    }
+    } else if (prefsAt > remoteAt) push = true; // escolhas feitas aqui antes do login: sobem
+    // o convite segue a mesma regra: o desfecho mais recente vale
+    if (remoteMemo && (!nudgeMemo || remoteMemo.at > nudgeMemo.at)) {
+      nudgeMemo = remoteMemo;
+      set(nudgeKey(), JSON.stringify(nudgeMemo));
+    } else if (nudgeMemo && (!remoteMemo || nudgeMemo.at > remoteMemo.at)) push = true;
+    if (push) pushNow();
   }
 
   /** identify chegou depois do boot (ou trocou o usuário): carrega as escolhas e o escopo dele */
@@ -257,7 +284,8 @@ function createWidget(): A11yWidget {
   }
 
   /* ---------------- lista de convidados (servidor) ---------------- */
-  type MatchMemo = { m: boolean; p: string | null; at: number };
+  // st: desfecho do convite que o servidor já registrou para este convidado
+  type MatchMemo = { m: boolean; p: string | null; st: string | null; at: number };
   async function inviteeMatch(): Promise<MatchMemo | null> {
     if (!cfg.nudge.hasList || owner === "anon" || preview()) return null;
     const cacheKey = `luumu_a11y_match_${boot!.key}:${owner}`;
@@ -265,7 +293,7 @@ function createWidget(): A11yWidget {
     if (cached && typeof cached.at === "number" && Date.now() - cached.at < MATCH_TTL_MS) return cached;
     const r = await post("match", {});
     if (!r) return null;
-    const memo: MatchMemo = { m: !!r.match, p: typeof r.profile === "string" ? r.profile : null, at: Date.now() };
+    const memo: MatchMemo = { m: !!r.match, p: typeof r.profile === "string" ? r.profile : null, st: typeof r.status === "string" ? r.status : null, at: Date.now() };
     set(cacheKey, JSON.stringify(memo));
     return memo;
   }
@@ -337,6 +365,11 @@ function createWidget(): A11yWidget {
     rootEl.style.setProperty("--acc-ink", readableOn(acc));
     rootEl.style.setProperty("--acc-soft", dark ? shade(acc, -0.72) : shade(acc, 0.9));
     rootEl.style.setProperty("--acc-line", dark ? shade(acc, -0.4) : shade(acc, 0.65));
+    // painel: cabeçalho escuro, blocos de ícone e seção Leitura derivados da cor de destaque
+    rootEl.style.setProperty("--head-bg", shade(acc, -0.58));
+    rootEl.style.setProperty("--head-bg2", shade(acc, -0.4));
+    rootEl.style.setProperty("--acc-tile", dark ? shade(acc, -0.62) : shade(acc, 0.88));
+    rootEl.style.setProperty("--sec-lav", dark ? shade(acc, -0.8) : shade(acc, 0.93));
     // convite: fundo levemente tingido pela cor de destaque e tinta navy (layout de referência)
     rootEl.style.setProperty("--n-bg", dark ? "var(--bg)" : shade(acc, 0.975));
     rootEl.style.setProperty("--n-ink", dark ? "#F1F5F9" : "#0E0D35");
@@ -428,46 +461,51 @@ function createWidget(): A11yWidget {
     */
     const extra = (a: string, label: string, ico: string, on: boolean) =>
       `<button type="button" class="lb lb-x${on ? " on" : ""}" data-a="${a}" aria-pressed="${on}" aria-label="${label}">
-        ${icon(ico, 27, 2.3)}<span class="lb-label" aria-hidden="true">${label}</span>${on ? `<span class="lb-badge" aria-hidden="true">${icon("check", 12, 3.4)}</span>` : ""}</button>`;
+        ${icon(ico, 28, 2.1)}<span class="lb-label" aria-hidden="true">${label}</span>${on ? `<span class="lb-badge" aria-hidden="true">${icon("check", 12, 3.4)}</span>` : ""}</button>`;
     const extras: string[] = [];
     if (enabled("libras") && cfg.launcher.librasShortcut) extras.push(extra("libras", "Libras", "hands", eff.libras));
     if (enabled("faceNav") && cfg.launcher.faceShortcut) extras.push(extra("face", "Navegação por rosto", "face", face.active));
     launcher.innerHTML = `<div class="lb-pill">
       ${extras.length ? `<div class="lb-more"><div class="lb-more-in">${extras.join("")}</div></div>` : ""}
       <button type="button" class="lb lb-main${panelOpen ? " on" : ""}" data-a="open" aria-haspopup="dialog" aria-expanded="${panelOpen}" aria-label="${esc(cfg.launcher.label)}${count ? `, ${count} ${count === 1 ? "ajuste ativo" : "ajustes ativos"}` : ""}">
-        ${icon("access", 30, 2.3)}<span class="lb-label" aria-hidden="true">${esc(cfg.launcher.label)}</span>${count ? `<span class="lb-badge" aria-hidden="true">${count}</span>` : ""}</button>
+        ${icon("access", 32, 2.6)}<span class="lb-label" aria-hidden="true">${esc(cfg.launcher.label)}</span>${count ? `<span class="lb-badge" aria-hidden="true">${count}</span>` : ""}</button>
     </div>`;
   }
 
   /* ---------------- painel ---------------- */
+  // Contraste, saturação e daltonismo: a chave liga a variação mais comum; as outras aparecem abaixo
+  const SELECT_ON: Partial<Record<FeatureId, string>> = { contrast: "high", saturation: "low", colorBlind: "deutan" };
+
   function rowFor(id: FeatureId, eff: A11yPrefs): string {
     const f = FEATURES.find((x) => x.id === id)!;
     const lab = `lb-${id}`;
+    const head = (desc: string, live = false) =>
+      `<span class="tile" aria-hidden="true">${icon(f.icon, 24, 2)}</span><span class="row-div" aria-hidden="true"></span>
+        <div class="txt"><b id="${lab}">${esc(f.label)}</b><span${live ? ' aria-live="polite"' : ""}>${esc(desc)}</span></div>`;
     if (id === "textSize") {
       const i = eff.textSize;
-      return `<div class="row${i > 0 ? " on" : ""}"><span class="tile">${icon("type")}</span>
-        <div class="txt"><b id="${lab}">${f.label}</b><span class="pct" aria-live="polite">${TEXT_SIZES[i]}%</span></div>
+      return `<div class="row${i > 0 ? " on" : ""}">${head(`${f.description} · ${TEXT_SIZES[i]}%`, true)}
         <div class="stepper" role="group" aria-labelledby="${lab}">
           <button type="button" data-a="size" data-d="-1" data-k="size-" aria-label="Diminuir texto"${i === 0 ? " disabled" : ""}>A−</button>
-          <span class="bars" aria-hidden="true">${TEXT_SIZES.map((_, n) => `<i class="${n <= i ? "on" : ""}"></i>`).join("")}</span>
           <button type="button" data-a="size" data-d="1" data-k="size+" aria-label="Aumentar texto"${i === TEXT_SIZES.length - 1 ? " disabled" : ""}>A+</button>
         </div></div>`;
     }
     const select = SELECT_FEATURES[id];
     if (select) {
       const v = eff[select.key] as string;
-      return `<div class="row${v !== "off" ? " on" : ""}"><span class="tile">${icon(f.icon)}</span>
-        <div class="txt"><b id="${lab}">${f.label}</b><span>${esc(f.description)}</span></div>
-        <div class="chips" role="radiogroup" aria-labelledby="${lab}">${select.options
+      const on = v !== "off";
+      return `<div class="row${on ? " on" : ""}" data-row="${id}">${head(f.description)}
+        <button type="button" class="sw" role="switch" aria-checked="${on}" aria-labelledby="${lab}" data-a="toggle" data-id="${id}" data-k="sw:${id}"></button>
+        ${on ? `<div class="chips" role="radiogroup" aria-label="${esc(f.label)}: variação">${select.options
+          .filter((o) => o.value !== "off")
           .map(
             (o) =>
               `<button type="button" class="chip" role="radio" aria-checked="${o.value === v}" data-a="choose" data-id="${id}" data-v="${o.value}" data-k="${id}:${o.value}">${esc(o.label)}</button>`
           )
-          .join("")}</div></div>`;
+          .join("")}</div>` : ""}</div>`;
     }
     const on = id === "faceNav" ? face.active : !!eff[id as PrefKey];
-    return `<div class="row${on ? " on" : ""}" data-row="${id}"><span class="tile">${icon(f.icon)}</span>
-      <div class="txt"><b id="${lab}">${f.label}</b><span>${esc(f.description)}</span></div>
+    return `<div class="row${on ? " on" : ""}" data-row="${id}">${head(f.description)}
       <button type="button" class="sw" role="switch" aria-checked="${on}" aria-labelledby="${lab}" data-a="toggle" data-id="${id}" data-k="sw:${id}"></button></div>`;
   }
 
@@ -478,31 +516,26 @@ function createWidget(): A11yWidget {
     const scroll = body?.scrollTop ?? 0;
     const eff = effective(prefs);
     const logo = cfg.brand.logoUrl;
-    const profiles = cfg.profiles.filter((p) => profileAvailable(p, cfg.features));
     const groups = FEATURE_GROUPS.map((g) => {
       const rows = FEATURES.filter((f) => f.group === g.id && enabled(f.id)).map((f) => rowFor(f.id, eff));
-      return rows.length ? `<section class="sec" aria-label="${esc(g.label)}"><h3 class="sec-t">${esc(g.label)}</h3>${rows.join("")}</section>` : "";
+      return rows.length
+        ? `<section class="sec sec-${g.id}" aria-labelledby="lu-sec-${g.id}"><h3 class="sec-t" id="lu-sec-${g.id}"><span class="sec-i" aria-hidden="true">${icon(g.icon, 22, 2)}</span>${esc(g.label)}</h3>${rows.join("")}</section>`
+        : "";
     }).join("");
     panel.className = `panel${side() === "left" ? " left" : ""}${panelOpen ? " open" : ""}`;
     panel.innerHTML = `
 <header class="p-head">
-  <span class="p-logo">${logo ? `<img src="${esc(logo)}" alt="">` : icon("access", 28, 2.2)}</span>
-  <div><h2 class="p-title" id="lu-a11y-title">${esc(cfg.brand.title)}</h2>${cfg.brand.subtitle ? `<p class="p-sub">${esc(cfg.brand.subtitle)}</p>` : ""}</div>
-  <button type="button" class="x" data-a="close" data-k="close" aria-label="Fechar">${icon("close", 22)}</button>
+  <svg class="p-wave" viewBox="0 0 240 140" preserveAspectRatio="none" aria-hidden="true"><path d="M70 140C112 112 132 52 240 30V140Z" fill="currentColor" opacity=".55"/><path d="M118 140C150 118 175 84 240 74V140Z" fill="currentColor"/></svg>
+  <span class="p-logo">${logo ? `<img src="${esc(logo)}" alt="">` : icon("access", 34, 2.4)}</span>
+  <div class="p-hd"><h2 class="p-title" id="lu-a11y-title">${esc(cfg.brand.title)}</h2>${cfg.brand.subtitle ? `<p class="p-sub">${esc(cfg.brand.subtitle)}</p>` : ""}</div>
+  <button type="button" class="x" data-a="close" data-k="close" aria-label="Fechar">${icon("close", 22, 2.4)}</button>
 </header>
 <div class="p-body">
-  ${profiles.length ? `<section class="sec" aria-label="Perfis rápidos"><h3 class="sec-t">Perfis rápidos</h3><div class="profiles">${profiles
-    .map((id) => {
-      const p = profileInfo(id);
-      const on = prefs.profiles.includes(id);
-      return `<button type="button" class="prof" aria-pressed="${on}" data-a="profile" data-id="${id}" data-k="pf:${id}"><span class="ck">${icon("check", 13, 3.2)}</span><span class="pi">${icon(p.icon, 26)}</span><b>${esc(p.label)}</b><span>${esc(p.description)}</span></button>`;
-    })
-    .join("")}</div></section>` : ""}
   ${groups || `<p class="empty">Nenhum recurso disponível.</p>`}
 </div>
 <footer class="p-foot">
-  <button type="button" class="btn ghost" data-a="reset" data-k="reset">${icon("reset", 20)}<span>Restaurar padrão</span></button>
-  <button type="button" class="btn primary" data-a="close" data-k="done">${icon("checkCircle", 20)}<span>Pronto</span></button>
+  <button type="button" class="btn ghost" data-a="reset" data-k="reset">${icon("reset", 20, 2.2)}<span>Restaurar padrão</span></button>
+  <button type="button" class="btn primary" data-a="close" data-k="done">${icon("checkCircle", 20, 2.2)}<span>Pronto</span></button>
 </footer>
 <div class="powered">Acessibilidade por Luumu</div>`;
     const nb = panel.querySelector(".p-body") as HTMLElement;
@@ -517,7 +550,7 @@ function createWidget(): A11yWidget {
     renderPanel();
     scrim.classList.add("open");
     requestAnimationFrame(() => panel.classList.add("open"));
-    releasePanelTrap = trapFocus(panel);
+    releasePanelTrap = trapFocus(panel, true);
     renderLauncher();
   }
   function closePanel() {
@@ -580,6 +613,12 @@ function createWidget(): A11yWidget {
           }
           return;
         }
+        const sel = SELECT_FEATURES[fid];
+        if (sel) {
+          const on = effective(prefs)[sel.key] === "off";
+          setPrefs({ ...prefs, [sel.key]: on ? SELECT_ON[fid] : "off" } as A11yPrefs);
+          return toast(toastText(fid, on));
+        }
         const on = !effective(prefs)[fid as PrefKey];
         setPrefs({ ...prefs, [fid]: on } as A11yPrefs);
         return toast(toastText(fid, on));
@@ -610,7 +649,10 @@ function createWidget(): A11yWidget {
   let invited = false;
 
   function remember(s: NudgeMemo["s"]) {
-    set(nudgeKey(), JSON.stringify({ s, at: Date.now() }));
+    nudgeMemo = { s, at: Date.now() };
+    set(nudgeKey(), JSON.stringify(nudgeMemo));
+    // na conta do estudante: aceitar vale em qualquer aparelho e depois de limpar o navegador
+    schedulePush();
     // o painel da Luumu mostra quem viu, aceitou ou dispensou (só para convidados da lista)
     if (invited) void post("match", { event: s }, true);
   }
@@ -697,10 +739,12 @@ function createWidget(): A11yWidget {
     sessionFlag("luumu_a11y_nudged", "1");
   }
 
+  let inviteeStatus: string | null = null;
   async function inAudience(): Promise<boolean> {
     const n = cfg.nudge;
     const m = await inviteeMatch();
     invited = !!m?.m;
+    inviteeStatus = m?.m ? m.st : null;
     inviteeProfile = m?.m && m.p && profileAvailable(m.p as ProfileId, cfg.features) ? (m.p as ProfileId) : null;
     if (n.audience === "all" || invited) return true;
     return matchesAnyGroup(n.groups, boot!.identity());
@@ -712,7 +756,10 @@ function createWidget(): A11yWidget {
     syncOwner();
     if (inScope === null) await decideScope();
     if (!inScope) return;
-    const memo = parseNudgeMemo(json(get(nudgeKey())));
+    // espera a conta: quem já aceitou (ou já tem recursos ligados) em outro aparelho não vê de novo
+    await pulling;
+    if (nudgeEl) return;
+    const memo = nudgeMemo;
     const due = nudgeDue(n.frequency, memo, {
       now: Date.now(),
       shownThisSession: sessionFlag("luumu_a11y_nudged") === "1",
@@ -725,7 +772,10 @@ function createWidget(): A11yWidget {
       timers.push(setTimeout(() => void maybeNudge(false), 6000));
       return;
     }
-    if (await inAudience()) showNudge();
+    if (!(await inAudience())) return;
+    // convidado que já aceitou: o painel da Luumu registrou, mesmo sem nada guardado aqui
+    if (inviteeStatus === "accepted") return;
+    showNudge();
   }
 
   /* ---------------- ciclo de vida ---------------- */
@@ -747,6 +797,7 @@ function createWidget(): A11yWidget {
     panel.setAttribute("role", "dialog");
     panel.setAttribute("aria-modal", "true");
     panel.setAttribute("aria-labelledby", "lu-a11y-title");
+    panel.tabIndex = -1;
     panel.addEventListener("keydown", (e) => {
       if (e.key === "Escape") closePanel();
     });
@@ -776,6 +827,8 @@ function createWidget(): A11yWidget {
         if (panelOpen) renderPanel(true);
       },
     });
+    window.addEventListener("pagehide", flushPending);
+    document.addEventListener("visibilitychange", onHidden);
     try {
       darkQuery = matchMedia("(prefers-color-scheme: dark)");
       darkQuery.addEventListener?.("change", applyTheme);
@@ -853,6 +906,9 @@ function createWidget(): A11yWidget {
     },
     destroy() {
       timers.forEach(clearTimeout);
+      flushPending();
+      window.removeEventListener("pagehide", flushPending);
+      document.removeEventListener("visibilitychange", onHidden);
       closePanel();
       closeNudge();
       face?.destroy();
@@ -863,6 +919,8 @@ function createWidget(): A11yWidget {
       if (pushTimer) clearTimeout(pushTimer);
       prefs = { ...DEFAULT_PREFS };
       prefsAt = 0;
+      nudgeMemo = null;
+      pulling = Promise.resolve();
       inScope = null;
       remoteBlocked = false;
       invited = false;

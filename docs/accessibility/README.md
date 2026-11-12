@@ -152,6 +152,17 @@ chave do estudante), não só no navegador:
   mudou aqui antes de entrar (ou offline), as escolhas sobem para a conta. O servidor ignora uma
   gravação mais velha que a guardada;
 - estudante não identificado: só no aparelho, nenhuma chamada ao servidor.
+- **o convite também**: o desfecho (visto/aceito/dispensado) é guardado na mesma linha das
+  preferências (chave `_nudge` do JSON, sem coluna nova). Aceitar vale em qualquer aparelho e
+  depois de limpar o navegador; gravação sem desfecho preserva o que já estava na conta. Para
+  convidados da lista, o status registrado no painel também impede o convite de reaparecer;
+- o convite **espera a leitura da conta** antes de decidir se aparece (quem aceitou em outro
+  aparelho não o vê de novo enquanto a conta ainda responde);
+- mudança pendente é enviada **na hora** ao esconder ou fechar a aba (`pagehide`/`visibilitychange`,
+  com `keepalive`), sem esperar os 800 ms;
+- **pré-requisitos**: o produto precisa chamar `Luumu.identify` com o `id` (ou `email`) do
+  estudante. Com "Exigir verificação" ligado, também o `user_hash` — sem ele o servidor recusa
+  (403) e as escolhas ficam só no aparelho.
 
 ## Verificação de identidade
 
