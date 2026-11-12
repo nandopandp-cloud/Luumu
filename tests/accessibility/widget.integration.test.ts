@@ -1,8 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- elementos do Shadow DOM inspecionados nos testes */
 /*
   Widget de acessibilidade (sdk/accessibility/widget.ts) num navegador simulado (happy-dom):
-  launcher, painel, recursos aplicados à página, perfis, escolhas guardadas por usuário,
-  convite por grupo e por lista individual (sem a lista sair do servidor) e limpeza total.
+  launcher, painel, recursos aplicados à página, perfis, escolhas por estudante sincronizadas
+  com a conta (qualquer aparelho), escopo de ativação, convite por grupo e por lista de
+  convidados (sem a lista sair do servidor), desfecho do convite e limpeza total.
 */
 import { test, before, beforeEach } from "node:test";
 import assert from "node:assert/strict";
@@ -14,7 +15,9 @@ const g = globalThis as Record<string, unknown>;
 type Widget = { boot(c: object): void; update(c: PublicA11yConfig): void; open(v?: string): void; close(): void; destroy(): void };
 let w: Widget;
 let fetches: { url: string; body: any }[] = [];
-let matchReply = false;
+// "servidor" das rotas do plugin
+let server: { match: boolean; profile: string | null; prefs: any; t: number } = { match: false, profile: null, prefs: null, t: 0 };
+const calls = (path: string) => fetches.filter((f) => f.url.endsWith(`/accessibility/${path}`));
 let identity: Record<string, unknown> = {};
 
 const cfg = (over: object = {}) => publicA11yConfig(normalizeA11yConfig(over));
@@ -33,8 +36,14 @@ function boot(config: PublicA11yConfig, extra: object = {}) {
 before(async () => {
   document.body.innerHTML = `<main><h1>Revolução Industrial</h1><p id="p1">As máquinas a vapor mudaram o trabalho.</p><a href="/x">Exercícios</a></main>`;
   g.fetch = async (url: string, init: { body: string }) => {
-    fetches.push({ url, body: JSON.parse(init.body) });
-    return new Response(JSON.stringify({ match: matchReply }), { status: 200 });
+    const body = JSON.parse(init.body);
+    fetches.push({ url, body });
+    const reply = url.endsWith("/match")
+      ? { match: server.match, profile: server.profile }
+      : body.op === "get"
+        ? server.prefs ? { prefs: server.prefs, t: server.t } : { prefs: null }
+        : { ok: true, t: body.t };
+    return new Response(JSON.stringify(reply), { status: 200 });
   };
   await import("@/sdk/accessibility/widget");
   w = (window as any).__luumuA11y;
@@ -45,7 +54,7 @@ beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
   fetches = [];
-  matchReply = false;
+  server = { match: false, profile: null, prefs: null, t: 0 };
   identity = {};
 });
 
@@ -71,7 +80,7 @@ test("ligar um recurso muda a página, avisa e fica guardado para o usuário", a
   assert.ok(html().classList.contains("lu-a11y-links"));
   assert.match($(".toast")!.textContent!, /Links destacados/);
   const saved = JSON.parse(localStorage.getItem("luumu_a11y_pk_test:aluno-1")!);
-  assert.equal(saved.highlightLinks, true);
+  assert.equal(saved.p.highlightLinks, true);
   // o selo do launcher conta o ajuste
   assert.equal($(".lb-badge")!.textContent, "1");
 
@@ -211,7 +220,7 @@ test("convite por grupo: estudante da turma vê, aceita e o perfil sugerido liga
   await sleep(20);
   assert.ok($(".mwrap"), "convite exibido");
   assert.match($(".sugg")!.textContent!, /Mais conforto na leitura/);
-  assert.equal(fetches.length, 0, "grupo decide no navegador, sem consultar a lista");
+  assert.equal(calls("match").length, 0, "grupo decide no navegador, sem consultar a lista");
   click($('[data-n="accept"]'));
   assert.equal($(".mwrap"), null);
   assert.ok($(".panel")!.classList.contains("open"), "painel abre depois de aceitar");
@@ -227,20 +236,98 @@ test("convite: fora do grupo e sem lista, nada aparece", async () => {
   assert.equal($(".mwrap"), null);
 });
 
-test("convite pela lista individual: pergunta ao servidor só pelo estudante logado", async () => {
-  identity = { id: "123", email: "ana@escola.br" };
-  matchReply = true;
-  const config = cfg({ nudge: { enabled: true, audience: "targeted", delay: 0, students: ["ana@escola.br", "bia@escola.br"] } });
-  assert.equal(JSON.stringify(config).includes("bia@escola.br"), false, "a lista não está na config pública");
-  boot(config);
+test("convite pela lista de convidados: pergunta só pelo estudante logado, usa o perfil dele e registra o desfecho", async () => {
+  identity = { id: "123", email: "ana@escola.br", user_hash: "a".repeat(64) };
+  server.match = true;
+  server.profile = "calma";
+  boot(publicA11yConfig(normalizeA11yConfig({ nudge: { enabled: true, audience: "targeted", delay: 0, profile: "foco" } }), true));
   await sleep(30);
-  assert.equal(fetches.length, 1);
-  assert.equal(fetches[0].url, "https://luumu.test/api/v1/accessibility/match");
-  assert.deepEqual(fetches[0].body, { key: "pk_test", id: "123", email: "ana@escola.br" });
+  // uma consulta (sem evento); a outra chamada é o registro de que ele viu o convite
+  const match = calls("match").filter((c) => !c.body.event);
+  assert.equal(match.length, 1);
+  assert.deepEqual(match[0].body, { key: "pk_test", id: "123", email: "ana@escola.br", h: "a".repeat(64) });
   assert.ok($(".mwrap"), "convite exibido");
+  assert.match($(".sugg")!.textContent!, /Tela mais calma/, "perfil do convidado vence o do convite");
   click($('[data-n="dismiss"]'));
-  assert.equal($(".mwrap"), null);
-  assert.equal(JSON.parse(localStorage.getItem("luumu_a11y_nudge_pk_test:123")!).s, "dismissed");
+  await sleep(10);
+  const events = calls("match").map((c) => c.body.event).filter(Boolean);
+  assert.deepEqual(events, ["shown", "dismissed"], "o painel fica sabendo que ele viu e dispensou");
+});
+
+test("escopo por grupo: fora dele o plugin não aparece e a página fica intacta", async () => {
+  identity = { id: "fora-1", rede: "Outra rede" };
+  localStorage.setItem("luumu_a11y_pk_test:fora-1", JSON.stringify({ p: { highlightLinks: true }, t: 1 }));
+  boot(cfg({ scope: { mode: "targeted", groups: [{ networks: ["Rede Aurora"] }], includeInvitees: false } }));
+  await sleep(20);
+  const host = document.querySelector('[data-luumu-ui="a11y"]') as HTMLElement;
+  assert.equal(host.hidden, true);
+  assert.equal(html().classList.contains("lu-a11y-links"), false, "escolhas guardadas não valem fora do escopo");
+  w.destroy();
+  identity = { id: "dentro-1", rede: "rede aurora" };
+  boot(cfg({ scope: { mode: "targeted", groups: [{ networks: ["Rede Aurora"] }], includeInvitees: false } }));
+  await sleep(20);
+  assert.equal((document.querySelector('[data-luumu-ui="a11y"]') as HTMLElement).hidden, false);
+});
+
+test("escopo pela lista de convidados: o servidor confirma e o plugin aparece", async () => {
+  identity = { id: "77" };
+  server.match = true;
+  boot(publicA11yConfig(normalizeA11yConfig({ scope: { mode: "targeted", includeInvitees: true } }), true));
+  const host = document.querySelector('[data-luumu-ui="a11y"]') as HTMLElement;
+  assert.equal(host.hidden, true, "escondido enquanto decide");
+  await sleep(30);
+  assert.equal(host.hidden, false);
+  assert.equal(calls("match").length, 1);
+});
+
+test("preferências seguem o estudante entre aparelhos: a conta mais recente vence", async () => {
+  // outro aparelho gravou depois: ao abrir aqui, vem da conta
+  identity = { id: "aluno-5" };
+  localStorage.setItem("luumu_a11y_pk_test:aluno-5", JSON.stringify({ p: { spacing: true }, t: 1000 }));
+  server.prefs = { highlightLinks: true, textSize: 1 };
+  server.t = 5000;
+  boot(cfg());
+  await sleep(30);
+  assert.ok(html().classList.contains("lu-a11y-links"), "veio da conta");
+  assert.equal(html().classList.contains("lu-a11y-spacing"), false);
+  assert.equal(calls("prefs")[0].body.op, "get");
+  assert.equal(JSON.parse(localStorage.getItem("luumu_a11y_pk_test:aluno-5")!).t, 5000, "cache local atualizado");
+
+  // mudar aqui grava na conta (com atraso curto, juntando cliques seguidos)
+  click($('[data-a="open"]'));
+  click($('[data-k="sw:spacing"]'));
+  click($('[data-k="sw:bigCursor"]'));
+  await sleep(900);
+  const sets = calls("prefs").filter((c) => c.body.op === "set");
+  assert.equal(sets.length, 1);
+  assert.equal(sets[0].body.prefs.spacing, true);
+  assert.equal(sets[0].body.prefs.bigCursor, true);
+  assert.equal(sets[0].body.id, "aluno-5");
+});
+
+test("preferências: escolhas feitas antes de entrar na conta sobem quando o servidor está mais velho", async () => {
+  identity = { id: "aluno-6" };
+  localStorage.setItem("luumu_a11y_pk_test:aluno-6", JSON.stringify({ p: { focusRing: true }, t: Date.now() }));
+  boot(cfg());
+  await sleep(30);
+  const sets = calls("prefs").filter((c) => c.body.op === "set");
+  assert.equal(sets.length, 1);
+  assert.equal(sets[0].body.prefs.focusRing, true);
+  // a leitura da conta acontece uma vez por sessão do navegador
+  w.destroy();
+  fetches = [];
+  boot(cfg());
+  await sleep(20);
+  assert.equal(calls("prefs").filter((c) => c.body.op === "get").length, 0);
+});
+
+test("estudante não identificado: escolhas só no aparelho, nenhuma chamada ao servidor", async () => {
+  boot(cfg());
+  click($('[data-a="open"]'));
+  click($('[data-k="sw:spacing"]'));
+  await sleep(900);
+  assert.equal(fetches.length, 0);
+  assert.ok(localStorage.getItem("luumu_a11y_pk_test:anon"));
 });
 
 test("prévia não grava nada no navegador", () => {

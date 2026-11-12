@@ -12,6 +12,8 @@ const Z = 2147483000;
 
 export const WIDGET_CSS = `
 :host{all:initial!important;letter-spacing:normal!important;word-spacing:normal!important;line-height:normal!important;font-size:16px!important;filter:none}
+/* fora do escopo de ativação o host fica [hidden]: precisa vencer o all:initial acima */
+:host([hidden]){display:none!important}
 *,*::before,*::after{box-sizing:border-box}
 [hidden]{display:none!important}
 .root{--acc:#4F46E5;--acc-ink:#fff;--acc-soft:#EEF2FF;--acc-line:#C7D2FE;--bg:#fff;--card:#fff;--fg:#0F172A;--mut:#5B6478;--line:#E2E8F0;--tile:#F1F5F9;--shadow:0 24px 64px rgba(15,23,42,.24),0 4px 12px rgba(15,23,42,.08);

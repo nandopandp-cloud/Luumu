@@ -38,6 +38,8 @@ import {
 } from "../../lib/accessibility/features";
 import { readableOn, shade, type PublicA11yConfig } from "../../lib/accessibility/config";
 import { matchesAnyGroup } from "../../lib/accessibility/audience";
+import { scopeDecision } from "../../lib/accessibility/scope";
+import { userKeyFrom } from "../../lib/accessibility/invitees";
 import { nudgeDue, parseNudgeMemo, type NudgeMemo } from "../../lib/accessibility/nudge";
 import { icon } from "./icons";
 import { WIDGET_CSS } from "./styles";
@@ -104,7 +106,13 @@ function createWidget(): A11yWidget {
   let libras: Libras;
   let face: FaceNav;
   let prefs: A11yPrefs = { ...DEFAULT_PREFS };
+  // quando o estudante mudou as escolhas pela última vez (decide quem vence na sincronização)
+  let prefsAt = 0;
   let owner = "anon";
+  // o plugin vale para este estudante? (escopo de ativação; null = ainda decidindo)
+  let inScope: boolean | null = null;
+  let pushTimer: ReturnType<typeof setTimeout> | null = null;
+  let remoteBlocked = false;
   let panelOpen = false;
   let releasePanelTrap: (() => void) | null = null;
   let releaseNudgeTrap: (() => void) | null = null;
@@ -152,25 +160,123 @@ function createWidget(): A11yWidget {
     }
   };
 
-  function currentOwner(): string {
-    const i = boot?.identity() ?? {};
-    const v = i.id ?? i.email;
-    return typeof v === "string" || typeof v === "number" ? String(v).slice(0, 120) : "anon";
-  }
+  // chave do estudante: ID do identify (ou e-mail); "anon" = não identificado
+  const currentOwner = (): string => userKeyFrom(boot?.identity() ?? {}) || "anon";
   const prefsKey = () => `luumu_a11y_${boot!.key}:${owner}`;
   const nudgeKey = () => `luumu_a11y_nudge_${boot!.key}:${owner}`;
 
+  /* ---------------- servidor (dados de UM estudante: o logado) ---------------- */
+  /** Identificação que vai nas rotas do plugin: id, e-mail e a assinatura (user_hash), se houver. */
+  function who() {
+    const i = boot!.identity();
+    const id = typeof i.id === "string" || typeof i.id === "number" ? i.id : null;
+    const email = typeof i.email === "string" ? i.email : null;
+    const h = typeof i.user_hash === "string" ? i.user_hash : typeof i.userHash === "string" ? i.userHash : null;
+    return { key: boot!.key, id, email, h };
+  }
+  async function post(path: string, body: object, keepalive = false): Promise<Record<string, unknown> | null> {
+    if (preview() || remoteBlocked) return null;
+    try {
+      const r = await fetch(`${boot!.api}/accessibility/${path}`, {
+        method: "POST",
+        headers: { "Content-Type": SIMPLE_CONTENT_TYPE },
+        body: JSON.stringify({ ...who(), ...body }),
+        keepalive,
+      });
+      // projeto exige verificação e o produto não mandou o user_hash: para de tentar nesta página
+      if (r.status === 403 || r.status === 404) remoteBlocked = true;
+      return r.ok ? ((await r.json()) as Record<string, unknown>) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /* ---------------- preferências: aparelho + conta do estudante ---------------- */
+  /*
+    As escolhas valem para o estudante em qualquer aparelho: ficam no servidor, pelo ID. O
+    localStorage é só o cache que deixa a página certa já no primeiro desenho. A sincronização
+    com o servidor acontece uma vez por sessão do navegador (custa uma request por visita, não
+    por página) e a cada mudança; a escolha mais recente vence.
+  */
   function loadPrefs() {
     owner = currentOwner();
-    prefs = normalizePrefs(json(get(prefsKey())));
+    const raw = json(get(prefsKey())) as { p?: unknown; t?: unknown } | null;
+    // formato antigo (só as preferências) ainda é aceito
+    const wrapped = raw && typeof raw === "object" && "p" in raw;
+    prefs = normalizePrefs(wrapped ? raw!.p : raw);
+    prefsAt = wrapped && typeof raw!.t === "number" ? raw!.t : 0;
+    void pullPrefs();
+  }
+  function storeLocal() {
+    set(prefsKey(), JSON.stringify({ p: prefs, t: prefsAt }));
   }
   function savePrefs() {
-    set(prefsKey(), JSON.stringify(prefs));
+    prefsAt = Date.now();
+    storeLocal();
+    if (owner === "anon") return;
+    if (pushTimer) clearTimeout(pushTimer);
+    pushTimer = setTimeout(() => void post("prefs", { op: "set", prefs, t: prefsAt }, true), 800);
   }
-  /** identify chegou depois do boot (ou trocou o usuário): carrega as escolhas dele */
+  async function pullPrefs() {
+    if (owner === "anon" || preview()) return;
+    const flag = `luumu_a11y_synced_${boot!.key}:${owner}`;
+    if (sessionFlag(flag) === "1") return;
+    const who0 = owner;
+    const r = await post("prefs", { op: "get" });
+    if (!r || who0 !== owner) return;
+    sessionFlag(flag, "1");
+    const remoteAt = typeof r.t === "number" ? r.t : 0;
+    if (r.prefs && remoteAt > prefsAt) {
+      // outro aparelho mudou depois: a conta vence
+      prefs = normalizePrefs(r.prefs);
+      prefsAt = remoteAt;
+      storeLocal();
+      applyAll();
+    } else if (prefsAt > remoteAt) {
+      // escolhas feitas aqui antes do login (ou offline): sobem para a conta
+      void post("prefs", { op: "set", prefs, t: prefsAt });
+    }
+  }
+
+  /** identify chegou depois do boot (ou trocou o usuário): carrega as escolhas e o escopo dele */
   function syncOwner() {
     if (currentOwner() === owner) return;
     loadPrefs();
+    applyAll();
+    void decideScope();
+  }
+
+  /* ---------------- lista de convidados (servidor) ---------------- */
+  type MatchMemo = { m: boolean; p: string | null; at: number };
+  async function inviteeMatch(): Promise<MatchMemo | null> {
+    if (!cfg.nudge.hasList || owner === "anon" || preview()) return null;
+    const cacheKey = `luumu_a11y_match_${boot!.key}:${owner}`;
+    const cached = json(get(cacheKey)) as MatchMemo | null;
+    if (cached && typeof cached.at === "number" && Date.now() - cached.at < MATCH_TTL_MS) return cached;
+    const r = await post("match", {});
+    if (!r) return null;
+    const memo: MatchMemo = { m: !!r.match, p: typeof r.profile === "string" ? r.profile : null, at: Date.now() };
+    set(cacheKey, JSON.stringify(memo));
+    return memo;
+  }
+
+  /* ---------------- escopo de ativação ---------------- */
+  async function decideScope() {
+    if (preview()) return setScope(true);
+    const d = scopeDecision(cfg.scope, boot!.identity(), cfg.nudge.hasList);
+    if (d !== "ask") return setScope(d === "yes");
+    const m = await inviteeMatch();
+    setScope(!!m?.m);
+  }
+  function setScope(v: boolean) {
+    if (inScope === v) return;
+    inScope = v;
+    if (hostEl) hostEl.hidden = !v;
+    if (!v) {
+      closePanel();
+      closeNudge();
+      if (face.active) face.stop();
+    }
     applyAll();
   }
 
@@ -198,7 +304,8 @@ function createWidget(): A11yWidget {
   }
 
   function applyAll() {
-    const eff = effective(prefs);
+    // fora do escopo de ativação o plugin não existe para este estudante: página intacta
+    const eff = inScope ? effective(prefs) : { ...DEFAULT_PREFS };
     effects.apply(eff);
     // Libras: com o VLibras aberto, ele mesmo escuta os cliques nos textos
     effects.setPicker(eff.textReader ? (text) => speak(text) : null);
@@ -454,14 +561,21 @@ function createWidget(): A11yWidget {
     nudgeEl = null;
   }
 
+  // perfil sugerido só para este estudante (lista de convidados), quando houver
+  let inviteeProfile: ProfileId | null = null;
+  let invited = false;
+
   function remember(s: NudgeMemo["s"]) {
     set(nudgeKey(), JSON.stringify({ s, at: Date.now() }));
+    // o painel da Luumu mostra quem viu, aceitou ou dispensou (só para convidados da lista)
+    if (invited) void post("match", { event: s }, true);
   }
 
   function showNudge() {
     if (nudgeEl) return;
     const n = cfg.nudge;
-    const profile = n.profile && profileAvailable(n.profile, cfg.features) ? profileInfo(n.profile) : null;
+    const pid = inviteeProfile ?? n.profile;
+    const profile = pid && profileAvailable(pid, cfg.features) ? profileInfo(pid) : null;
     nudgeEl = document.createElement("div");
     nudgeEl.className = "mwrap";
     nudgeEl.innerHTML = `
@@ -508,35 +622,19 @@ function createWidget(): A11yWidget {
 
   async function inAudience(): Promise<boolean> {
     const n = cfg.nudge;
-    if (n.audience === "all") return true;
-    const traits = boot!.identity();
-    if (matchesAnyGroup(n.groups, traits)) return true;
-    if (!n.hasList) return false;
-    const id = traits.id;
-    const email = traits.email;
-    if (!id && !email) return false;
-    const cacheKey = `luumu_a11y_match_${boot!.key}:${owner}`;
-    const cached = json(get(cacheKey)) as { m: boolean; at: number } | null;
-    if (cached && typeof cached.at === "number" && Date.now() - cached.at < MATCH_TTL_MS) return !!cached.m;
-    try {
-      const r = await fetch(`${boot!.api}/accessibility/match`, {
-        method: "POST",
-        headers: { "Content-Type": SIMPLE_CONTENT_TYPE },
-        body: JSON.stringify({ key: boot!.key, id: typeof id === "number" || typeof id === "string" ? id : null, email: typeof email === "string" ? email : null }),
-      });
-      if (!r.ok) return false;
-      const m = !!(await r.json()).match;
-      set(cacheKey, JSON.stringify({ m, at: Date.now() }));
-      return m;
-    } catch {
-      return false;
-    }
+    const m = await inviteeMatch();
+    invited = !!m?.m;
+    inviteeProfile = m?.m && m.p && profileAvailable(m.p as ProfileId, cfg.features) ? (m.p as ProfileId) : null;
+    if (n.audience === "all" || invited) return true;
+    return matchesAnyGroup(n.groups, boot!.identity());
   }
 
   async function maybeNudge(retry = true) {
     const n = cfg.nudge;
     if (!n.enabled || nudgeEl) return;
     syncOwner();
+    if (inScope === null) await decideScope();
+    if (!inScope) return;
     const memo = parseNudgeMemo(json(get(nudgeKey())));
     const due = nudgeDue(n.frequency, memo, {
       now: Date.now(),
@@ -615,8 +713,13 @@ function createWidget(): A11yWidget {
       mount();
       applyTheme();
       loadPrefs();
+      // nada aparece nem muda na página antes de saber se o plugin vale para este estudante
+      hostEl!.hidden = true;
       applyAll();
+      void decideScope();
       timers.push(setTimeout(syncOwner, 1500));
+      // o identify pode chegar segundos depois: escopo por grupo/lista é decidido de novo
+      timers.push(setTimeout(() => (inScope ? undefined : void decideScope()), 6000));
       const delay = Math.max(0, cfg.nudge.delay) * 1000;
       // prévia: o convite só aparece quando pedido (nunca consulta a API com a key de prévia)
       if (c.preview) {
@@ -626,6 +729,7 @@ function createWidget(): A11yWidget {
     update(config) {
       if (!boot) return;
       cfg = config;
+      void decideScope();
       applyTheme();
       effects.setAccent(cfg.brand.accent);
       libras.update(cfg, side());
@@ -668,7 +772,13 @@ function createWidget(): A11yWidget {
       effects?.destroy();
       window.speechSynthesis?.cancel();
       for (const k of Object.keys(memory)) delete memory[k];
+      if (pushTimer) clearTimeout(pushTimer);
       prefs = { ...DEFAULT_PREFS };
+      prefsAt = 0;
+      inScope = null;
+      remoteBlocked = false;
+      invited = false;
+      inviteeProfile = null;
       hostEl?.remove();
       hostEl = null;
       boot = null;

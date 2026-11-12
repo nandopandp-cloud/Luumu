@@ -10,15 +10,16 @@ import { Tabs } from "@/components/ui/Tabs";
 import { Mascot } from "@/components/ui/Mascot";
 import { useToast } from "@/components/ui/Toast";
 import { normalizeA11yConfig, publicA11yConfig, type A11yConfig } from "@/lib/accessibility/config";
-import { parseStudentList } from "@/lib/accessibility/audience";
 import { FEATURES } from "@/lib/accessibility/features";
 import { saveAccessibilityAction } from "@/app/(app)/accessibility/actions";
 import { AppearanceTab, FeaturesTab, LibrasTab, NudgeTab } from "./tabs";
+import { ActivationTab } from "./ActivationTab";
 import { LivePreview, type PreviewView } from "./LivePreview";
 
-type Tab = "features" | "appearance" | "libras" | "nudge";
+type Tab = "activation" | "features" | "appearance" | "libras" | "nudge";
 
 const TABS: { value: Tab; label: string }[] = [
+  { value: "activation", label: "Ativação" },
   { value: "features", label: "Recursos" },
   { value: "appearance", label: "Aparência" },
   { value: "libras", label: "Libras" },
@@ -26,7 +27,7 @@ const TABS: { value: Tab; label: string }[] = [
 ];
 
 // a prévia acompanha a aba: em Libras abre o tradutor VLibras; no convite, o modal
-const VIEW_FOR_TAB: Record<Tab, PreviewView> = { features: "panel", appearance: "launcher", libras: "libras", nudge: "nudge" };
+const VIEW_FOR_TAB: Record<Tab, PreviewView> = { activation: "launcher", features: "panel", appearance: "launcher", libras: "libras", nudge: "nudge" };
 
 const HIGHLIGHTS = [
   { icon: Eye, text: "16 recursos de leitura, cor e navegação" },
@@ -42,9 +43,13 @@ export function AccessibilityAdmin({
   sdkKey,
   hosts,
   initial,
+  verification,
+  inviteeCount,
   updatedAt,
 }: {
   hosts: string[];
+  verification: { requireVerified: boolean; hasSecret: boolean };
+  inviteeCount: number;
   projectName: string;
   projectLogo: string;
   canManage: boolean;
@@ -56,20 +61,15 @@ export function AccessibilityAdmin({
   const toast = useToast();
   const [enabled, setEnabled] = useState(initial.enabled);
   const [config, setConfig] = useState<A11yConfig>(initial.config);
-  const [studentsText, setStudentsTextRaw] = useState(initial.config.nudge.students.join("\n"));
   const [baseline, setBaseline] = useState(() => JSON.stringify({ enabled: initial.enabled, config: initial.config }));
-  const [tab, setTab] = useState<Tab>("features");
-  const [view, setView] = useState<PreviewView>("panel");
+  const [tab, setTab] = useState<Tab>("activation");
+  const [view, setView] = useState<PreviewView>("launcher");
   const [saving, startSaving] = useTransition();
 
   const patch = (fn: (c: A11yConfig) => A11yConfig) => setConfig((c) => fn(c));
-  const setStudentsText = (v: string) => {
-    setStudentsTextRaw(v);
-    patch((c) => ({ ...c, nudge: { ...c.nudge, students: parseStudentList(v) } }));
-  };
 
-  // a prévia recebe o que o SDK receberia: normalizado e sem a lista individual
-  const previewConfig = useMemo(() => publicA11yConfig(normalizeA11yConfig(config)), [config]);
+  // a prévia recebe o que o SDK receberia (normalizado, sem domínios nem lista de convidados)
+  const previewConfig = useMemo(() => publicA11yConfig(normalizeA11yConfig(config), inviteeCount > 0), [config, inviteeCount]);
   const dirty = JSON.stringify({ enabled, config }) !== baseline;
 
   function changeTab(t: Tab) {
@@ -84,7 +84,6 @@ export function AccessibilityAdmin({
       if (!r.ok) return toast("error", r.error);
       setEnabled(nextEnabled);
       setConfig(r.config);
-      setStudentsTextRaw(r.config.nudge.students.join("\n"));
       setBaseline(JSON.stringify({ enabled: nextEnabled, config: r.config }));
       toast("success", nextEnabled !== enabled ? (nextEnabled ? "Plugin ativado. Ele aparece no produto em até 1 minuto." : "Plugin desativado.") : "Configurações salvas.");
       router.refresh();
@@ -95,7 +94,6 @@ export function AccessibilityAdmin({
     const base = JSON.parse(baseline) as { enabled: boolean; config: A11yConfig };
     setEnabled(base.enabled);
     setConfig(base.config);
-    setStudentsTextRaw(base.config.nudge.students.join("\n"));
   }
 
   const featureCount = FEATURES.filter((f) => config.features[f.id]).length;
@@ -143,7 +141,7 @@ export function AccessibilityAdmin({
           <p className="font-bold">{enabled ? `Ativo em ${projectName}` : `Desligado em ${projectName}`}</p>
           <p className="text-sm text-fg-mut">
             {enabled
-              ? `O botão de acessibilidade aparece para todos os estudantes, com ${featureCount} recursos${config.nudge.enabled ? " e o convite ligado" : ""}.`
+              ? `O botão de acessibilidade aparece ${config.scope.mode === "all" ? "para todos os estudantes" : "para o público escolhido em Ativação"}, com ${featureCount} recursos${config.nudge.enabled ? " e o convite ligado" : ""}.`
               : "Ninguém vê o botão no produto. Configure abaixo, confira na prévia e ative quando estiver pronto."}
             {!sdkKey && " Este projeto ainda não tem o SDK instalado."}
           </p>
@@ -171,11 +169,14 @@ export function AccessibilityAdmin({
           <div className="mb-4">
             <Tabs tabs={TABS} value={tab} onChange={(v) => changeTab(v as Tab)} />
           </div>
+          {tab === "activation" && (
+            <ActivationTab config={config} patch={patch} hosts={hosts} canManage={canManage} verification={verification} inviteeCount={inviteeCount} />
+          )}
           {tab === "features" && <FeaturesTab config={config} patch={patch} />}
           {tab === "appearance" && <AppearanceTab config={config} patch={patch} projectLogo={projectLogo} />}
           {tab === "libras" && <LibrasTab config={config} patch={patch} projectName={projectName} hosts={hosts} />}
           {tab === "nudge" && (
-            <NudgeTab config={config} patch={patch} studentsText={studentsText} setStudentsText={setStudentsText} studentCount={config.nudge.students.length} />
+            <NudgeTab config={config} patch={patch} canManage={canManage} inviteeCount={inviteeCount} />
           )}
         </div>
 

@@ -34,6 +34,8 @@ export default async function AccessibilityPage() {
       sdkKey={sdkKey}
       hosts={hosts}
       initial={{ enabled: settings.enabled, config: settings.config }}
+      verification={{ requireVerified: settings.requireVerified, hasSecret: settings.hasSecret }}
+      inviteeCount={settings.invitees}
       updatedAt={settings.updatedAt?.toISOString() ?? null}
     />
   );

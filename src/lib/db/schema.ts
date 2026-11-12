@@ -914,9 +914,50 @@ export const accessibilitySettings = pgTable("accessibility_settings", {
   projectId: text("project_id").primaryKey().references(() => projects.id, { onDelete: "cascade" }),
   enabled: boolean("enabled").notNull().default(false),
   config: jsonb("config").notNull().default({}),
+  // verificação de identidade (HMAC do ID com este segredo, calculado no backend do cliente).
+  // Nunca vai para o navegador. Gerado na primeira vez que o painel mostra a área.
+  identitySecret: text("identity_secret"),
+  // exigir o user_hash para ler/gravar preferências e conferir a lista de convidados
+  requireVerified: boolean("require_verified").notNull().default(false),
   updatedBy: text("updated_by").references(() => users.id, { onDelete: "set null" }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * Estudantes convidados (lista individual do convite de acessibilidade). `userKey` = ID do
+ * identify ou e-mail, minúsculo. Dado sensível (LGPD): só o servidor lê; o SDK pergunta por
+ * UM estudante, o logado (/api/v1/accessibility/match). `status` acompanha o convite.
+ */
+export const accessibilityInvitees = pgTable(
+  "accessibility_invitees",
+  {
+    projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    userKey: text("user_key").notNull(),
+    name: text("name").notNull().default(""),
+    profile: text("profile"), // perfil sugerido só para este estudante (null = o do convite)
+    status: text("status").notNull().default("pending"), // pending | shown | accepted | dismissed
+    lastEventAt: timestamp("last_event_at", { withTimezone: true }),
+    createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.projectId, t.userKey] }), index("accessibility_invitees_created_idx").on(t.projectId, t.createdAt)]
+);
+
+/**
+ * Preferências de acessibilidade de cada estudante, para valerem em qualquer aparelho.
+ * `userHash` = sha256(projeto + ID): a tabela não guarda o ID em claro, então não liga
+ * diretamente uma pessoa identificada às necessidades dela.
+ */
+export const accessibilityUserPrefs = pgTable(
+  "accessibility_user_prefs",
+  {
+    projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    userHash: text("user_hash").notNull(),
+    prefs: jsonb("prefs").notNull().default({}),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.projectId, t.userHash] })]
+);
 
 export type Workspace = typeof workspaces.$inferSelect;
 export type Survey = typeof surveys.$inferSelect;

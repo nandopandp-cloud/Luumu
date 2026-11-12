@@ -20,7 +20,8 @@ painel Luumu  /accessibility                         produto do cliente
                 │ saveAccessibilityAction    │ page-effects.ts  efeitos na página│
                 ▼                            │ libras.ts (VLibras) · face-nav.ts│
    accessibility_settings (0044)  ◄── /api/v1/config (recorte público)        │
-                                  ◄── /api/v1/accessibility/match (lista)     │
+                                  ◄── /api/v1/accessibility/match (convidados)│
+                                  ◄── /api/v1/accessibility/prefs (escolhas)  │
                                              └──────────────────────────────────┘
 ```
 
@@ -30,6 +31,10 @@ painel Luumu  /accessibility                         produto do cliente
 | `src/lib/accessibility/config.ts` | configuração do projeto, `normalizeA11yConfig` (única porta de entrada) e `publicA11yConfig` (puro) |
 | `src/lib/accessibility/audience.ts` | grupos de rede/escola/turma/ano e lista individual (puro) |
 | `src/lib/accessibility/nudge.ts` | quando o convite pode reaparecer (puro) |
+| `src/lib/accessibility/scope.ts` | onde o plugin fica ativo: domínios, grupos, convidados (puro) |
+| `src/lib/accessibility/invitees.ts` | chave do estudante, leitura de lista colada/CSV, status do convite (puro) |
+| `src/lib/accessibility/verify.ts` | verificação de identidade (HMAC) e chave pseudonimizada das preferências (server-only) |
+| `src/lib/api/accessibility.ts` | validação comum das rotas do SDK com dados de um estudante |
 | `src/lib/accessibility/vlibras.ts` | VLibras: avatares, pedido de personalização no formato oficial, validação do endereço aprovado (puro) |
 | `src/lib/db/accessibility.ts` | leitura/gravação, cache de 60s por instância |
 | `src/sdk/accessibility/*` | widget no produto (`public/sdk-a11y.js`) |
@@ -38,33 +43,102 @@ painel Luumu  /accessibility                         produto do cliente
 
 ## Como o produto informa quem é o estudante
 
-O convite usa os traits do `Luumu.identify`. Os nomes aceitos (português ou inglês) estão em
-`TRAIT_ALIASES` (`audience.ts`):
+Tudo que depende do estudante usa os traits do `Luumu.identify`. Os nomes aceitos (português ou
+inglês) estão em `TRAIT_ALIASES` (`audience.ts`):
 
 ```js
 Luumu.identify({
   id: "123456", email: "ana@escola.sp.gov.br",
+  user_hash: "…",   // HMAC-SHA256(segredo do projeto, id em minúsculas), ver "Verificação"
   rede: "Rede Estadual SP", escola: "EE Prof. Ana Rosa", turma: "7º A",
   school_year: "7º ano",
 });
 ```
 
-A comparação ignora acento, caixa e espaços repetidos. Dentro de um grupo, todos os campos
-preenchidos precisam bater; dentro de um campo, qualquer valor serve; entre grupos, basta um.
+A chave do estudante é o `id` (ou, na falta dele, o `email`), em minúsculas e sem espaços
+(`userKeyFrom`). A comparação de rede/escola/turma ignora acento, caixa e espaços repetidos.
+Dentro de um grupo, todos os campos preenchidos precisam bater; dentro de um campo, qualquer
+valor serve; entre grupos, basta um.
 
 O produto também pode abrir o painel por um botão próprio:
 `Luumu.accessibility.open()`, `open("libras")` ou `open("face")`.
 
+## Onde o plugin aparece (Ativação)
+
+`config.scope` (`scope.ts`):
+
+- **Todo o projeto** (padrão): todos os domínios e todos os estudantes.
+- **Só onde eu escolher**: domínios (plataformas do projeto, nenhum marcado = todos) e, dentro
+  deles, quem casar com um grupo de rede/escola/turma/ano **ou** estiver na lista de
+  convidados (opção "Convidados da lista também recebem"). Sem grupos e sem convidados, vale
+  para todos nos domínios escolhidos.
+
+Cada camada é decidida onde custa menos e expõe menos:
+
+| Camada | Onde | Por quê |
+|---|---|---|
+| domínio | servidor, no `/config` | o host já é parte da chave de cache; fora dele o SDK nem recebe o plugin |
+| grupos | navegador | rede/escola/turma não identificam ninguém |
+| convidados | servidor, `/match`, por estudante | a lista é dado sensível |
+
+Enquanto decide, o widget fica escondido e não toca na página. Fora do escopo, as escolhas
+guardadas do estudante não são aplicadas.
+
+## Convidados
+
+Tabela `accessibility_invitees`, editada na aba Convite (as mudanças valem na hora, fora da
+barra "Salvar"):
+
+- **um a um**: ID ou e-mail, nome e perfil sugerido só para ele;
+- **em lote**: lista colada (um por linha ou separados por vírgula), CSV ou Excel (.xlsx), com
+  cabeçalho `id`/`email`/`matrícula`, `nome`, `perfil` em qualquer ordem (o perfil aceita o id
+  ou o nome mostrado, ex. "Mais foco"). Quem já está na lista é atualizado e mantém o status;
+- busca, filtro por status, seleção, "Remover todos" e um modelo CSV para baixar.
+
+**Status do convite**: Ainda não viu → Viu o convite → Aceitou / Dispensou. O SDK manda o
+desfecho para `/match` (`event`) só quando o estudante é convidado da lista. "Aceitou" não volta
+atrás.
+
+## Preferências em qualquer aparelho
+
+As escolhas do estudante ficam na conta dele (`accessibility_user_prefs`, por projeto e pela
+chave do estudante), não só no navegador:
+
+- o `localStorage` é o cache que deixa a página certa já no primeiro desenho;
+- a conta é lida **uma vez por sessão do navegador** (uma request por visita, não por página) e
+  gravada a cada mudança (com 800 ms de espera para juntar cliques seguidos);
+- a escolha mais recente vence: se outro aparelho mudou depois, a conta vale; se o estudante
+  mudou aqui antes de entrar (ou offline), as escolhas sobem para a conta. O servidor ignora uma
+  gravação mais velha que a guardada;
+- estudante não identificado: só no aparelho, nenhuma chamada ao servidor.
+
+## Verificação de identidade
+
+Sem ela, quem souber o ID de um estudante consegue pedir as preferências dele (que podem indicar
+uma deficiência) e saber se ele é convidado. Com ela, o backend do produto assina o ID:
+
+```
+user_hash = HMAC-SHA256(segredo do projeto, id em minúsculas e sem espaços)   // hex
+```
+
+e manda no `identify`. O segredo é gerado e trocado no painel (aba Ativação, só owner/admin),
+fica em `accessibility_settings.identity_secret` e nunca vai para o navegador. Com **Exigir
+verificação** ligado, `/prefs` e `/match` recusam chamadas sem assinatura válida (o widget
+continua funcionando, com as escolhas só no aparelho). Ligue a exigência depois que o produto
+já estiver enviando o `user_hash`.
+
 ## Privacidade (LGPD)
 
-- **Lista individual de estudantes sinalizados** é dado sensível: indica que uma pessoa
-  identificada tem uma necessidade de acessibilidade. Ela nunca sai no `/config` público. O
-  SDK só sabe que ela existe (`hasList`) e pergunta `POST /api/v1/accessibility/match` pelo
-  próprio estudante logado (com rate limit de 20/min por IP + key). A resposta fica 12h no
-  navegador dele.
-- **Escolhas do estudante** ficam só no `localStorage`, por projeto e por usuário (`id` ou
-  `email` do identify). Computador de escola é compartilhado, por isso a chave inclui o usuário.
-  Nenhuma escolha é enviada à Luumu.
+- **Lista de convidados** é dado sensível: indica que uma pessoa identificada tem uma
+  necessidade de acessibilidade. Ela nunca sai no `/config` público. O SDK só sabe que ela
+  existe (`hasList`) e pergunta `POST /api/v1/accessibility/match` pelo próprio estudante logado
+  (rate limit de 30/min por IP + key; com verificação, só com `user_hash` válido). A resposta
+  fica 12h no navegador dele.
+- **Escolhas do estudante** ficam na conta dele (`accessibility_user_prefs`) com a chave
+  **pseudonimizada**: `sha256(projeto + ID)`. A tabela não guarda o ID em claro ao lado das
+  necessidades. No navegador, o cache local é por projeto e por estudante (computador de escola
+  é compartilhado). Ver "Verificação de identidade" para quem pode ler.
+- Todas as rotas com dados de um estudante usam POST: o ID não vai para a URL (logs, cache).
 - **Navegação por rosto**: a imagem da câmera é processada no navegador (MediaPipe
   FaceLandmarker, baixado do jsDelivr só quando o estudante aceita). Nenhum quadro sai do
   dispositivo, e a câmera é desligada ao parar ou ao sair da página.
@@ -138,7 +212,8 @@ e `destroy()` devolve a página exatamente como estava. Algumas notas:
 
 ## Ambiente
 
-1. Aplique `drizzle/0044_accessibility.sql` no SQL Editor do Neon. Sem ela, o `/config` manda
-   o plugin desligado e `/accessibility` mostra um aviso.
+1. Aplique `drizzle/0044_accessibility.sql` no SQL Editor do Neon (três tabelas:
+   `accessibility_settings`, `accessibility_invitees`, `accessibility_user_prefs`). Sem ela, o
+   `/config` manda o plugin desligado e `/accessibility` mostra um aviso.
 2. `pnpm build:sdk` gera `public/sdk-a11y.js`, e o `prebuild` já roda esse passo.
 3. Upload de logo usa o mesmo Blob Store dos tours (`BLOB_READ_WRITE_TOKEN`). Sem ele, cole a URL.

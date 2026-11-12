@@ -90,8 +90,8 @@ export async function GET(req: Request) {
     // onde procurar nome/foto NESTE projeto/plataforma (sem a migração 0025 = automático)
     listCaptureRules(resolved.projectId).catch(() => []),
     // plugin de acessibilidade (sem a migração 0044 = desligado). Recorte público: a lista
-    // individual de estudantes sinalizados nunca sai aqui (lib/accessibility/audience.ts)
-    getAccessibilityForSdk(resolved.projectId).catch(() => null),
+    // de convidados nunca sai aqui; fora dos domínios do escopo de ativação vem null
+    getAccessibilityForSdk(resolved.projectId, host).catch(() => null),
   ]);
   // heatmaps: taxa de amostragem (cota do plano) + páginas que já têm cópia (o SDK não pergunta)
   const plan = heatmaps ? await heatmapPlan(resolved.workspaceId, resolved.projectId, host).catch(() => null) : null;

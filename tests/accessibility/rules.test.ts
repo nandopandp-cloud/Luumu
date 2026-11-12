@@ -13,7 +13,10 @@ import {
   toggleProfile,
   FEATURE_IDS,
 } from "@/lib/accessibility/features";
-import { matchesAnyGroup, matchesGroup, matchesStudentList, normalizeGroups, parseStudentList, normalizeValue } from "@/lib/accessibility/audience";
+import { matchesAnyGroup, matchesGroup, normalizeGroups, normalizeValue } from "@/lib/accessibility/audience";
+import { hostInScope, normalizeScope, scopeDecision } from "@/lib/accessibility/scope";
+import { inviteeKey, parseInvitees, parseProfile, userKeyFrom } from "@/lib/accessibility/invitees";
+import { prefsKey, userHashFor, verifyUserHash } from "@/lib/accessibility/verify";
 import { DEFAULT_A11Y_CONFIG, normalizeA11yConfig, publicA11yConfig, readableOn, safeImageUrl, librasLogoUrl, librasLook, shade } from "@/lib/accessibility/config";
 import { nudgeDue, NUDGE_RETRY_MS, parseNudgeMemo } from "@/lib/accessibility/nudge";
 import { safePersonalizationUrl, vlibrasPersonalizationJson, vlibrasRequestEmail } from "@/lib/accessibility/vlibras";
@@ -126,13 +129,83 @@ test("grupo vazio nunca casa (e é removido na normalização)", () => {
   assert.equal(matchesAnyGroup([], { rede: "x" }), false);
 });
 
-test("lista individual: IDs/e-mails normalizados e conferência por id ou e-mail", () => {
-  const list = parseStudentList(" 123 \nAna@Escola.br; 123, ,  bia@x.com ");
-  assert.deepEqual(list, ["123", "ana@escola.br", "bia@x.com"]);
-  assert.equal(matchesStudentList(list, { id: 123 }), true);
-  assert.equal(matchesStudentList(list, { email: " ANA@escola.br" }), true);
-  assert.equal(matchesStudentList(list, { id: "999", email: "outra@x.com" }), false);
-  assert.equal(matchesStudentList(list, {}), false);
+/* ---------------- escopo de ativação ---------------- */
+
+test("escopo: domínios filtram no servidor; vazio ou 'all' vale em todos", () => {
+  const sc = normalizeScope({ mode: "targeted", hosts: ["https://App.Escola.com/inicio", "app.escola.com", "lixo com espaço"] });
+  assert.deepEqual(sc.hosts, ["app.escola.com"]);
+  assert.equal(hostInScope(sc, "app.escola.com"), true);
+  assert.equal(hostInScope(sc, "outro.escola.com"), false);
+  assert.equal(hostInScope(sc, null), false);
+  assert.equal(hostInScope(normalizeScope({ mode: "all", hosts: ["a.com"] }), "b.com"), true);
+  assert.equal(hostInScope(normalizeScope({ mode: "targeted" }), "b.com"), true, "sem domínios marcados = todos");
+});
+
+test("escopo: grupos decidem no navegador; a lista de convidados pede o servidor", () => {
+  const sc = normalizeScope({ mode: "targeted", groups: [{ networks: ["Rede Aurora"] }], includeInvitees: true });
+  assert.equal(scopeDecision(sc, { rede: "rede aurora" }, true), "yes");
+  assert.equal(scopeDecision(sc, { rede: "Outra", id: "9" }, true), "ask", "pode estar na lista");
+  assert.equal(scopeDecision(sc, { rede: "Outra" }, true), "no", "sem id/e-mail não há o que perguntar");
+  assert.equal(scopeDecision(sc, { rede: "Outra", id: "9" }, false), "no", "projeto sem convidados");
+  assert.equal(scopeDecision({ ...sc, includeInvitees: false }, { id: "9" }, true), "no");
+  assert.equal(scopeDecision(normalizeScope({ mode: "targeted" }), {}, false), "yes", "só domínios: todos dentro deles");
+  assert.equal(scopeDecision(normalizeScope({ mode: "targeted", includeInvitees: true }), { id: "1" }, true), "ask", "só a lista");
+  assert.equal(scopeDecision(normalizeScope({}), {}, true), "yes");
+});
+
+/* ---------------- convidados ---------------- */
+
+test("chave do convidado: ID ou e-mail, minúsculo, sem espaços", () => {
+  assert.equal(inviteeKey(" Ana@Escola.BR "), "ana@escola.br");
+  assert.equal(inviteeKey(123), "123");
+  assert.equal(inviteeKey("Ana Souza"), "");
+  assert.equal(userKeyFrom({ id: 42, email: "x@y.com" }), "42");
+  assert.equal(userKeyFrom({ email: "X@Y.com" }), "x@y.com");
+  assert.equal(userKeyFrom({}), "");
+});
+
+test("lista colada: um por linha ou separados por vírgula, sem repetidos", () => {
+  const r = parseInvitees(" 123 \nAna@Escola.br; 123, ,  bia@x.com \n\n");
+  assert.deepEqual(r.rows.map((x) => x.key), ["123", "ana@escola.br", "bia@x.com"]);
+  assert.equal(r.duplicates, 1);
+});
+
+test("CSV com cabeçalho em qualquer ordem, aspas e perfil pelo nome", () => {
+  const csv = '\uFEFFnome,perfil,email\n"Souza, Ana",Mais conforto na leitura,ana@escola.br\nBruno,foco,bruno@escola.br\nSem chave,,\n';
+  const r = parseInvitees(csv);
+  assert.deepEqual(r.rows, [
+    { key: "ana@escola.br", name: "Souza, Ana", profile: "leitura" },
+    { key: "bruno@escola.br", name: "Bruno", profile: "foco" },
+  ]);
+  assert.deepEqual(r.invalid, []);
+});
+
+test("planilha sem cabeçalho (tabulação vinda do Excel): id, nome, perfil", () => {
+  const r = parseInvitees("123\tAna Souza\tMais foco\n456\tBruno Reis\t\nnão é id\tX\t");
+  assert.deepEqual(r.rows.map((x) => [x.key, x.name, x.profile]), [["123", "Ana Souza", "foco"], ["456", "Bruno Reis", null]]);
+  assert.deepEqual(r.invalid, ["não é id"]);
+  assert.equal(parseProfile("Tela mais calma"), "calma");
+  assert.equal(parseProfile("inexistente"), null);
+});
+
+/* ---------------- verificação de identidade ---------------- */
+
+test("user_hash: HMAC-SHA256 do ID com o segredo do projeto", () => {
+  const h = userHashFor("a11y_segredo", "123");
+  assert.match(h, /^[a-f0-9]{64}$/);
+  assert.equal(verifyUserHash("a11y_segredo", "123", h), true);
+  assert.equal(verifyUserHash("a11y_segredo", "123", h.toUpperCase()), true);
+  assert.equal(verifyUserHash("a11y_segredo", "124", h), false, "assinatura de outro estudante");
+  assert.equal(verifyUserHash("a11y_outro", "123", h), false, "segredo trocado");
+  assert.equal(verifyUserHash(null, "123", h), false);
+  assert.equal(verifyUserHash("a11y_segredo", "123", "xyz"), false);
+});
+
+test("preferências: o ID não fica em claro na chave do banco", () => {
+  const k = prefsKey("prj_1", "ana@escola.br");
+  assert.match(k, /^[a-f0-9]{64}$/);
+  assert.equal(k.includes("ana"), false);
+  assert.notEqual(prefsKey("prj_2", "ana@escola.br"), k, "a chave muda por projeto");
 });
 
 /* ---------------- configuração ---------------- */
@@ -143,7 +216,7 @@ test("normalizeA11yConfig cai no padrão com lixo e corta textos", () => {
     brand: { accent: "red", title: "x".repeat(100), logoUrl: "javascript:alert(1)" },
     launcher: { position: "top", offset: 9999 },
     libras: { avatar: "nobody", skin: "#abcdef", personalizationUrl: "http://x.com/p.json" },
-    nudge: { delay: -5, profile: "xyz", students: "1\n2" },
+    nudge: { delay: -5, profile: "xyz" },
   });
   assert.equal(c.brand.accent, DEFAULT_A11Y_CONFIG.brand.accent);
   assert.equal(c.brand.title.length, 40);
@@ -155,15 +228,14 @@ test("normalizeA11yConfig cai no padrão com lixo e corta textos", () => {
   assert.equal(c.libras.personalizationUrl, "", "só https");
   assert.equal(c.nudge.delay, 0);
   assert.equal(c.nudge.profile, null);
-  assert.deepEqual(c.nudge.students, ["1", "2"]);
 });
 
-test("recorte público nunca leva a lista individual", () => {
-  const c = normalizeA11yConfig({ nudge: { students: ["ana@escola.br"] } });
-  const pub = publicA11yConfig(c);
+test("recorte público: sem domínios e sem lista, só se há convidados", () => {
+  const c = normalizeA11yConfig({ scope: { mode: "targeted", hosts: ["app.escola.com"] } });
+  const pub = publicA11yConfig(c, true);
   assert.equal(pub.nudge.hasList, true);
-  assert.equal("students" in pub.nudge, false);
-  assert.equal(JSON.stringify(pub).includes("ana@escola.br"), false);
+  assert.equal("hosts" in pub.scope, false);
+  assert.equal(publicA11yConfig(c).nudge.hasList, false);
 });
 
 test("imagens: só https ou caminho do próprio site", () => {

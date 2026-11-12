@@ -13,11 +13,12 @@
  * Grupo = combinação (E) de redes, escolas, turmas e anos; dentro de cada campo vale
  * qualquer um dos valores (OU). Entre grupos também é OU. Ex.: [rede X] ou [escola Y + 7º A].
  *
- * Privacidade (LGPD): a lista INDIVIDUAL de estudantes sinalizados é dado sensível — indica
- * uma necessidade de acessibilidade de uma pessoa identificada. Ela nunca sai no /config
- * público: o SDK só sabe que a lista existe (`hasList`) e pergunta ao servidor por UM
- * estudante, o logado (POST /api/v1/accessibility/match). Os grupos são de turma/escola/rede
- * e não identificam ninguém, então seguem no /config e são avaliados no navegador.
+ * Privacidade (LGPD): a lista INDIVIDUAL de convidados (lib/accessibility/invitees.ts, tabela
+ * accessibility_invitees) é dado sensível — indica uma necessidade de acessibilidade de uma
+ * pessoa identificada. Ela nunca sai no /config público: o SDK só sabe que a lista existe
+ * (`hasList`) e pergunta ao servidor por UM estudante, o logado (POST
+ * /api/v1/accessibility/match). Os grupos são de turma/escola/rede e não identificam ninguém,
+ * então seguem no /config e são avaliados no navegador.
  */
 import { matchesSchoolYears, normalizeSchoolYears } from "../surveys/school-years";
 
@@ -38,7 +39,6 @@ export const TRAIT_ALIASES = {
 
 export const MAX_GROUPS = 50;
 export const MAX_VALUES_PER_FIELD = 100;
-export const MAX_STUDENTS = 5000;
 
 /** Comparação tolerante: sem acento, sem caixa, espaços colapsados ("7º A" = "7º  a"). */
 export function normalizeValue(v: unknown): string {
@@ -87,21 +87,6 @@ export function groupIsEmpty(g: AudienceGroup): boolean {
   return !g.networks.length && !g.schools.length && !g.classes.length && !g.schoolYears.length;
 }
 
-/**
- * Lista individual colada pelo cliente: IDs ou e-mails, um por linha, vírgula ou ponto e
- * vírgula. Guardada já normalizada (minúsculas, sem espaços) para a conferência ser direta.
- */
-export function parseStudentList(input: unknown): string[] {
-  const raw = Array.isArray(input) ? input.map(String).join("\n") : String(input ?? "");
-  const seen = new Set<string>();
-  for (const part of raw.split(/[\n,;\t]+/)) {
-    const v = part.trim().toLowerCase().slice(0, 200);
-    if (v) seen.add(v);
-    if (seen.size >= MAX_STUDENTS) break;
-  }
-  return [...seen];
-}
-
 /** Valores de um trait, aceitando os apelidos e listas (professor com várias turmas). */
 export function traitValues(traits: Record<string, unknown>, kind: keyof typeof TRAIT_ALIASES): string[] {
   const out: string[] = [];
@@ -130,15 +115,6 @@ export function matchesGroup(group: AudienceGroup, traits: Record<string, unknow
 
 export function matchesAnyGroup(groups: AudienceGroup[], traits: Record<string, unknown>): boolean {
   return groups.some((g) => matchesGroup(g, traits));
-}
-
-/** Lista individual (servidor): o ID ou o e-mail do identify está na lista? */
-export function matchesStudentList(list: string[], who: { id?: unknown; email?: unknown }): boolean {
-  if (!list.length) return false;
-  const keys = [who.id, who.email].map((v) => (typeof v === "string" || typeof v === "number" ? String(v).trim().toLowerCase() : "")).filter(Boolean);
-  if (!keys.length) return false;
-  const set = new Set(list);
-  return keys.some((k) => set.has(k));
 }
 
 /** Resumo de um grupo para o painel: "Rede Estadual SP · EE Ana Rosa · 7º A". */

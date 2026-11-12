@@ -1,23 +1,22 @@
 "use client";
 
 import {
-  Accessibility, Bolt, Building2, CaseSensitive, Contrast, Droplet, Eye, GraduationCap, Hand, Heading, Info, Keyboard, Link2, Lock, Megaphone,
-  Moon, MousePointer2, Palette, Pause, Plus, Rows3, ScanFace, ScanLine, School, SlidersHorizontal, Sparkles, Sun, SunMoon,
-  Trash2, Type, Users, Volume2, ZoomIn, Hash, UserRound,
+  Accessibility, Bolt, Building2, CaseSensitive, Contrast, Droplet, Eye, Hand, Heading, Keyboard, Link2, Lock, Megaphone,
+  Moon, MousePointer2, Palette, Pause, Rows3, ScanFace, ScanLine, SlidersHorizontal, Sparkles, Sun, SunMoon,
+  Type, Users, Volume2, ZoomIn,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/Card";
 import { Field, Input, Select, Textarea } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
-import { CodeBlock } from "@/components/ui/CodeBlock";
-import { SchoolYearPicker } from "@/components/surveys/SchoolYearPicker";
 import { FEATURE_GROUPS, FEATURES, PROFILES, profileAvailable, type FeatureId, type ProfileId } from "@/lib/accessibility/features";
 import {
   ACCENT_PRESETS, LAUNCHER_POSITIONS, NUDGE_FREQUENCIES,
   type A11yConfig, type LauncherPosition,
 } from "@/lib/accessibility/config";
-import { MAX_STUDENTS, type AudienceGroup } from "@/lib/accessibility/audience";
-import { ChipInput, ColorField, ImageField, Pills, SectionTitle, ToggleRow } from "./controls";
+import { ColorField, ImageField, Pills, SectionTitle, ToggleRow } from "./controls";
+import { GroupsEditor, IdentifyHint } from "./GroupsEditor";
+import { InviteesManager } from "./InviteesManager";
 import { LibrasTab } from "./LibrasTab";
 
 type Patch = (fn: (c: A11yConfig) => A11yConfig) => void;
@@ -226,37 +225,13 @@ export { LibrasTab };
 
 /* ================================================================ Convite */
 
-const IDENTIFY_SNIPPET = `// no produto, depois do login do estudante
-Luumu.identify({
-  id: "123456",               // ou e-mail: confere com a lista individual
-  email: "ana@escola.sp.gov.br",
-  rede: "Rede Estadual SP",   // também aceita: network
-  escola: "EE Prof. Ana Rosa", // também aceita: school
-  turma: "7º A",              // também aceita: class, classroom
-  school_year: "7º ano",
-});`;
-
-let groupSeq = 0;
-const newGroup = (): AudienceGroup => ({ id: `g${Date.now().toString(36)}${groupSeq++}`, networks: [], schools: [], classes: [], schoolYears: [] });
-
-export function NudgeTab({
-  config,
-  patch,
-  studentsText,
-  setStudentsText,
-  studentCount,
-}: {
-  config: A11yConfig;
-  patch: Patch;
-  studentsText: string;
-  setStudentsText: (v: string) => void;
-  studentCount: number;
-}) {
+export function NudgeTab({ config, patch, canManage, inviteeCount }: { config: A11yConfig; patch: Patch; canManage: boolean; inviteeCount: number }) {
   const n = config.nudge;
   const nudge = (p: Partial<A11yConfig["nudge"]>) => patch((c) => ({ ...c, nudge: { ...c.nudge, ...p } }));
-  const setGroup = (id: string, p: Partial<AudienceGroup>) => nudge({ groups: n.groups.map((g) => (g.id === id ? { ...g, ...p } : g)) });
   const targeted = n.audience === "targeted";
-  const reach = targeted ? `${n.groups.length} ${n.groups.length === 1 ? "grupo" : "grupos"} e ${studentCount} ${studentCount === 1 ? "estudante" : "estudantes"} na lista` : "todos os estudantes";
+  const reach = targeted
+    ? `${n.groups.length} ${n.groups.length === 1 ? "grupo" : "grupos"} e ${inviteeCount.toLocaleString("pt-BR")} ${inviteeCount === 1 ? "convidado" : "convidados"} da lista`
+    : "todos os estudantes com o plugin";
 
   return (
     <div className="flex flex-col gap-4">
@@ -269,12 +244,17 @@ export function NudgeTab({
         <ToggleRow title="Mostrar o convite" description={n.enabled ? `Ativo para ${reach}.` : "Desligado: ninguém vê o convite."} checked={n.enabled} onChange={(enabled) => nudge({ enabled })} />
       </Card>
 
+      <Card>
+        <SectionTitle icon={<Users className="size-4.5" />} title="Convidados" description="Estudantes que recebem o convite, um a um ou em lote. Cada um pode ter o próprio perfil sugerido." />
+        <InviteesManager canManage={canManage} />
+      </Card>
+
       <Card className={cn(!n.enabled && "opacity-60")}>
-        <SectionTitle icon={<Users className="size-4.5" />} title="Quem recebe" description="Sinalize estudantes por rede, escola, turma e ano — ou por uma lista individual." />
+        <SectionTitle icon={<Building2 className="size-4.5" />} title="Quem mais recebe" description="Além dos convidados da lista, o convite pode ir para grupos inteiros ou para todos." />
         <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Público do convite">
           {[
-            { v: "targeted" as const, t: "Estudantes sinalizados", d: "Só quem estiver nos grupos ou na lista abaixo." },
-            { v: "all" as const, t: "Todos os estudantes", d: "Qualquer estudante que acessar o produto." },
+            { v: "targeted" as const, t: "Convidados e grupos", d: "Os convidados da lista e quem estiver nos grupos abaixo." },
+            { v: "all" as const, t: "Todos os estudantes", d: "Qualquer estudante que tenha o plugin." },
           ].map((o) => (
             <button
               key={o.v}
@@ -289,79 +269,10 @@ export function NudgeTab({
             </button>
           ))}
         </div>
-
         {targeted && (
           <div className="mt-5 flex flex-col gap-5">
-            <div>
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <p className="text-sm font-semibold text-fg-soft">Grupos</p>
-                <span className="text-xs text-fg-mut">Dentro do grupo, todos os campos preenchidos precisam bater. Entre grupos, basta um.</span>
-              </div>
-              <div className="flex flex-col gap-3">
-                {n.groups.map((g, i) => (
-                  <div key={g.id} className="rounded-2xl border border-line bg-bg-sunken/50 p-4">
-                    <div className="mb-3 flex items-center justify-between">
-                      <span className="text-xs font-bold uppercase tracking-[0.12em] text-fg-mut">Grupo {i + 1}</span>
-                      <button type="button" onClick={() => nudge({ groups: n.groups.filter((x) => x.id !== g.id) })} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-fg-mut hover:text-erro" aria-label={`Remover grupo ${i + 1}`}>
-                        <Trash2 className="size-3.5" /> Remover
-                      </button>
-                    </div>
-                    <div className="grid gap-3">
-                      <Field label="Redes" hint="Ex.: Rede Estadual SP. Vazio = qualquer rede.">
-                        <ChipInput label="Redes" values={g.networks} onChange={(networks) => setGroup(g.id, { networks })} placeholder="Digite e tecle Enter" />
-                      </Field>
-                      <Field label="Escolas">
-                        <ChipInput label="Escolas" values={g.schools} onChange={(schools) => setGroup(g.id, { schools })} placeholder="Ex.: EE Prof. Ana Rosa" />
-                      </Field>
-                      <Field label="Turmas">
-                        <ChipInput label="Turmas" values={g.classes} onChange={(classes) => setGroup(g.id, { classes })} placeholder="Ex.: 7º A, 8º B" />
-                      </Field>
-                      <Field label="Anos escolares">
-                        <SchoolYearPicker selected={g.schoolYears} onChange={(schoolYears) => setGroup(g.id, { schoolYears })} />
-                      </Field>
-                    </div>
-                  </div>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => nudge({ groups: [...n.groups, newGroup()] })}
-                  className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-line-strong py-3 text-sm font-semibold text-fg-soft transition hover:border-accent hover:text-accent"
-                >
-                  <Plus className="size-4" /> Adicionar grupo
-                </button>
-                {n.groups.some((g) => !g.networks.length && !g.schools.length && !g.classes.length && !g.schoolYears.length) && (
-                  <p className="text-xs text-fg-mut">Grupos sem nenhum critério são ignorados ao salvar (eles alcançariam todo mundo).</p>
-                )}
-              </div>
-            </div>
-
-            <Field
-              label="Lista individual"
-              hint={`IDs ou e-mails, um por linha (ou separados por vírgula). ${studentCount} ${studentCount === 1 ? "estudante" : "estudantes"} · máx. ${MAX_STUDENTS.toLocaleString("pt-BR")}.`}
-              action={<Badge tone="success" dot={false}><Lock className="mr-0.5 size-3" /> Nunca vai para o navegador</Badge>}
-            >
-              <Textarea rows={5} value={studentsText} onChange={(e) => setStudentsText(e.target.value)} placeholder={"123456\nana@escola.sp.gov.br\n…"} className="font-mono text-xs" spellCheck={false} />
-            </Field>
-            <p className="-mt-2 flex gap-2 text-xs leading-relaxed text-fg-mut">
-              <Info className="mt-0.5 size-3.5 shrink-0" />
-              Indicar que um estudante precisa de acessibilidade é dado sensível (LGPD). A lista fica só no servidor: o produto pergunta
-              “este estudante está na lista?” apenas para quem está logado, e nada sobre a lista aparece no código da página.
-            </p>
-
-            <div>
-              <p className="mb-2 flex items-center gap-2 text-sm font-semibold text-fg-soft">
-                <School className="size-4" /> Como o produto informa rede, escola e turma
-              </p>
-              <CodeBlock code={IDENTIFY_SNIPPET} lang="js" />
-              <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-fg-mut">
-                <span className="inline-flex items-center gap-1"><Building2 className="size-3" /> rede/network</span>·
-                <span className="inline-flex items-center gap-1"><School className="size-3" /> escola/school</span>·
-                <span className="inline-flex items-center gap-1"><Users className="size-3" /> turma/class</span>·
-                <span className="inline-flex items-center gap-1"><GraduationCap className="size-3" /> school_year</span>·
-                <span className="inline-flex items-center gap-1"><Hash className="size-3" /> id</span>·
-                <span className="inline-flex items-center gap-1"><UserRound className="size-3" /> email</span>
-              </div>
-            </div>
+            <GroupsEditor groups={n.groups} onChange={(groups) => nudge({ groups })} emptyHint="Sem grupos: só os convidados da lista recebem o convite." />
+            <IdentifyHint />
           </div>
         )}
       </Card>

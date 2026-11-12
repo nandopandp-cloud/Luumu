@@ -5,11 +5,13 @@
  * o /config passam por ela, então um campo novo com valor ausente ou inválido cai no padrão
  * em vez de quebrar o SDK nos sites dos clientes.
  *
- * `publicA11yConfig` é o recorte que vai para o navegador do estudante (/config): sem a lista
- * individual de estudantes sinalizados (ver audience.ts, "Privacidade").
+ * `publicA11yConfig` é o recorte que vai para o navegador do estudante (/config). A lista de
+ * convidados não faz parte da configuração: mora em accessibility_invitees e o navegador só
+ * sabe se ela existe (ver audience.ts, "Privacidade").
  */
 import { FEATURE_IDS, PROFILE_IDS, isProfileId, type FeatureId, type ProfileId } from "./features";
-import { normalizeGroups, parseStudentList, type AudienceGroup } from "./audience";
+import { normalizeGroups, type AudienceGroup } from "./audience";
+import { DEFAULT_SCOPE, normalizeScope, type ActivationScope } from "./scope";
 import { HAIR_COLORS, SKIN_TONES, VLIBRAS_AVATARS, safePersonalizationUrl, type VlibrasAvatar, type VlibrasLook } from "./vlibras";
 
 export type LauncherPosition = "bottom-right" | "bottom-left" | "middle-right" | "middle-left";
@@ -34,11 +36,9 @@ export interface LibrasConfig {
 
 export interface NudgeConfig {
   enabled: boolean;
-  /** "all" = todo estudante; "targeted" = só grupos e/ou lista individual */
+  /** "all" = todo estudante com o plugin; "targeted" = só grupos e/ou convidados da lista */
   audience: "all" | "targeted";
   groups: AudienceGroup[];
-  /** lista individual (IDs/e-mails). NUNCA vai para o /config público. */
-  students: string[];
   title: string;
   message: string;
   cta: string;
@@ -51,6 +51,8 @@ export interface NudgeConfig {
 }
 
 export interface A11yConfig {
+  /** onde o plugin fica ativo (lib/accessibility/scope.ts) */
+  scope: ActivationScope;
   brand: {
     title: string;
     subtitle: string;
@@ -74,9 +76,10 @@ export interface A11yConfig {
   nudge: NudgeConfig;
 }
 
-/** O que o SDK recebe: sem a lista individual, só se ela existe. */
-export type PublicA11yConfig = Omit<A11yConfig, "nudge"> & {
-  nudge: Omit<NudgeConfig, "students"> & { hasList: boolean };
+/** O que o SDK recebe: sem os domínios (filtrados no servidor) e sabendo só se há convidados. */
+export type PublicA11yConfig = Omit<A11yConfig, "nudge" | "scope"> & {
+  scope: Omit<ActivationScope, "hosts">;
+  nudge: NudgeConfig & { hasList: boolean };
 };
 
 export const LAUNCHER_POSITIONS: { value: LauncherPosition; label: string }[] = [
@@ -95,9 +98,10 @@ export const NUDGE_FREQUENCIES: { value: NudgeFrequency; label: string; hint: st
 export const ACCENT_PRESETS = ["#4F46E5", "#6B2BD9", "#0E7490", "#0F766E", "#15803D", "#B45309", "#BE123C", "#111827"];
 
 export const DEFAULT_A11Y_CONFIG: A11yConfig = {
+  scope: DEFAULT_SCOPE,
   brand: {
     title: "Acessibilidade",
-    subtitle: "Ajuste a plataforma do seu jeito. Suas escolhas ficam salvas neste dispositivo.",
+    subtitle: "Ajuste a plataforma do seu jeito. Suas escolhas ficam salvas na sua conta.",
     accent: "#4F46E5",
     logoUrl: "",
     theme: "light",
@@ -127,7 +131,6 @@ export const DEFAULT_A11Y_CONFIG: A11yConfig = {
     enabled: false,
     audience: "targeted",
     groups: [],
-    students: [],
     title: "Sua experiência pode ficar ainda melhor",
     message: "Separamos recursos de acessibilidade que deixam a leitura e a navegação mais confortáveis. Quer experimentar?",
     cta: "Ativar recursos",
@@ -174,6 +177,7 @@ export function normalizeA11yConfig(input: unknown): A11yConfig {
   const offset = typeof launcher.offset === "number" && Number.isFinite(launcher.offset) ? Math.round(Math.min(200, Math.max(8, launcher.offset))) : d.launcher.offset;
 
   return {
+    scope: normalizeScope(o.scope),
     brand: {
       title: text(brand.title, d.brand.title, 40),
       subtitle: optText(brand.subtitle, d.brand.subtitle, 160),
@@ -206,7 +210,6 @@ export function normalizeA11yConfig(input: unknown): A11yConfig {
       enabled: bool(nudge.enabled, d.nudge.enabled),
       audience: oneOf(nudge.audience, ["all", "targeted"] as const, d.nudge.audience),
       groups: normalizeGroups(nudge.groups),
-      students: parseStudentList(nudge.students),
       title: text(nudge.title, d.nudge.title, 80),
       message: text(nudge.message, d.nudge.message, 280),
       cta: text(nudge.cta, d.nudge.cta, 30),
@@ -218,10 +221,11 @@ export function normalizeA11yConfig(input: unknown): A11yConfig {
   };
 }
 
-/** Recorte para o navegador: tira a lista individual e garante perfis com recurso disponível. */
-export function publicA11yConfig(config: A11yConfig): PublicA11yConfig {
-  const { students, ...nudge } = config.nudge;
-  return { ...config, nudge: { ...nudge, hasList: students.length > 0 } };
+/** Recorte para o navegador. `hasInvitees`: o projeto tem convidados na lista (contagem do banco). */
+export function publicA11yConfig(config: A11yConfig, hasInvitees = false): PublicA11yConfig {
+  const { hosts: _hosts, ...scope } = config.scope;
+  void _hosts;
+  return { ...config, scope, nudge: { ...config.nudge, hasList: hasInvitees } };
 }
 
 /** Logo que vai na camisa do avatar (vazio = camisa lisa). */

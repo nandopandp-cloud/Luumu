@@ -93,6 +93,7 @@ luumu/
 │   │   │   ├── v1/                   API PÚBLICA usada pelo SDK (CORS + chave do projeto):
 │   │   │   │                         config, collect, events, responses, surveys, tours,
 │   │   │   │                         builder, heatmaps, analytics, avatars, accessibility
+│   │   │                         (match: convidados; prefs: escolhas por estudante)
 │   │   │   └── …                     API INTERNA do painel: exports (analytics, reports,
 │   │   │                             product-report), uploads (logo, avatar, tours), search,
 │   │   │                             usage, events/status, cron/reports
@@ -147,7 +148,9 @@ luumu/
 │   │   │                             frequência, render do card, token, sdk-version.ts (gerado)
 │   │   ├── heatmaps/                 core.ts (limites, compactação), draw.ts (render)
 │   │   ├── accessibility/            features (recursos, perfis), config, audience (convite),
-│   │   │                             nudge (frequência), vlibras (Libras pelo gov.br)
+│   │   │                             nudge (frequência), vlibras (Libras pelo gov.br),
+│   │   │                             scope (onde fica ativo), invitees (convidados),
+│   │   │                             verify (assinatura do ID, server-only)
 │   │   ├── analytics/                core, derive (métricas), selectors, identity-filter,
 │   │   │                             svg-avatar, svg-parts (avatar em peças), export
 │   │   ├── insights/                 análise de temas, perguntas (regra + IA), contexto da IA
