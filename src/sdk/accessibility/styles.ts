@@ -61,7 +61,9 @@ button:focus-visible,[tabindex]:focus-visible,a:focus-visible{outline:3px solid 
 /* rótulo: dica ao lado do botão em foco ou sob o mouse */
 .lb-label{position:absolute;right:calc(100% + 18px);top:50%;transform:translate(6px,-50%);background:var(--lb-surface-solid);color:var(--lb-surface-ink);border:1px solid var(--lb-line);box-shadow:0 10px 24px var(--lb-shade);padding:8px 13px;border-radius:12px;font-size:14px;font-weight:700;letter-spacing:.01em;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .15s,transform .15s}
 .launcher.left .lb-label{right:auto;left:calc(100% + 18px);transform:translate(-6px,-50%)}
-.lb:hover .lb-label,.lb:focus-visible .lb-label,.launcher.labels .lb-main .lb-label{opacity:1;transform:translate(0,-50%)}
+/* com o grupo aberto (mouse em cima ou foco pelo teclado), todos os atalhos mostram o nome */
+.launcher:hover .lb-label,.launcher:focus-within .lb-label,.launcher.labels .lb-main .lb-label{opacity:1;transform:translate(0,-50%)}
+.launcher:hover .lb-x .lb-label,.launcher:focus-within .lb-x .lb-label{transition-delay:.08s}
 @media (max-width:520px){.lb,.lb-x{width:54px;height:54px}}
 
 /* ---------- painel (layout de referência) ----------
