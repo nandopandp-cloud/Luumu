@@ -330,6 +330,11 @@ sinal ──► sdk-libras3d.js (Three.js): esqueleto do VLibras ──retarget�
 - Logo da camisa: a imagem precisa permitir CORS (as enviadas pelo painel permitem); sem isso a
   camisa aparece sem logo.
 - Sem WebGL: o estudante vê "Não foi possível abrir o tradutor de Libras agora." e o recurso desliga.
+- Janela do estudante: arrastar pela barra (ou alça ⠿ + setas) move; o canto inferior direito (ou
+  setas nele) redimensiona (mín. 240×300, até a tela); arrastar no intérprete (ou setas com ele em
+  foco) gira o ângulo (±50° de lado, inclinação leve), "De frente"/duplo clique volta. Posição,
+  tamanho e ângulo ficam em `localStorage` (`luumu_libras3d_janela`) do site; na prévia do painel
+  nada é guardado.
 - Limitações conhecidas: contatos de mão no rosto podem ficar alguns centímetros fora (corpo
   diferente do Ícaro); os ossos de pálpebras e lábios do VLibras ainda não são transferidos.
 

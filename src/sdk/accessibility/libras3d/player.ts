@@ -72,8 +72,10 @@ const CSS = `
   border-radius:22px;overflow:hidden;background:#fff;font:500 13px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#1B1838;
   box-shadow:0 26px 60px -20px rgba(30,20,80,.55),0 0 0 1px rgba(30,27,75,.08)}
 .win.left{left:20px}.win.right{right:20px}
-.win.big{width:min(560px,calc(100vw - 24px));height:min(720px,calc(100vh - 40px))}
-header{display:flex;align-items:center;gap:6px;padding:8px 8px 8px 12px;background:var(--brand,#5B2BD9);color:#fff}
+.win.free{left:auto;right:auto;bottom:auto}
+header{display:flex;align-items:center;gap:6px;padding:8px 8px 8px 10px;background:var(--brand,#5B2BD9);color:#fff;cursor:move;touch-action:none;user-select:none;-webkit-user-select:none}
+header .move{width:24px;background:transparent;cursor:move}
+header .move:hover{background:rgba(255,255,255,.16)}
 header b{flex:1;font-weight:800;font-size:14px}
 header b small{font-weight:600;font-size:10px;opacity:.8;margin-left:6px;padding:2px 6px;border-radius:99px;background:rgba(255,255,255,.18);letter-spacing:.04em}
 button{font:inherit;cursor:pointer;border:0}
@@ -82,7 +84,15 @@ header button:hover{background:rgba(255,255,255,.28)}
 button:focus-visible{outline:3px solid #fff;outline-offset:1px}
 .stage{position:relative;flex:1;min-height:0;background:var(--bg)}
 canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
-.cap{position:absolute;left:10px;right:10px;bottom:10px;padding:8px 10px;border-radius:12px;background:rgba(255,255,255,.9);box-shadow:0 6px 20px -12px rgba(40,20,90,.5);font-size:12.5px}
+.stage{cursor:grab;touch-action:none;outline:none}
+.stage.turning{cursor:grabbing}
+.stage:focus-visible{box-shadow:inset 0 0 0 3px var(--brand,#5B2BD9)}
+.front{position:absolute;top:10px;left:10px;z-index:2;display:inline-flex;align-items:center;gap:5px;padding:6px 10px;border-radius:99px;background:rgba(255,255,255,.92);color:#1B1838;font-weight:700;font-size:11.5px;box-shadow:0 4px 14px -6px rgba(40,20,90,.5)}
+.front[hidden]{display:none}
+.tip{position:absolute;top:10px;right:10px;z-index:2;padding:5px 9px;border-radius:99px;background:rgba(255,255,255,.85);color:#4A4766;font-size:11px;font-weight:600;pointer-events:none;transition:opacity .4s}
+.grip{position:absolute;right:3px;bottom:3px;z-index:3;width:22px;height:22px;border-radius:7px;background:rgba(255,255,255,.9);color:#4A4766;display:grid;place-items:center;cursor:nwse-resize;touch-action:none;box-shadow:0 2px 8px -3px rgba(40,20,90,.45)}
+.grip:focus-visible,.front:focus-visible,.move:focus-visible{outline:3px solid var(--brand,#5B2BD9);outline-offset:1px}
+.cap{position:absolute;left:10px;right:30px;bottom:10px;padding:8px 10px;border-radius:12px;background:rgba(255,255,255,.9);box-shadow:0 6px 20px -12px rgba(40,20,90,.5);font-size:12.5px}
 .cap b{display:block;font-size:14px;font-weight:800;min-height:1.3em}
 .cap span{color:#6B6884}
 .bar{height:3px;margin-top:6px;border-radius:3px;background:rgba(91,43,217,.15);overflow:hidden}
@@ -98,6 +108,9 @@ const IC = {
   pause: '<svg width="14" height="14" viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1.5" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="1.5" fill="currentColor"/></svg>',
   play: '<svg width="14" height="14" viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z" fill="currentColor"/></svg>',
   expand: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>',
+  move: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>',
+  grip: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M21 11 11 21M21 4 4 21M21 18l-3 3"/></svg>',
+  front: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>',
   close: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
 };
 
@@ -115,20 +128,112 @@ function create(opts: Libras3dOptions): Libras3dPlayer {
   const shadow = host.attachShadow({ mode: "open" });
   shadow.innerHTML = `<style>${CSS}</style>
     <div class="win" role="dialog" aria-label="Intérprete de Libras">
-      <header><b>Libras<small>BETA</small></b>
+      <header><button type="button" class="move" data-a="move" aria-label="Mover janela (use as setas)" title="Arraste para mover">${IC.move}</button><b>Libras<small>BETA</small></b>
         <button type="button" data-a="pause" aria-label="Pausar" title="Pausar">${IC.pause}</button>
         <button type="button" data-a="speed" aria-label="Velocidade 1x" title="Velocidade">1×</button>
         <button type="button" data-a="expand" aria-label="Expandir" title="Expandir">${IC.expand}</button>
         <button type="button" data-a="close" aria-label="Fechar Libras" title="Fechar">${IC.close}</button>
       </header>
-      <div class="stage"><div class="load">Carregando o intérprete…</div>
+      <div class="stage" tabindex="0" role="img" aria-label="Intérprete de Libras. Arraste ou use as setas para girar.">
+        <div class="load">Carregando o intérprete…</div>
+        <button type="button" class="front" data-a="front" hidden>${IC.front} De frente</button>
+        <span class="tip">Arraste para girar</span>
         <div class="cap" aria-live="polite"><b></b><span></span><div class="bar"><i></i></div></div>
       </div>
+      <button type="button" class="grip" data-a="grip" aria-label="Redimensionar janela (use as setas)" title="Arraste para redimensionar">${IC.grip}</button>
     </div><div class="hl"></div>`;
   const $ = <T extends Element>(s: string) => shadow.querySelector(s) as T;
   const win = $<HTMLElement>(".win"), stageEl = $<HTMLElement>(".stage"), loadEl = $<HTMLElement>(".load");
   const capWord = $<HTMLElement>(".cap b"), capHint = $<HTMLElement>(".cap span"), barEl = $<HTMLElement>(".bar i"), hl = $<HTMLElement>(".hl");
+  const frontBtn = $<HTMLButtonElement>(".front"), tipEl = $<HTMLElement>(".tip"), headerEl = $<HTMLElement>("header");
   document.body.appendChild(host);
+
+  /* janela livre: posição e tamanho escolhidos pelo estudante, guardados neste navegador */
+  const WIN_KEY = "luumu_libras3d_janela";
+  const MIN_W = 240, MIN_H = 300, BIG_W = 560, BIG_H = 720;
+  type Box = { x: number; y: number; w: number; h: number };
+  let box: Box | null = null;
+  let beforeBig: Box | null = null;
+  let saved: { box?: Box; yaw?: number; pitch?: number } = {};
+  if (!opts.preview) {
+    try { saved = JSON.parse(localStorage.getItem(WIN_KEY) || "{}") || {}; } catch { saved = {}; }
+  }
+  function clampBox(b: Box): Box {
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const w = Math.max(MIN_W, Math.min(b.w, vw - 16)), h = Math.max(MIN_H, Math.min(b.h, vh - 16));
+    return { w, h, x: Math.max(8, Math.min(b.x, vw - w - 8)), y: Math.max(8, Math.min(b.y, vh - h - 8)) };
+  }
+  function currentBox(): Box {
+    if (box) return box;
+    const r = win.getBoundingClientRect();
+    return { x: r.left, y: r.top, w: r.width, h: r.height };
+  }
+  function applyBox(b: Box | null) {
+    box = b ? clampBox(b) : null;
+    win.classList.toggle("free", !!box);
+    for (const [k, v] of [["left", box?.x], ["top", box?.y], ["width", box?.w], ["height", box?.h]] as const) win.style[k] = v === undefined ? "" : `${Math.round(v)}px`;
+  }
+  function saveWin() {
+    if (opts.preview) return;
+    try { localStorage.setItem(WIN_KEY, JSON.stringify({ box: box ?? undefined, yaw, pitch })); } catch { /* armazenamento bloqueado: vale só nesta página */ }
+  }
+  if (saved.box && typeof saved.box.x === "number") applyBox(saved.box);
+  const onViewport = () => { if (box) applyBox(box); };
+  window.addEventListener("resize", onViewport);
+
+  // arrastar pela barra de título (os botões continuam clicáveis)
+  let drag: { id: number; sx: number; sy: number; b: Box; mode: "move" | "size" | "turn"; yaw: number; pitch: number } | null = null;
+  function startDrag(e: PointerEvent, mode: "move" | "size" | "turn", el: HTMLElement) {
+    if (e.button !== 0) return;
+    drag = { id: e.pointerId, sx: e.clientX, sy: e.clientY, b: currentBox(), mode, yaw, pitch };
+    el.setPointerCapture(e.pointerId);
+    if (mode === "turn") { stageEl.classList.add("turning"); tipEl.style.opacity = "0"; }
+    e.preventDefault();
+  }
+  function moveDrag(e: PointerEvent) {
+    if (!drag || e.pointerId !== drag.id) return;
+    const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
+    if (drag.mode === "move") applyBox({ ...drag.b, x: drag.b.x + dx, y: drag.b.y + dy });
+    else if (drag.mode === "size") applyBox({ ...drag.b, w: drag.b.w + dx, h: drag.b.h + dy });
+    else setAngle(drag.yaw - dx * 0.008, drag.pitch + dy * 0.005, false);
+  }
+  function endDrag(e: PointerEvent) {
+    if (!drag || e.pointerId !== drag.id) return;
+    stageEl.classList.remove("turning");
+    drag = null;
+    saveWin();
+  }
+  headerEl.addEventListener("pointerdown", (e) => {
+    const b = (e.target as Element).closest("button");
+    if (b && b.dataset.a !== "move") return;
+    startDrag(e, "move", headerEl);
+  });
+  const gripEl = $<HTMLElement>(".grip");
+  gripEl.addEventListener("pointerdown", (e) => startDrag(e, "size", gripEl));
+  stageEl.addEventListener("pointerdown", (e) => {
+    if ((e.target as Element).closest("button")) return;
+    startDrag(e, "turn", stageEl);
+  });
+  for (const el of [headerEl, gripEl, stageEl]) {
+    el.addEventListener("pointermove", moveDrag);
+    el.addEventListener("pointerup", endDrag);
+    el.addEventListener("pointercancel", endDrag);
+  }
+  stageEl.addEventListener("dblclick", () => setAngle(0, 0));
+  // teclado: setas na alça de mover, no canto de redimensionar e no intérprete (girar)
+  const ARROWS: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+  shadow.addEventListener("keydown", (ev) => {
+    const e = ev as KeyboardEvent;
+    const d = ARROWS[e.key];
+    if (!d) return;
+    const t = e.target as HTMLElement;
+    const step = e.shiftKey ? 60 : 20;
+    if (t.dataset?.a === "move") { const b = currentBox(); applyBox({ ...b, x: b.x + d[0] * step, y: b.y + d[1] * step }); saveWin(); }
+    else if (t.dataset?.a === "grip") { const b = currentBox(); applyBox({ ...b, w: b.w + d[0] * step, h: b.h + d[1] * step }); saveWin(); }
+    else if (t === stageEl) setAngle(yaw - d[0] * 0.12, pitch + d[1] * 0.06);
+    else return;
+    e.preventDefault();
+  });
   const hint = opts.preview ? "Prévia: na página, o estudante clica num texto para traduzir." : "Clique num texto da página (ou selecione um trecho) para traduzir.";
   capHint.textContent = hint;
   function applyChrome() {
@@ -173,9 +278,25 @@ function create(opts: Libras3dOptions): Libras3dPlayer {
     let dist = (current.top - current.bottom) / 2 / Math.tan(vfov / 2);
     const hfov = 2 * Math.atan(Math.tan(vfov / 2) * camera.aspect);
     dist = Math.max(dist, 80 / 2 / Math.tan(hfov / 2));
+    camDist = dist;
+    placeCamera();
+  }
+  /* ângulo escolhido pelo estudante: giro (yaw) limitado para não ficar de costas e inclinação leve */
+  const YAW = 0.9, PITCH: [number, number] = [-0.25, 0.35];
+  let yaw = 0, pitch = 0, camDist = 0;
+  function placeCamera() {
+    if (!current || !camDist) return;
     const cy = (current.top + current.bottom) / 2;
-    camera.position.set(current.head.x, cy + 4, current.head.z + dist);
-    camera.lookAt(current.head.x, cy, current.head.z);
+    const t = new THREE.Vector3(current.head.x, cy, current.head.z);
+    camera.position.set(t.x + Math.sin(yaw) * Math.cos(pitch) * camDist, t.y + 4 + Math.sin(pitch) * camDist, t.z + Math.cos(yaw) * Math.cos(pitch) * camDist);
+    camera.lookAt(t);
+  }
+  function setAngle(y: number, p: number, persist = true) {
+    yaw = Math.max(-YAW, Math.min(YAW, y));
+    pitch = Math.max(PITCH[0], Math.min(PITCH[1], p));
+    placeCamera();
+    frontBtn.hidden = Math.abs(yaw) < 0.02 && Math.abs(pitch) < 0.02;
+    if (persist) saveWin();
   }
   const ro = new ResizeObserver(fit);
   ro.observe(stageEl);
@@ -448,9 +569,20 @@ function create(opts: Libras3dOptions): Libras3dPlayer {
       b.setAttribute("aria-label", `Velocidade ${st.speed}x`);
     }
     if (a === "expand") {
-      const big = win.classList.toggle("big");
-      b.setAttribute("aria-label", big ? "Reduzir" : "Expandir");
+      const b0 = currentBox();
+      if (beforeBig) {
+        applyBox(beforeBig);
+        beforeBig = null;
+      } else {
+        beforeBig = b0;
+        const w = Math.min(BIG_W, window.innerWidth - 16), h = Math.min(BIG_H, window.innerHeight - 16);
+        applyBox({ w, h, x: b0.x + b0.w / 2 - w / 2, y: b0.y + b0.h - h });
+      }
+      b.setAttribute("aria-label", beforeBig ? "Reduzir" : "Expandir");
+      b.title = beforeBig ? "Reduzir" : "Expandir";
+      saveWin();
     }
+    if (a === "front") { setAngle(0, 0); stageEl.focus(); }
   });
 
   /* ------------------------------------------------------------ início */
@@ -462,6 +594,8 @@ function create(opts: Libras3dOptions): Libras3dPlayer {
       await loadInterpreter(look.interpreter);
       if (destroyed) return;
       loadEl.remove();
+      setAngle(Number(saved.yaw) || 0, Number(saved.pitch) || 0, false);
+      setTimeout(() => (tipEl.style.opacity = "0"), 4000);
       raf = requestAnimationFrame(loop);
       // boas-vindas do player do VLibras na primeira abertura
       const w = base!.clips["[WLCM]BOAS_VINDAS_INI"];
@@ -500,6 +634,7 @@ function create(opts: Libras3dOptions): Libras3dPlayer {
       document.removeEventListener("mousemove", onMove, true);
       document.removeEventListener("click", onClick, true);
       document.removeEventListener("mouseup", onUp, true);
+      window.removeEventListener("resize", onViewport);
       if (current) disposeTree(current.root);
       pmrem.dispose();
       renderer.dispose();
