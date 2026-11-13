@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Intérprete de Libras · Protótipo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700;800&family=Inter:wght@400;500;600&display=swap">
+<style>
+:root{
+  --brand:#5B2BD9; --brand-ink:#FFFFFF; --brand-soft:#EFE9FD; --brand-line:#D9CCFB;
+  --bg:#F6F4FC; --paper:#FFFFFF; --ink:#1B1838; --soft:#4A4766; --mut:#7C7995; --line:#E7E3F2;
+  --stage-a:#E9E2FF; --stage-b:#F7F5FD;
+  --display:"Plus Jakarta Sans",ui-sans-serif,system-ui,-apple-system,sans-serif; --body:"Inter",ui-sans-serif,system-ui,-apple-system,sans-serif;
+  --r-lg:24px; --r-md:16px; --r-sm:12px;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--soft);font:400 14px/1.5 var(--body);-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible{outline:3px solid color-mix(in srgb,var(--brand) 55%,transparent);outline-offset:2px}
+h1,h2,h3{font-family:var(--display);color:var(--ink);margin:0}
+
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px max(16px,3vw) 0}
+.brand{display:flex;align-items:center;gap:12px}
+.brand-ic{width:44px;height:44px;border-radius:50%;background:var(--brand);color:#fff;display:grid;place-items:center;box-shadow:0 8px 20px -8px color-mix(in srgb,var(--brand) 70%,transparent)}
+.brand h1{font-size:22px;font-weight:800;letter-spacing:-.01em}
+.brand p{margin:0;color:var(--mut);font-size:13.5px}
+.badge{font:700 11px/1 var(--display);letter-spacing:.06em;text-transform:uppercase;color:var(--brand);background:var(--brand-soft);border:1px solid var(--brand-line);padding:7px 10px;border-radius:999px;white-space:nowrap}
+
+.app{display:grid;grid-template-columns:minmax(300px,380px) minmax(0,1fr);gap:20px;padding:16px max(16px,3vw) 24px;min-height:calc(100vh - 76px)}
+.panel{background:var(--paper);border:1px solid var(--line);border-radius:var(--r-lg);padding:20px;display:flex;flex-direction:column;gap:22px;align-self:start}
+.sec{display:flex;flex-direction:column;gap:10px}
+.sec h2{font-size:15px;font-weight:800}
+.hint{margin:0;font-size:12.5px;color:var(--mut)}
+
+.avatars{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.avatar{position:relative;display:flex;flex-direction:column;align-items:stretch;gap:1px;padding:0 0 7px;border-radius:var(--r-md);border:1.5px solid var(--line);background:linear-gradient(180deg,var(--stage-a),var(--stage-b) 75%);overflow:hidden;text-align:left;transition:border-color .15s, box-shadow .15s}
+.avatar img{display:block;width:100%;aspect-ratio:1/1.12;object-fit:cover;object-position:50% 20%}
+.avatar-name{padding:5px 6px 0;font:700 12px/1.2 var(--display);color:var(--ink)}
+.avatar-desc{padding:0 6px;font-size:10.5px;line-height:1.25;color:var(--mut)}
+.avatar-check{position:absolute;top:5px;right:5px;width:20px;height:20px;border-radius:50%;background:var(--brand);color:#fff;display:none;place-items:center}
+.avatar:hover{border-color:var(--brand-line)}
+.avatar[aria-pressed="true"]{border-color:var(--brand);box-shadow:0 0 0 3px color-mix(in srgb,var(--brand) 18%,transparent)}
+.avatar[aria-pressed="true"] .avatar-check{display:grid}
+
+.row{display:flex;flex-wrap:wrap;gap:8px}
+.btn{display:inline-flex;align-items:center;gap:8px;border:1.5px solid var(--line);background:var(--paper);border-radius:var(--r-sm);padding:9px 12px;font-weight:600;color:var(--ink)}
+.btn:hover{border-color:var(--brand-line)}
+.btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+.chip{border:1.5px solid var(--line);background:var(--paper);border-radius:999px;padding:7px 12px;font-weight:600;font-size:13px;color:var(--ink)}
+.chip:hover{border-color:var(--brand-line)}
+.chip[aria-pressed="true"]{background:var(--brand-soft);border-color:var(--brand);color:var(--brand)}
+.spell{display:flex;gap:8px}
+.spell input{flex:1;min-width:0;border:1.5px solid var(--line);border-radius:var(--r-sm);padding:9px 12px;font:600 14px var(--body);color:var(--ink);text-transform:uppercase;background:var(--paper)}
+.spell-out{display:flex;flex-wrap:wrap;gap:4px}
+.spell-out span{min-width:26px;padding:4px 0;text-align:center;border-radius:8px;background:var(--bg);font:800 13px var(--display);color:var(--mut)}
+.spell-out span.on{background:var(--brand);color:#fff}
+
+.seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:8px}
+.opt{display:grid;place-items:center;gap:4px;padding:10px 6px;border-radius:var(--r-sm);border:1.5px solid var(--line);background:var(--paper);color:var(--soft);font-size:12px;font-weight:600}
+.opt:hover{border-color:var(--brand-line)}
+.opt[aria-pressed="true"]{border-color:var(--brand);background:var(--brand-soft);color:var(--brand)}
+.corner{width:34px;height:26px;border-radius:6px;border:1.5px solid currentColor;position:relative;opacity:.9}
+.corner::after{content:"";position:absolute;width:10px;height:8px;border-radius:2px;background:currentColor}
+.corner.tl::after{top:3px;left:3px}.corner.tr::after{top:3px;right:3px}.corner.bl::after{bottom:3px;left:3px}.corner.br::after{bottom:3px;right:3px}
+
+.sub-h{margin:4px 0 0;font:700 12px/1.2 var(--display);letter-spacing:.04em;text-transform:uppercase;color:var(--mut)}
+.range-l{display:flex;justify-content:space-between;align-items:baseline}
+.range-l span{font:600 12px var(--body);letter-spacing:0;text-transform:none;color:var(--ink)}
+.sv{position:relative;height:120px;border-radius:var(--r-sm);cursor:crosshair;touch-action:none;
+  background:linear-gradient(to top,#000,transparent),linear-gradient(to right,#fff,var(--hue,#3050ff))}
+.sv-dot{position:absolute;width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;border:2.5px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.35),0 2px 6px rgba(0,0,0,.35);pointer-events:none}
+.hue,.range{-webkit-appearance:none;appearance:none;width:100%;height:12px;border-radius:999px;margin:4px 0}
+.hue{background:linear-gradient(90deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)}
+.range{background:var(--brand-soft)}
+.hue::-webkit-slider-thumb,.range::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:#fff;border:2.5px solid var(--brand);box-shadow:0 2px 6px rgba(0,0,0,.25)}
+.hue::-moz-range-thumb,.range::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:#fff;border:2.5px solid var(--brand)}
+.hexrow{display:flex;align-items:center;gap:8px}
+.hexrow label{font:600 13px var(--body);color:var(--soft)}
+.hexbox{display:flex;align-items:center;gap:2px;border:1.5px solid var(--line);border-radius:var(--r-sm);padding:7px 10px;background:var(--paper);flex:1;min-width:0}
+.hexbox span{color:var(--mut);font:600 14px var(--body)}
+.hexbox input{border:0;outline:0;min-width:0;width:100%;font:600 14px ui-monospace,Menlo,monospace;color:var(--ink);text-transform:uppercase;background:transparent}
+.swatches{display:flex;flex-wrap:wrap;gap:8px}
+.sw{width:28px;height:28px;border-radius:50%;border:2px solid #fff;background:var(--c);box-shadow:0 0 0 1px var(--line)}
+.sw[aria-pressed="true"]{box-shadow:0 0 0 2.5px var(--brand)}
+.logo-row{display:flex;gap:12px;align-items:flex-start}
+.logo-prev{flex:none;width:96px;height:96px;border-radius:var(--r-sm);display:grid;place-items:center;padding:10px;color:#fff;font-size:11.5px;text-align:center;opacity:.95}
+.logo-prev img{max-width:100%;max-height:100%;object-fit:contain}
+.logo-actions{display:flex;flex-direction:column;gap:8px;min-width:0}
+.logo-actions .btn{justify-content:center}
+.btn.small{padding:7px 10px;font-size:12.5px}
+.btn.danger{border-color:#F3C1BD;color:#B42318}
+.btn.danger:not(:disabled):hover{background:#FEF3F2}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.actions{margin-top:6px}
+.actions .btn{justify-content:center}
+.pos-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.pos-grid .opt{display:flex;align-items:center;justify-content:center;gap:5px;padding:8px 4px;font-size:11.5px;text-align:center;line-height:1.2}
+.pos-grid #logo-clicar{grid-column:span 1}
+body.placing .canvas-host canvas{cursor:crosshair}
+.bg-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.bgsw{display:flex;align-items:center;gap:7px;padding:6px 8px;border-radius:var(--r-sm);border:1.5px solid var(--line);background:var(--paper);font:600 12px var(--body);color:var(--ink)}
+.bgsw i{flex:none;width:22px;height:22px;border-radius:6px;background:var(--b);box-shadow:inset 0 0 0 1px rgba(0,0,0,.12)}
+.bgsw[aria-pressed="true"]{border-color:var(--brand);background:var(--brand-soft)}
+#bg-cor-wrap{position:relative;cursor:pointer}
+#bg-cor-wrap[aria-pressed="true"]{border-color:var(--brand);color:var(--brand)}
+#bg-cor{width:18px;height:18px;padding:0;border:0;background:none;cursor:pointer}
+details.real{border:1px solid var(--line);border-radius:var(--r-md);padding:12px 14px;background:var(--bg)}
+details.real summary{cursor:pointer;font:700 13px var(--display);color:var(--ink)}
+details.real ul{margin:10px 0 0;padding-left:18px;font-size:12.5px;display:flex;flex-direction:column;gap:6px}
+
+/* ---------- palco ---------- */
+.right{display:flex;flex-direction:column;gap:12px;min-width:0;position:sticky;top:16px;height:calc(100vh - 108px);min-height:520px;align-self:start}
+.views{display:flex;gap:8px;align-self:flex-start;background:var(--paper);border:1px solid var(--line);padding:4px;border-radius:999px}
+.views button{border:0;background:transparent;border-radius:999px;padding:7px 14px;font-weight:600;color:var(--soft)}
+.views button[aria-pressed="true"]{background:var(--brand);color:#fff}
+.stage{position:relative;flex:1;min-height:0;border-radius:var(--r-lg);overflow:hidden;background:var(--stage-bg,radial-gradient(120% 90% at 50% 18%,#FFFFFF 0%,var(--stage-a) 55%,#D9CEFB 100%));border:1px solid var(--line)}
+.canvas-host{position:absolute;inset:0}
+.canvas-host canvas{position:absolute;inset:0;display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+.canvas-host canvas:active{cursor:grabbing}
+.tools{position:absolute;top:16px;right:16px;display:flex;gap:10px;z-index:3}
+.round{width:46px;height:46px;border-radius:50%;border:0;background:#fff;color:var(--ink);display:grid;place-items:center;box-shadow:0 6px 18px -8px rgba(40,20,90,.45)}
+.round:hover{color:var(--brand)}
+.round .ic-play{display:none}
+body.paused .round .ic-pause{display:none}
+body.paused .round .ic-play{display:block}
+.now{position:absolute;left:16px;bottom:16px;right:16px;max-width:420px;z-index:3;background:rgba(255,255,255,.88);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.9);border-radius:var(--r-md);padding:12px 14px;display:flex;flex-direction:column;gap:4px;box-shadow:0 10px 30px -18px rgba(40,20,90,.5)}
+.now b{font:800 15px var(--display);color:var(--ink)}
+.now small{font-size:12px;color:var(--mut)}
+.now .bar{height:4px;border-radius:4px;background:var(--brand-soft);overflow:hidden;margin-top:4px}
+.now .bar i{display:block;height:100%;background:var(--brand);transform-origin:left;transform:scaleX(0)}
+.hint-drag{position:absolute;top:22px;left:20px;z-index:3;font-size:12px;color:var(--mut);background:rgba(255,255,255,.7);padding:6px 10px;border-radius:999px}
+.loading,.error{position:absolute;inset:0;display:grid;place-items:center;z-index:4;font:600 14px var(--body);color:var(--soft)}
+.loading{background:rgba(246,244,252,.6)}
+.loading span::before{content:"";display:inline-block;width:16px;height:16px;margin-right:10px;vertical-align:-3px;border-radius:50%;border:2.5px solid var(--brand-line);border-top-color:var(--brand);animation:spin .8s linear infinite}
+.error{background:#fff;color:#B42318;padding:24px;text-align:center}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ---------- vista "no site" ---------- */
+.site{position:relative;flex:1;min-height:0;border-radius:var(--r-lg);overflow:hidden;border:1px solid var(--line);background:#F3F4F8}
+.site-bar{height:52px;background:#1E1B4B;display:flex;align-items:center;gap:10px;padding:0 18px;color:#fff;font:700 14px var(--display)}
+.site-bar i{width:28px;height:28px;border-radius:8px;background:rgba(255,255,255,.18)}
+.site-body{display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:20px}
+.site-card{background:#fff;border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:10px}
+.site-card .l{height:10px;border-radius:6px;background:#E6E8F0}
+.site-card .l.w60{width:60%} .site-card .l.w40{width:40%} .site-card .l.t{height:16px;width:70%;background:#D5D8E4}
+.site-card .img{height:110px;border-radius:12px;background:linear-gradient(135deg,#E4DEFB,#F3EFFF)}
+.libras-win{position:absolute;z-index:5;display:flex;flex-direction:column;border-radius:22px;overflow:hidden;background:#fff;box-shadow:0 26px 60px -20px rgba(30,20,80,.55),0 0 0 1px rgba(30,27,75,.08);transition:all .25s ease}
+.libras-win header{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--brand);color:#fff}
+.libras-win header b{font:800 14px var(--display);flex:1}
+.libras-win header .ic{width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.2);display:grid;place-items:center}
+.libras-win header button{border:0;background:rgba(255,255,255,.16);color:#fff;width:30px;height:30px;border-radius:50%;display:grid;place-items:center}
+.libras-win .win-stage{position:relative;flex:1;min-height:0;overflow:hidden;background:var(--stage-bg,radial-gradient(120% 90% at 50% 18%,#FFFFFF 0%,var(--stage-a) 60%,#D9CEFB 100%))}
+body[data-size="p"] .libras-win{width:230px;height:300px}
+body[data-size="m"] .libras-win,body:not([data-size]) .libras-win{width:290px;height:380px}
+body[data-size="g"] .libras-win{width:360px;height:470px}
+body[data-pos="tl"] .libras-win{top:68px;left:16px}
+body[data-pos="tr"] .libras-win{top:68px;right:16px}
+body[data-pos="bl"] .libras-win{bottom:16px;left:16px}
+body[data-pos="br"] .libras-win,body:not([data-pos]) .libras-win{bottom:16px;right:16px}
+.launcher{position:absolute;right:16px;bottom:16px;width:52px;height:52px;border-radius:50%;background:var(--brand);color:#fff;display:grid;place-items:center;box-shadow:0 10px 24px -10px rgba(60,20,160,.7);z-index:4}
+body[data-pos="br"] .launcher,body:not([data-pos]) .launcher{right:auto;left:16px}
+
+body[data-view="studio"] .site{display:none}
+body[data-view="site"] .stage{display:none}
+
+/* ---------- expandido ---------- */
+body.expanded{overflow:hidden}
+body.expanded .stage{position:fixed;inset:16px;z-index:50;min-height:0}
+body.expanded .libras-win{position:fixed;inset:16px!important;width:auto!important;height:auto!important;z-index:50}
+body.expanded .right{z-index:60}
+body.expanded::after{content:"";position:fixed;inset:0;background:rgba(20,14,50,.55);z-index:40}
+
+@media (max-width:900px){
+  .top{flex-wrap:wrap;align-items:flex-start}
+  .badge{white-space:normal}
+  .hint-drag{display:none}
+  .app{grid-template-columns:1fr}
+  .right{order:-1;position:static;height:auto}
+  .stage,.site{flex:none;height:min(76vh,560px)}
+  .site-body{grid-template-columns:1fr}
+}
+@media (prefers-reduced-motion:reduce){ .libras-win{transition:none} .loading span::before{animation:none} }
+</style>
+</head>
+<body data-view="studio" data-size="m" data-pos="br">
+
+<div class="top">
+  <div class="brand">
+    <div class="brand-ic" aria-hidden="true">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-4 0v1"/><path d="M14 10V4a2 2 0 0 0-4 0v2"/><path d="M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>
+    </div>
+    <div><h1>Libras</h1><p>Intérprete em 3D com movimentos reais do VLibras</p></div>
+  </div>
+  <span class="badge">Protótipo local · fora do produto</span>
+</div>
+
+<main class="app">
+  <aside class="panel" aria-label="Ajustes do intérprete">
+    <section class="sec">
+      <h2>Escolha o intérprete</h2>
+      <div class="avatars" id="avatar-list"></div>
+    </section>
+
+    <section class="sec" aria-labelledby="camisa-t">
+      <h2 id="camisa-t">Camisa</h2>
+      <p class="sub-h">Cor da camisa</p>
+      <div class="sv" id="sv" tabindex="0" role="slider" aria-label="Saturação e brilho da cor da camisa"><span class="sv-dot" id="sv-dot"></span></div>
+      <input type="range" id="hue" class="hue" min="0" max="360" step="1" aria-label="Matiz da cor da camisa">
+      <div class="hexrow">
+        <label for="hex">Hex</label>
+        <span class="hexbox"><span>#</span><input id="hex" maxlength="7" spellcheck="false" autocomplete="off"></span>
+        <button type="button" class="chip" id="cor-original" aria-pressed="true">Cor original</button>
+      </div>
+      <div class="swatches" role="group" aria-label="Cores sugeridas">
+        <button type="button" class="sw" data-cor="#1F2A5A" style="--c:#1F2A5A" aria-label="Azul-marinho"></button>
+        <button type="button" class="sw" data-cor="#5B2BD9" style="--c:#5B2BD9" aria-label="Roxo"></button>
+        <button type="button" class="sw" data-cor="#0F766E" style="--c:#0F766E" aria-label="Verde-petróleo"></button>
+        <button type="button" class="sw" data-cor="#4D7C0F" style="--c:#4D7C0F" aria-label="Verde"></button>
+        <button type="button" class="sw" data-cor="#B91C1C" style="--c:#B91C1C" aria-label="Vermelho"></button>
+        <button type="button" class="sw" data-cor="#111827" style="--c:#111827" aria-label="Preto"></button>
+        <button type="button" class="sw" data-cor="#E5E7EB" style="--c:#E5E7EB" aria-label="Cinza-claro"></button>
+      </div>
+
+      <p class="sub-h">Logo da camisa</p>
+      <div class="logo-row">
+        <div class="logo-prev" id="logo-prev"><span>Sem logo</span></div>
+        <div class="logo-actions">
+          <label class="btn" for="logo-file"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 13v8"/><path d="M4 14.9A7 7 0 1 1 15.7 8h1.8a4.5 4.5 0 0 1 2.5 8.2"/><path d="m8 17 4-4 4 4"/></svg>Enviar logo</label>
+          <input type="file" id="logo-file" accept=".png,.svg,.jpg,.jpeg,.webp,image/png,image/svg+xml,image/jpeg,image/webp" hidden>
+          <div class="row">
+            <button type="button" class="btn small" id="logo-exemplo">Usar logo de exemplo</button>
+            <button type="button" class="btn small danger" id="logo-remover" disabled>Remover</button>
+          </div>
+          <p class="hint">PNG, SVG, JPG ou WEBP · até 1 MB · ideal 500×500 px</p>
+        </div>
+      </div>
+      <p class="sub-h">Posição do logo</p>
+      <div class="pos-grid" role="group" aria-label="Posição do logo">
+        <button type="button" class="opt" data-logopos="auto" aria-pressed="true">Automática</button>
+        <button type="button" class="opt" data-logopos="centro" aria-pressed="false">Centro do peito</button>
+        <button type="button" class="opt" data-logopos="esquerdo" aria-pressed="false">Peito esquerdo</button>
+        <button type="button" class="opt" data-logopos="direito" aria-pressed="false">Peito direito</button>
+        <button type="button" class="opt" data-logopos="baixo" aria-pressed="false">Barriga</button>
+        <button type="button" class="opt" id="logo-clicar" aria-pressed="false"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="4"/></svg><span class="txt">Escolher na camisa</span></button>
+      </div>
+      <label class="sub-h range-l" for="logo-x">Ajuste horizontal <span id="logo-x-val">auto</span></label>
+      <input type="range" id="logo-x" class="range" min="-14" max="14" step="1" value="0">
+      <label class="sub-h range-l" for="logo-y">Ajuste vertical <span id="logo-y-val">auto</span></label>
+      <input type="range" id="logo-y" class="range" min="-18" max="10" step="1" value="0">
+      <p class="hint" id="logo-fora" hidden>Nessa posição o logo sai da roupa. Ajuste para mais perto do peito.</p>
+      <p class="hint">"Peito esquerdo" é o lado esquerdo do intérprete (à direita de quem olha).</p>
+      <label class="sub-h range-l" for="opacidade">Opacidade do logo <span id="op-val">100%</span></label>
+      <input type="range" id="opacidade" class="range" min="0" max="100" step="1" value="100">
+      <label class="sub-h range-l" for="tamanho-logo">Tamanho do logo <span id="tam-val">13 cm</span></label>
+      <input type="range" id="tamanho-logo" class="range" min="7" max="20" step="1" value="13">
+      <p class="hint" id="camisa-aviso" hidden>Este intérprete não tem uma camisa separável na textura; escolha outro para ver a personalização.</p>
+      <div class="seg actions">
+        <button type="button" class="btn" id="descartar" disabled>Descartar alterações</button>
+        <button type="button" class="btn primary" id="salvar" disabled>Salvar alterações</button>
+      </div>
+      <p class="hint" id="camisa-status" aria-live="polite"></p>
+    </section>
+
+    <section class="sec" aria-labelledby="fundo-t">
+      <h2 id="fundo-t">Fundo do intérprete</h2>
+      <div class="bg-grid" role="group" aria-label="Fundo do intérprete">
+        <button type="button" class="bgsw" data-bg="lavanda" aria-pressed="true" style="--b:radial-gradient(120% 90% at 50% 18%,#fff,#E9E2FF 55%,#D9CEFB)"><i></i>Lavanda</button>
+        <button type="button" class="bgsw" data-bg="branco" aria-pressed="false" style="--b:#fff"><i></i>Branco</button>
+        <button type="button" class="bgsw" data-bg="cinza" aria-pressed="false" style="--b:linear-gradient(180deg,#F4F5F8,#DDE0E8)"><i></i>Cinza</button>
+        <button type="button" class="bgsw" data-bg="verde" aria-pressed="false" style="--b:radial-gradient(#E3F4EC,#C6E7D7)"><i></i>Menta</button>
+        <button type="button" class="bgsw" data-bg="marinho" aria-pressed="false" style="--b:radial-gradient(#3A4A86,#1F2A5A 60%,#141B3D)"><i></i>Marinho</button>
+        <button type="button" class="bgsw" data-bg="grafite" aria-pressed="false" style="--b:radial-gradient(#4A4D57,#2A2C33)"><i></i>Grafite</button>
+      </div>
+      <div class="row">
+        <label class="btn small" id="bg-cor-wrap" aria-pressed="false"><input type="color" id="bg-cor" value="#E9E2FF" aria-label="Cor de fundo personalizada">Outra cor</label>
+        <label class="btn small" for="bg-file"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg>Imagem de fundo</label>
+        <input type="file" id="bg-file" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" hidden>
+        <button type="button" class="btn small danger" id="bg-remover" hidden>Remover imagem</button>
+      </div>
+      <p class="hint">Para Libras, prefira fundos lisos que contrastem com a pele e a roupa: o movimento das mãos fica mais fácil de acompanhar. O fundo é salvo automaticamente neste navegador.</p>
+      <p class="hint" id="bg-status" aria-live="polite"></p>
+    </section>
+
+    <section class="sec">
+      <h2>O que reproduzir</h2>
+      <div class="row">
+        <button type="button" class="btn" id="btn-idle">Repouso</button>
+        <button type="button" class="btn" id="btn-welcome">Boas-vindas</button>
+      </div>
+      <p class="hint">Sinais do dicionário oficial do VLibras:</p>
+      <div class="row" id="sign-list"></div>
+      <p class="hint">Soletrar uma palavra com o alfabeto manual:</p>
+      <form class="spell" id="spell-form" autocomplete="off">
+        <label for="spell-input" class="hint" hidden>Palavra para soletrar</label>
+        <input id="spell-input" maxlength="16" placeholder="Ex.: LUUMU" aria-label="Palavra para soletrar">
+        <button type="submit" class="btn primary">Soletrar</button>
+      </form>
+      <div class="spell-out" id="spell-out" hidden aria-live="polite"></div>
+    </section>
+
+    <section class="sec">
+      <h2>Reprodução</h2>
+      <div class="row">
+        <button type="button" class="btn" id="btn-pause" aria-pressed="false" aria-label="Pausar a animação">
+          <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1.5" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="1.5" fill="currentColor"/></svg>
+          <span class="txt">Pausar</span>
+        </button>
+      </div>
+      <div class="seg" role="group" aria-label="Velocidade">
+        <button type="button" class="opt" data-speed="0.5" aria-pressed="false">0,5×</button>
+        <button type="button" class="opt" data-speed="0.75" aria-pressed="false">0,75×</button>
+        <button type="button" class="opt" data-speed="1" aria-pressed="true">1×</button>
+      </div>
+    </section>
+
+    <section class="sec">
+      <h2>Tamanho do intérprete</h2>
+      <div class="seg" role="group" aria-label="Tamanho do intérprete">
+        <button type="button" class="opt" data-size="p" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="9" r="3"/><path d="M6.5 19a5.5 5.5 0 0 1 11 0"/></svg>Pequeno</button>
+        <button type="button" class="opt" data-size="m" aria-pressed="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg>Médio</button>
+        <button type="button" class="opt" data-size="g" aria-pressed="false"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4.5"/><path d="M3.5 21a8.5 8.5 0 0 1 17 0"/></svg>Grande</button>
+      </div>
+    </section>
+
+    <section class="sec">
+      <h2>Posição na tela</h2>
+      <div class="seg" role="group" aria-label="Posição na tela">
+        <button type="button" class="opt" data-pos="tl" aria-pressed="false" aria-label="Canto superior esquerdo"><span class="corner tl"></span></button>
+        <button type="button" class="opt" data-pos="tr" aria-pressed="false" aria-label="Canto superior direito"><span class="corner tr"></span></button>
+        <button type="button" class="opt" data-pos="bl" aria-pressed="false" aria-label="Canto inferior esquerdo"><span class="corner bl"></span></button>
+        <button type="button" class="opt" data-pos="br" aria-pressed="true" aria-label="Canto inferior direito"><span class="corner br"></span></button>
+      </div>
+      <p class="hint">A posição aparece na vista "No site".</p>
+    </section>
+
+    <details class="real">
+      <summary>O que é real neste protótipo</summary>
+      <ul>
+        <li><strong>Movimentos:</strong> repouso, boas-vindas, os 10 sinais e o alfabeto vêm dos arquivos públicos do VLibras, transferidos osso a osso para o novo personagem.</li>
+        <li><strong>Não há tradução de texto livre aqui.</strong> Só os sinais listados e a soletração.</li>
+        <li><strong>Expressões:</strong> as do próprio sinal (sorriso, sobrancelhas, bico) foram convertidas para o padrão ARKit. O piscar é automático e não faz parte de nenhum sinal.</li>
+        <li><strong>Personagens:</strong> Microsoft Rocketbox (licença MIT), com a roupa recolorida para azul-marinho.</li>
+        <li><strong>Atenção:</strong> pontos de contato (mão no queixo, no rosto) podem ficar alguns centímetros fora, porque o corpo tem proporções diferentes do Ícaro. A validação final precisa de intérpretes.</li>
+      </ul>
+    </details>
+  </aside>
+
+  <div class="right">
+    <div class="views" role="group" aria-label="Visualização">
+      <button type="button" data-view="studio" aria-pressed="true">Estúdio</button>
+      <button type="button" data-view="site" aria-pressed="false">No site</button>
+    </div>
+
+    <section class="stage" aria-label="Intérprete">
+      <div class="canvas-host" id="stage-canvas"></div>
+      <span class="hint-drag">Arraste para girar · role para aproximar</span>
+      <div class="tools">
+        <button type="button" class="round" id="stage-center" title="Voltar ao enquadramento" aria-label="Voltar ao enquadramento">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
+        </button>
+        <button type="button" class="round" id="stage-pause" title="Pausar (barra de espaço)" aria-label="Pausar a animação" aria-pressed="false">
+          <svg class="ic-pause" width="20" height="20" viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1.5" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="1.5" fill="currentColor"/></svg>
+          <svg class="ic-play" width="20" height="20" viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z" fill="currentColor"/></svg>
+        </button>
+        <button type="button" class="round" id="stage-expand" title="Expandir" aria-label="Expandir">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+        </button>
+      </div>
+      <div class="now" aria-live="polite">
+        <b id="now-label">Repouso</b>
+        <small id="now-source">animação de respiração do player VLibras</small>
+        <div class="bar"><i id="now-bar"></i></div>
+      </div>
+      <div class="loading" id="stage-loading" hidden><span>Carregando o intérprete…</span></div>
+      <div class="error" id="stage-error" hidden></div>
+    </section>
+
+    <section class="site" aria-label="Pré-visualização no site">
+      <div class="site-bar"><i></i>Escola Aurora · Plataforma de estudos</div>
+      <div class="site-body" aria-hidden="true">
+        <div class="site-card"><div class="l t"></div><div class="l"></div><div class="l w60"></div><div class="img"></div></div>
+        <div class="site-card"><div class="l t"></div><div class="l"></div><div class="l w40"></div><div class="l"></div><div class="l w60"></div></div>
+        <div class="site-card"><div class="l t"></div><div class="img"></div><div class="l w60"></div></div>
+        <div class="site-card"><div class="l t"></div><div class="l"></div><div class="l"></div><div class="l w40"></div></div>
+      </div>
+      <div class="libras-win" role="dialog" aria-label="Intérprete de Libras">
+        <header>
+          <span class="ic" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-4 0v1"/><path d="M14 10V4a2 2 0 0 0-4 0v2"/><path d="M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg></span>
+          <b>Libras</b>
+          <button type="button" id="site-expand" title="Expandir" aria-label="Expandir"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+        </header>
+        <div class="win-stage canvas-host" id="site-canvas"></div>
+      </div>
+      <span class="launcher" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="4.5" r="1.8" fill="currentColor"/><path d="M5 8.5l7 1.5 7-1.5M12 10v4.5M12 14.5l-3 6M12 14.5l3 6"/></svg></span>
+    </section>
+  </div>
+</main>
+
+<script src="dados/movimentos.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

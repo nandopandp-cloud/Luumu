@@ -1,0 +1,14 @@
+Protótipo do intérprete de Libras (Luumu) — conteúdo de terceiros
+
+Personagens 3D: Microsoft Rocketbox Avatar Library — licença MIT
+  https://github.com/microsoft/Microsoft-Rocketbox
+  Copyright (c) Microsoft Corporation. Permission is hereby granted, free of charge, to any person
+  obtaining a copy of this software and associated documentation files, to deal in the Software
+  without restriction (...). THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
+  Modificações: conversão para GLB, recoloração de roupas e cabelos, redução de expressões.
+
+Movimentos de Libras: VLibras (Governo Federal / UFPB-LAViD) — player e portal sob LGPL-3.0
+  https://github.com/spbgovbr-vlibras
+  Animações extraídas do player 7.12.2 e do dicionário público (dicionario2.vlibras.gov.br).
+
+Renderização: Three.js r169 — licença MIT (https://threejs.org)

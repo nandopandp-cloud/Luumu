@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Bundles do SDK gerados por scripts/build-sdk.mjs (minificados)
     "public/sdk*.js",
+    // protótipo estático gerado fora do app (minificado)
+    "public/prototipos/**",
   ]),
 ]);
 
