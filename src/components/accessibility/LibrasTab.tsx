@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { BadgeCheck, Check, Copy, Download, ExternalLink, FileImage, Hand, Info, Mail, ShieldCheck, Shirt } from "lucide-react";
+import { BadgeCheck, Boxes, Check, Copy, Download, ExternalLink, FileImage, Hand, Info, Mail, ShieldCheck, Shirt } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -13,6 +13,7 @@ import {
   safePersonalizationUrl, vlibrasPersonalizationJson, vlibrasRequestEmail,
 } from "@/lib/accessibility/vlibras";
 import { ColorField, ImageField, Pills, SectionTitle, SwatchRow } from "./controls";
+import { LibrasLuumu } from "./LibrasLuumu";
 
 type Patch = (fn: (c: A11yConfig) => A11yConfig) => void;
 
@@ -37,8 +38,38 @@ export function LibrasTab({ config, patch, projectName, hosts }: { config: A11yC
   const approved = !!l.personalizationUrl;
   const urlInvalid = urlDraft.trim() !== "" && !safePersonalizationUrl(urlDraft);
 
+  const luumu = l.engine === "luumu";
   return (
     <div className="flex flex-col gap-4">
+      <Card>
+        <SectionTitle icon={<Boxes className="size-4.5" />} title="Intérprete de Libras" description="Quem aparece fazendo os sinais quando o estudante liga Libras." />
+        <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Intérprete de Libras">
+          {[
+            { v: "vlibras" as const, t: "VLibras (gov.br)", d: "Avatar oficial do governo, com personalização mediante aprovação do VLibras.", badge: null },
+            { v: "luumu" as const, t: "Intérprete Luumu", d: "12 personagens 3D com a camisa e o fundo da escola. Usa a tradução e os sinais do VLibras.", badge: "Beta" },
+          ].map((o) => (
+            <button
+              key={o.v}
+              type="button"
+              role="radio"
+              aria-checked={l.engine === o.v}
+              onClick={() => set({ engine: o.v })}
+              className={cn("rounded-xl border p-3.5 text-left transition", l.engine === o.v ? "border-accent bg-surface-brand" : "border-line hover:border-line-strong")}
+            >
+              <span className="flex items-center gap-2 text-sm font-semibold">
+                {o.t}
+                {o.badge && <Badge tone="warn" dot={false}>{o.badge}</Badge>}
+              </span>
+              <span className="mt-0.5 block text-xs text-fg-mut">{o.d}</span>
+            </button>
+          ))}
+        </div>
+      </Card>
+
+      {luumu ? (
+        <LibrasLuumu config={config} patch={patch} />
+      ) : (
+      <>
       <Card>
         <SectionTitle
           icon={<Hand className="size-4.5" />}
@@ -175,6 +206,8 @@ export function LibrasTab({ config, patch, projectName, hosts }: { config: A11yC
           </a>
         </div>
       </Card>
+      </>
+      )}
     </div>
   );
 }

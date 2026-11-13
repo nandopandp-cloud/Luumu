@@ -275,6 +275,69 @@ test("Libras sem VLibras no site: carrega o oficial com avatar, lado e personali
   }
 });
 
+test("Libras com o intérprete Luumu (beta): abre o intérprete 3D, não o VLibras, com o visual do painel", async () => {
+  const created: any[] = [];
+  const updates: any[] = [];
+  let destroyed = 0;
+  (window as any).__luumuLibras3d = {
+    create(o: any) {
+      created.push(o);
+      return { update: (...a: any[]) => updates.push(a), translate: async () => {}, destroy: () => destroyed++ };
+    },
+  };
+  try {
+    const look = { interpreter: "jf2", shirtColor: "#5B2BD9", logo: "custom", logoUrl: "https://cdn.escola.com/logo.png", background: "menta" };
+    boot(cfg({ launcher: { position: "bottom-right" }, libras: { engine: "luumu", look } }));
+    click($('[data-a="libras"]'));
+    await sleep(10);
+    assert.equal(created.length, 1, "intérprete Luumu criado");
+    assert.equal(document.querySelector("script[data-luumu-ui='a11y-vlibras']"), null, "o VLibras não é carregado");
+    const o = created[0];
+    assert.equal(o.look.interpreter, "jf2");
+    assert.equal(o.logoUrl, "https://cdn.escola.com/logo.png");
+    assert.equal(o.side, "left", "janela no lado oposto aos botões da Luumu");
+    assert.equal(o.api, "https://luumu.test/api/v1");
+    assert.equal(o.origin, "https://luumu.test");
+    assert.equal($('[data-a="libras"]')!.getAttribute("aria-pressed"), "true");
+    // painel muda o visual: a janela aberta acompanha
+    w.update(cfg({ launcher: { position: "bottom-right" }, libras: { engine: "luumu", look: { ...look, interpreter: "jm2", logo: "none" } } }));
+    assert.equal(updates.at(-1)[0].interpreter, "jm2");
+    assert.equal(updates.at(-1)[1], "", "sem logo");
+    // o estudante fecha pela própria janela: o recurso desliga
+    o.onClose();
+    await sleep(10);
+    assert.equal(destroyed, 1);
+    assert.equal($('[data-a="libras"]')!.getAttribute("aria-pressed"), "false");
+    // sem WebGL: avisa e desliga
+    (window as any).__luumuLibras3d = { create() { throw new Error("webgl"); } };
+    click($('[data-a="libras"]'));
+    await sleep(10);
+    assert.equal($('[data-a="libras"]')!.getAttribute("aria-pressed"), "false");
+    assert.match($(".toast")!.textContent!, /tradutor de Libras/);
+  } finally {
+    delete (window as any).__luumuLibras3d;
+  }
+});
+
+test("trocar de VLibras para o intérprete Luumu no painel com Libras aberto troca a janela", async () => {
+  (window as any).happyDOM.settings.disableJavaScriptFileLoading = true;
+  const created: any[] = [];
+  (window as any).__luumuLibras3d = { create(o: any) { created.push(o); return { update() {}, translate: async () => {}, destroy() {} }; } };
+  try {
+    boot(cfg());
+    click($('[data-a="libras"]'));
+    assert.ok(document.querySelector("script[data-luumu-ui='a11y-vlibras']"), "começa com o VLibras");
+    w.update(cfg({ libras: { engine: "luumu" } }));
+    await sleep(10);
+    assert.equal(created.length, 1, "abre o intérprete Luumu no lugar");
+  } finally {
+    document.querySelectorAll("script[data-luumu-ui='a11y-vlibras']").forEach((s) => s.remove());
+    delete (window as any).VLibrasWidget;
+    delete (window as any).__luumuLibras3d;
+    (window as any).happyDOM.settings.disableJavaScriptFileLoading = false;
+  }
+});
+
 test("convite por grupo: estudante da turma vê, aceita e o perfil sugerido liga", async () => {
   identity = { id: "aluno-9", rede: "Rede Aurora", turma: "1ª série B" };
   boot(cfg({ nudge: { enabled: true, audience: "targeted", delay: 0, profile: "leitura", groups: [{ id: "g1", networks: ["rede aurora"], classes: ["1ª Série B"] }] } }));

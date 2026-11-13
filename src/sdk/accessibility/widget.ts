@@ -1085,7 +1085,7 @@ function createWidget(): A11yWidget {
         setPrefs({ ...prefs, libras: false });
         toast("Não foi possível abrir o tradutor de Libras agora.");
       },
-    });
+    }, { api: boot!.api, preview: preview() });
     face = createFaceNav(rootEl, {
       side: side(),
       toast,

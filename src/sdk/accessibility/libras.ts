@@ -20,6 +20,7 @@
 */
 import { VLIBRAS_SCRIPT } from "../../lib/accessibility/vlibras";
 import type { PublicA11yConfig } from "../../lib/accessibility/config";
+import { createLuumuLibras } from "./libras3d-host";
 
 type VWidget = {
   path?: string;
@@ -43,7 +44,42 @@ export interface Libras {
   destroy(): void;
 }
 
+/**
+ * Libras do widget: o motor vem do painel (cfg.libras.engine). "vlibras" = widget oficial (abaixo);
+ * "luumu" = intérprete 3D da Luumu, beta (libras3d-host.ts). Trocar o motor no painel com a
+ * janela aberta fecha a antiga e abre a nova.
+ */
 export function createLibras(
+  cfg0: PublicA11yConfig,
+  side0: "left" | "right",
+  opts: { onClosed: () => void; onUnavailable: () => void },
+  ctx: { api: string; preview: boolean } = { api: "", preview: false }
+): Libras {
+  const make = (c: PublicA11yConfig, s: "left" | "right") => (c.libras.engine === "luumu" && ctx.api ? createLuumuLibras(c, s, opts, ctx) : createVlibras(c, s, opts));
+  let engine = cfg0.libras.engine;
+  let impl = make(cfg0, side0);
+  return {
+    get visible() {
+      return impl.visible;
+    },
+    show: () => impl.show(),
+    hide: () => impl.hide(),
+    update(next, nextSide) {
+      if (next.libras.engine !== engine) {
+        const wasOpen = impl.visible;
+        impl.destroy();
+        engine = next.libras.engine;
+        impl = make(next, nextSide);
+        if (wasOpen) impl.show();
+        return;
+      }
+      impl.update(next, nextSide);
+    },
+    destroy: () => impl.destroy(),
+  };
+}
+
+function createVlibras(
   cfg0: PublicA11yConfig,
   side0: "left" | "right",
   opts: { onClosed: () => void; onUnavailable: () => void }

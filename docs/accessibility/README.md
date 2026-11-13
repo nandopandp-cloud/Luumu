@@ -294,6 +294,38 @@ Luumu não gera nem hospeda personalização por conta própria. A aba Libras do
 (`traducao2.vlibras.gov.br`). Ele tem métricas próprias de uso, amostradas e só depois que o
 estudante aceita o aviso de consentimento do próprio VLibras.
 
+## Intérprete Luumu (beta)
+
+Painel → Libras → **Intérprete de Libras**: "VLibras (gov.br)" (padrão) ou "Intérprete Luumu".
+No modo Luumu a tradução e os sinais continuam sendo os do VLibras; a Luumu troca o personagem e
+a janela (`config.libras.engine = "luumu"`, visual em `config.libras.look`).
+
+```
+clique/seleção no texto ──► traducao2.vlibras.gov.br/translate ──► "BOM_DIA ANA"
+glosa ──► /api/v1/accessibility/libras/sinal/:glosa ──► dicionario2.vlibras.gov.br (pacote Unity)
+          (converte com lib/accessibility/libras3d/unity.ts + sign.ts; 30 dias na borda;
+           sem sinal → { missing: true } e a palavra é soletrada)
+sinal ──► sdk-libras3d.js (Three.js): esqueleto do VLibras ──retarget──► personagem (rig.ts)
+```
+
+| Arquivo | Papel |
+|---|---|
+| `src/lib/accessibility/libras3d/unity.ts` | leitor de AssetBundle UnityFS (LZ4 + árvore de tipos) — puro |
+| `src/lib/accessibility/libras3d/sign.ts` | AnimationClip → sinal amostrado a 30 fps (curvas de Hermite, como o player do VLibras) — puro |
+| `src/lib/accessibility/libras3d/interpreters.ts` | os 12 personagens, faixa de cor da camisa de cada um, visual do painel — puro |
+| `src/sdk/accessibility/libras3d-host.ts` | no `sdk-a11y.js`: baixa o `sdk-libras3d.js` só ao abrir Libras |
+| `src/sdk/accessibility/libras3d/` | `player.ts` (janela, cena, tradução, texto da página), `rig.ts`, `shirt.ts` → `public/sdk-libras3d.js` |
+| `public/a11y/libras3d/` | `base.json` (esqueleto, repouso, boas-vindas, alfabeto, números, pontuação), `modelos/*.glb`, `miniaturas/` |
+
+- Personagens: Microsoft Rocketbox (MIT), convertidos e recoloridos no protótipo
+  (`/prototipos/libras`). Movimentos: dados públicos do VLibras (player e portal sob LGPL-3.0; o
+  repositório dos pacotes do dicionário não declara licença — checagem jurídica pendente).
+- Logo da camisa: a imagem precisa permitir CORS (as enviadas pelo painel permitem); sem isso a
+  camisa aparece sem logo.
+- Sem WebGL: o estudante vê "Não foi possível abrir o tradutor de Libras agora." e o recurso desliga.
+- Limitações conhecidas: contatos de mão no rosto podem ficar alguns centímetros fora (corpo
+  diferente do Ícaro); os ossos de pálpebras e lábios do VLibras ainda não são transferidos.
+
 ## Recursos na página
 
 `page-effects.ts` aplica tudo como classes `lu-a11y-*` em `<html>` com uma `<style>` própria,

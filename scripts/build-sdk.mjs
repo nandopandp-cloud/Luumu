@@ -9,6 +9,8 @@ import { readFileSync, writeFileSync } from "node:fs";
    - public/sdk-heatmaps.js gravador de heatmaps (só em projetos com a coleta ativa)
    - public/sdk-analytics.js coletor de analytics de produto (idem)
    - public/sdk-a11y.js     plugin de acessibilidade (só em projetos com o plugin ligado)
+   - public/sdk-libras3d.js intérprete de Libras da Luumu, Three.js (só quando o estudante abre
+                            Libras num projeto que usa esse intérprete; carregado pelo sdk-a11y)
    - public/sdk.js          core: pesquisas, eventos e a ponte dos tours (carregado em toda página)
 
   Versão dos bundles sob demanda = hash do CONTEÚDO deles, gravado em
@@ -18,6 +20,10 @@ import { readFileSync, writeFileSync } from "node:fs";
 */
 const common = { bundle: true, minify: true, format: "iife", target: ["es2018"], legalComments: "none", metafile: true };
 
+// intérprete 3D primeiro: o sdk-a11y leva o hash dele para pedir sempre a versão certa
+const libras3d = await build({ ...common, entryPoints: ["src/sdk/accessibility/libras3d/player.ts"], outfile: "public/sdk-libras3d.js" });
+const LIBRAS3D_VERSION = createHash("sha1").update(readFileSync("public/sdk-libras3d.js")).digest("hex").slice(0, 10);
+
 const lazy = [
   ["src/sdk/tours/runtime.ts", "public/sdk-tours.js"],
   ["src/sdk/builder/builder.ts", "public/sdk-builder.js"],
@@ -25,7 +31,9 @@ const lazy = [
   ["src/sdk/analytics/collector.ts", "public/sdk-analytics.js"],
   ["src/sdk/accessibility/widget.ts", "public/sdk-a11y.js"],
 ];
-const lazyResults = await Promise.all(lazy.map(([entry, outfile]) => build({ ...common, entryPoints: [entry], outfile })));
+const lazyResults = await Promise.all(
+  lazy.map(([entry, outfile]) => build({ ...common, entryPoints: [entry], outfile, define: { __LIBRAS3D_VERSION__: JSON.stringify(LIBRAS3D_VERSION) } }))
+);
 
 const hash = createHash("sha1");
 for (const [, outfile] of lazy) hash.update(readFileSync(outfile));
@@ -42,7 +50,7 @@ const core = await build({
   define: { __LUUMU_BUILD__: JSON.stringify(VERSION) },
 });
 
-for (const r of [...lazyResults, core]) {
+for (const r of [libras3d, ...lazyResults, core]) {
   const [file, info] = Object.entries(r.metafile.outputs)[0];
   console.log(`✓ ${file} (${(info.bytes / 1024).toFixed(1)} KB)`);
 }

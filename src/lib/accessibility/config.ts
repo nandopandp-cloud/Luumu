@@ -13,6 +13,7 @@ import { FEATURE_IDS, PROFILE_IDS, isProfileId, type FeatureId, type ProfileId }
 import { normalizeGroups, type AudienceGroup } from "./audience";
 import { DEFAULT_SCOPE, normalizeScope, type ActivationScope } from "./scope";
 import { safeWebhookUrl, type IntegrationMode } from "./integration";
+import { DEFAULT_LOOK, normalizeLook, type InterpreterLook } from "./libras3d/interpreters";
 import { HAIR_COLORS, SKIN_TONES, VLIBRAS_AVATARS, safePersonalizationUrl, type VlibrasAvatar, type VlibrasLook } from "./vlibras";
 
 export type LauncherPosition = "bottom-right" | "bottom-left" | "middle-right" | "middle-left";
@@ -23,6 +24,13 @@ export type NudgeFrequency = "once" | "until_accepted" | "every_session";
  * depois que o VLibras aprova a parceria; as cores e a logo abaixo servem para montar o pedido.
  */
 export interface LibrasConfig {
+  /**
+   * Quem desenha o intérprete: "vlibras" = widget oficial do governo (padrão); "luumu" = intérprete
+   * 3D da Luumu (beta, lib/accessibility/libras3d), que usa a tradução e os sinais do VLibras.
+   */
+  engine: "vlibras" | "luumu";
+  /** visual do intérprete Luumu */
+  look: InterpreterLook;
   avatar: VlibrasAvatar;
   personalizationUrl: string;
   skin: string;
@@ -151,6 +159,8 @@ export const DEFAULT_A11Y_CONFIG: A11yConfig = {
   features: Object.fromEntries(FEATURE_IDS.map((f) => [f, true])) as Record<FeatureId, boolean>,
   profiles: [...PROFILE_IDS],
   libras: {
+    engine: "vlibras",
+    look: DEFAULT_LOOK,
     avatar: "icaro",
     personalizationUrl: "",
     skin: SKIN_TONES[2].value,
@@ -268,6 +278,8 @@ export function normalizeA11yConfig(input: unknown): A11yConfig {
     features: Object.fromEntries(FEATURE_IDS.map((f) => [f, bool(features[f], d.features[f])])) as Record<FeatureId, boolean>,
     profiles,
     libras: {
+      engine: libras.engine === "luumu" ? "luumu" : "vlibras",
+      look: normalizeLook(libras.look),
       avatar: oneOf(libras.avatar, VLIBRAS_AVATARS.map((a) => a.value), d.libras.avatar),
       personalizationUrl: safePersonalizationUrl(libras.personalizationUrl),
       skin: color(libras.skin, d.libras.skin),
