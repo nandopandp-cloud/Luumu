@@ -84,6 +84,15 @@ test("posição do logo e fundo", () => {
   assert.match(backgroundCss("??"), /gradient/, "inválido volta para lavanda");
 });
 
+test("imagem de fundo: URL segura por cima da cor, caminho relativo resolvido na origem da Luumu", () => {
+  assert.equal(normalizeLook({ backgroundUrl: "javascript:alert(1)" }).backgroundUrl, "");
+  assert.equal(normalizeLook({ backgroundUrl: 'https://x.com/a.jpg") ; background:red' }).backgroundUrl, "", "sem escapar do url()");
+  assert.equal(normalizeLook({ backgroundUrl: "https://cdn.escola.com/fundo.jpg" }).backgroundUrl, "https://cdn.escola.com/fundo.jpg");
+  const css = backgroundCss("marinho", "/mascot/fundo.png", "https://luumu.com.br");
+  assert.match(css, /^center \/ cover no-repeat url\("https:\/\/luumu\.com\.br\/mascot\/fundo\.png"\), radial-gradient/);
+  assert.equal(backgroundCss("#112233", ""), "#112233", "sem imagem, só a cor");
+});
+
 test("configuração: VLibras continua o padrão; o intérprete Luumu chega ao navegador", () => {
   assert.equal(normalizeA11yConfig({}).libras.engine, "vlibras");
   const c = normalizeA11yConfig({ libras: { engine: "luumu", look: { interpreter: "jm2", background: "marinho" } } });

@@ -197,7 +197,7 @@ export function ChipInput({ values, onChange, placeholder, label }: { values: st
 }
 
 /** URL de imagem com envio para o Blob (POST /api/accessibility/upload). */
-export function ImageField({ value, onChange, label, fallbackUrl, fallbackLabel }: { value: string; onChange: (v: string) => void; label: string; fallbackUrl?: string; fallbackLabel?: string }) {
+export function ImageField({ value, onChange, label, fallbackUrl, fallbackLabel, emptyLabel = "sem logo", placeholder = "https://…/logo.png" }: { value: string; onChange: (v: string) => void; label: string; fallbackUrl?: string; fallbackLabel?: string; emptyLabel?: string; placeholder?: string }) {
   const ref = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -223,10 +223,10 @@ export function ImageField({ value, onChange, label, fallbackUrl, fallbackLabel 
             // eslint-disable-next-line @next/next/no-img-element -- URL arbitrária do cliente (Blob ou site dele), sem otimização
             <img src={value} alt="" className="size-full object-contain p-1" />
           ) : (
-            <span className="text-[10px] font-semibold text-fg-mut">sem logo</span>
+            <span className="text-[10px] font-semibold text-fg-mut">{emptyLabel}</span>
           )}
         </span>
-        <Input value={value} onChange={(e) => onChange(e.target.value.trim())} placeholder="https://…/logo.png" className="py-2 text-xs" aria-label={label} spellCheck={false} />
+        <Input value={value} onChange={(e) => onChange(e.target.value.trim())} placeholder={placeholder} className="py-2 text-xs" aria-label={label} spellCheck={false} />
       </div>
       <div className="flex flex-wrap gap-2">
         <button type="button" onClick={() => ref.current?.click()} disabled={busy} className="inline-flex items-center gap-1.5 rounded-lg border border-line-strong px-3 py-1.5 text-xs font-semibold text-fg-soft transition hover:border-accent hover:text-accent disabled:opacity-60">

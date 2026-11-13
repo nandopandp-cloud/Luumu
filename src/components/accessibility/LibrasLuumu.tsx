@@ -167,6 +167,9 @@ export function LibrasLuumu({ config, patch }: { config: A11yConfig; patch: Patc
             </button>
             {customBg && <ColorField label="Cor de fundo" value={look.background} onChange={(background) => set({ background })} presets={[]} />}
           </div>
+          <Field label="Imagem de fundo (opcional)" hint="Cobre a área do intérprete; a cor acima aparece enquanto ela carrega. Prefira imagens lisas ou desfocadas: fundo carregado atrapalha a leitura das mãos.">
+            <ImageField label="URL da imagem de fundo" value={look.backgroundUrl} onChange={(backgroundUrl) => set({ backgroundUrl })} emptyLabel="sem imagem" placeholder="https://…/fundo.jpg" />
+          </Field>
         </div>
       </Card>
 

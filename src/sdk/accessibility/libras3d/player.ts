@@ -134,7 +134,7 @@ function create(opts: Libras3dOptions): Libras3dPlayer {
   function applyChrome() {
     win.classList.toggle("left", side === "left");
     win.classList.toggle("right", side === "right");
-    stageEl.style.setProperty("--bg", backgroundCss(look.background));
+    stageEl.style.setProperty("--bg", backgroundCss(look.background, look.backgroundUrl, opts.origin));
   }
   applyChrome();
 

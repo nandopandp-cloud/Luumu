@@ -90,6 +90,8 @@ export interface InterpreterLook {
   logoSize: number;
   /** id de BACKGROUNDS ou cor #RRGGBB */
   background: string;
+  /** imagem de fundo (cobre a área do intérprete); "" = só a cor/preset acima */
+  backgroundUrl: string;
 }
 
 export const DEFAULT_LOOK: InterpreterLook = {
@@ -103,6 +105,7 @@ export const DEFAULT_LOOK: InterpreterLook = {
   logoOpacity: 100,
   logoSize: 13,
   background: "lavanda",
+  backgroundUrl: "",
 };
 
 const hex = (v: unknown) => (typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v) ? v.toUpperCase() : null);
@@ -134,6 +137,7 @@ export function normalizeLook(input: unknown): InterpreterLook {
     logoOpacity: num(o.logoOpacity, [0, 100], d.logoOpacity),
     logoSize: num(o.logoSize, [7, 20], d.logoSize),
     background: bg,
+    backgroundUrl: safeUrl(o.backgroundUrl),
   };
 }
 
@@ -144,7 +148,14 @@ export function logoPosition(look: Pick<InterpreterLook, "logoSpot" | "logoX" | 
   return p ? { ...p } : null;
 }
 
-/** CSS do fundo (preset ou cor). */
-export function backgroundCss(bg: string): string {
-  return bg in BACKGROUNDS ? BACKGROUNDS[bg as BackgroundId].css : hex(bg) ?? BACKGROUNDS.lavanda.css;
+/**
+ * CSS do fundo (preset ou cor) e, se houver, a imagem por cima, cobrindo a área. `origin` resolve
+ * imagens com caminho relativo (/…) quando a janela roda no site do cliente.
+ */
+export function backgroundCss(bg: string, imageUrl = "", origin = ""): string {
+  const base = bg in BACKGROUNDS ? BACKGROUNDS[bg as BackgroundId].css : hex(bg) ?? BACKGROUNDS.lavanda.css;
+  const url = safeUrl(imageUrl);
+  if (!url) return base;
+  const full = url.startsWith("/") ? origin + url : url;
+  return `center / cover no-repeat url("${full}"), ${base}`;
 }
