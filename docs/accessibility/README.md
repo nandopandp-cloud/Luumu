@@ -300,6 +300,13 @@ Painel → Libras → **Intérprete de Libras**: "VLibras (gov.br)" (padrão) ou
 No modo Luumu a tradução e os sinais continuam sendo os do VLibras; a Luumu troca o personagem e
 a janela (`config.libras.engine = "luumu"`, visual em `config.libras.look`).
 
+**Visual por plataforma:** no topo do editor, "Plataforma" escolhe o que se edita: o padrão ou
+uma plataforma do projeto ("Personalizar esta plataforma" copia o padrão para ela; "Voltar ao
+padrão" apaga). Fica em `config.libras.lookByHost` (hostname → visual). O `/config` já recebe o
+`host` (e ele faz parte da chave do cache da borda): `publicA11yConfig(config, convidados, host)`
+põe em `libras.look` o visual daquela plataforma e manda `lookByHost` vazio — um site nunca vê as
+outras plataformas do cliente. O motor (VLibras ou Luumu) continua um só para o projeto.
+
 ```
 clique/seleção no texto ──► traducao2.vlibras.gov.br/translate ──► "BOM_DIA ANA"
 glosa ──► /api/v1/accessibility/libras/sinal/:glosa ──► dicionario2.vlibras.gov.br (pacote Unity)

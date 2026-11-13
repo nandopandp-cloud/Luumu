@@ -102,3 +102,21 @@ test("configuração: VLibras continua o padrão; o intérprete Luumu chega ao n
   assert.equal(pub.libras.look.interpreter, "jm2");
   assert.equal(normalizeA11yConfig({ libras: { engine: "outro" } }).libras.engine, "vlibras");
 });
+
+test("visual por plataforma: cada site recebe só o seu; sem visual próprio, o padrão", () => {
+  const c = normalizeA11yConfig({
+    libras: {
+      engine: "luumu",
+      look: { interpreter: "f11" },
+      lookByHost: { "HTTPS://Escola-A.com.br/": { interpreter: "jm2", background: "marinho" }, "nao é host": { interpreter: "f15" } },
+    },
+  });
+  assert.deepEqual(Object.keys(c.libras.lookByHost), ["escola-a.com.br"], "host normalizado; chave inválida descartada");
+  const a = publicA11yConfig(c, false, "escola-a.com.br");
+  assert.equal(a.libras.look.interpreter, "jm2");
+  assert.equal(a.libras.look.background, "marinho");
+  assert.deepEqual(a.libras.lookByHost, {}, "o mapa das outras plataformas não sai do servidor");
+  assert.equal(publicA11yConfig(c, false, "escola-b.com.br").libras.look.interpreter, "f11", "outra plataforma: padrão");
+  assert.equal(publicA11yConfig(c).libras.look.interpreter, "f11", "sem host: padrão");
+  assert.equal(JSON.stringify(publicA11yConfig(c, false, "escola-b.com.br")).includes("escola-a"), false);
+});

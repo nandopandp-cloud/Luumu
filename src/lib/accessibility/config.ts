@@ -11,7 +11,7 @@
  */
 import { FEATURE_IDS, PROFILE_IDS, isProfileId, type FeatureId, type ProfileId } from "./features";
 import { normalizeGroups, type AudienceGroup } from "./audience";
-import { DEFAULT_SCOPE, normalizeScope, type ActivationScope } from "./scope";
+import { DEFAULT_SCOPE, cleanHost, normalizeScope, type ActivationScope } from "./scope";
 import { safeWebhookUrl, type IntegrationMode } from "./integration";
 import { DEFAULT_LOOK, normalizeLook, type InterpreterLook } from "./libras3d/interpreters";
 import { HAIR_COLORS, SKIN_TONES, VLIBRAS_AVATARS, safePersonalizationUrl, type VlibrasAvatar, type VlibrasLook } from "./vlibras";
@@ -29,8 +29,13 @@ export interface LibrasConfig {
    * 3D da Luumu (beta, lib/accessibility/libras3d), que usa a tradução e os sinais do VLibras.
    */
   engine: "vlibras" | "luumu";
-  /** visual do intérprete Luumu */
+  /** visual do intérprete Luumu (padrão das plataformas sem visual próprio) */
   look: InterpreterLook;
+  /**
+   * Visual próprio por plataforma (hostname → visual). O /config entrega a cada site só o visual
+   * dele, já em `look` (publicA11yConfig com `host`): um site nunca vê as outras plataformas.
+   */
+  lookByHost: Record<string, InterpreterLook>;
   avatar: VlibrasAvatar;
   personalizationUrl: string;
   skin: string;
@@ -161,6 +166,7 @@ export const DEFAULT_A11Y_CONFIG: A11yConfig = {
   libras: {
     engine: "vlibras",
     look: DEFAULT_LOOK,
+    lookByHost: {},
     avatar: "icaro",
     personalizationUrl: "",
     skin: SKIN_TONES[2].value,
@@ -280,6 +286,12 @@ export function normalizeA11yConfig(input: unknown): A11yConfig {
     libras: {
       engine: libras.engine === "luumu" ? "luumu" : "vlibras",
       look: normalizeLook(libras.look),
+      lookByHost: Object.fromEntries(
+        Object.entries(obj(libras.lookByHost))
+          .map(([h, v]) => [cleanHost(h), normalizeLook(v)] as const)
+          .filter(([h]) => !!h)
+          .slice(0, 200)
+      ),
       avatar: oneOf(libras.avatar, VLIBRAS_AVATARS.map((a) => a.value), d.libras.avatar),
       personalizationUrl: safePersonalizationUrl(libras.personalizationUrl),
       skin: color(libras.skin, d.libras.skin),
@@ -307,8 +319,11 @@ export function normalizeA11yConfig(input: unknown): A11yConfig {
   };
 }
 
-/** Recorte para o navegador. `hasInvitees`: o projeto tem convidados na lista (contagem do banco). */
-export function publicA11yConfig(config: A11yConfig, hasInvitees = false): PublicA11yConfig {
+/**
+ * Recorte para o navegador. `hasInvitees`: o projeto tem convidados na lista (contagem do banco).
+ * `host`: plataforma que pediu — o intérprete Luumu sai com o visual dela (ou o padrão).
+ */
+export function publicA11yConfig(config: A11yConfig, hasInvitees = false, host: string | null = null): PublicA11yConfig {
   const { hosts: _hosts, ...scope } = config.scope;
   void _hosts;
   const ext = config.integration.mode === "external";
@@ -318,6 +333,8 @@ export function publicA11yConfig(config: A11yConfig, hasInvitees = false): Publi
     // no modo externo a lista da Luumu não vale: quem decide é o setUser da outra plataforma
     nudge: { ...config.nudge, hasList: ext ? false : hasInvitees },
     integration: { mode: config.integration.mode, webhook: !!config.integration.webhookUrl },
+    // só o visual desta plataforma; o mapa (com as outras plataformas do cliente) não sai do servidor
+    libras: { ...config.libras, look: (host && config.libras.lookByHost[host]) || config.libras.look, lookByHost: {} },
   };
 }
 

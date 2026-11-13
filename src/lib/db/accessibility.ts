@@ -67,7 +67,7 @@ export async function getAccessibilitySettings(projectId: string): Promise<Acces
 export async function getAccessibilityForSdk(projectId: string, host: string | null): Promise<PublicA11yConfig | null> {
   const s = await load(projectId);
   if (!s.enabled || !hostInScope(s.config.scope, host)) return null;
-  return publicA11yConfig(s.config, s.invitees > 0);
+  return publicA11yConfig(s.config, s.invitees > 0, host);
 }
 
 /** O projeto configurou o plugin (ligado ou não): o SDK guarda o catálogo por menos tempo. */

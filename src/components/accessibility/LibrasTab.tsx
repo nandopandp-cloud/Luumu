@@ -28,7 +28,7 @@ const FACTS = [
  * é exclusiva de parceiros aprovados pelo VLibras: aqui o cliente escolhe o que quer, gera o
  * pedido no formato oficial e, depois da aprovação, cola o endereço recebido.
  */
-export function LibrasTab({ config, patch, projectName, hosts }: { config: A11yConfig; patch: Patch; projectName: string; hosts: string[] }) {
+export function LibrasTab({ config, patch, projectName, hosts, librasHost = null, onLibrasHost = () => {} }: { config: A11yConfig; patch: Patch; projectName: string; hosts: string[]; librasHost?: string | null; onLibrasHost?: (h: string | null) => void }) {
   const l = config.libras;
   const set = (p: Partial<A11yConfig["libras"]>) => patch((c) => ({ ...c, libras: { ...c.libras, ...p } }));
   const [urlDraft, setUrlDraft] = useState(l.personalizationUrl);
@@ -67,7 +67,7 @@ export function LibrasTab({ config, patch, projectName, hosts }: { config: A11yC
       </Card>
 
       {luumu ? (
-        <LibrasLuumu config={config} patch={patch} />
+        <LibrasLuumu config={config} patch={patch} hosts={hosts} host={librasHost} onHost={onLibrasHost} />
       ) : (
       <>
       <Card>

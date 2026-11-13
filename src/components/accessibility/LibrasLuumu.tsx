@@ -1,11 +1,12 @@
 "use client";
 
-import { Check, Image as ImageIcon, Info, Palette, Shirt, Sparkles, Users } from "lucide-react";
+import { Check, Globe, Image as ImageIcon, Info, Palette, RotateCcw, Shirt, Sparkles, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Field } from "@/components/ui/Input";
 import type { A11yConfig } from "@/lib/accessibility/config";
+import { hostInScope } from "@/lib/accessibility/scope";
 import {
   BACKGROUNDS, INTERPRETERS, LOGO_SPOT_OPTIONS, LOGO_X, LOGO_Y, SHIRT_COLORS, logoPosition, type InterpreterLook,
 } from "@/lib/accessibility/libras3d/interpreters";
@@ -26,18 +27,89 @@ function Range({ id, label, value, min, max, suffix, onChange }: { id: string; l
 }
 
 /**
- * Intérprete Luumu (beta): escolha do personagem, camisa (cor, logo, posição) e fundo.
- * Visual em config.libras.look (lib/accessibility/libras3d/interpreters.ts); a janela real aparece
- * na prévia ao lado, vista "Libras".
+ * Intérprete Luumu (beta): escolha do personagem, camisa (cor, logo, posição) e fundo — um visual
+ * padrão e, se quiser, um visual próprio por plataforma (config.libras.lookByHost). `host` = a
+ * plataforma em edição (null = padrão); a prévia ao lado mostra o visual dela, vista "Libras".
  */
-export function LibrasLuumu({ config, patch }: { config: A11yConfig; patch: Patch }) {
-  const look = config.libras.look;
-  const set = (p: Partial<InterpreterLook>) => patch((c) => ({ ...c, libras: { ...c.libras, look: { ...c.libras.look, ...p } } }));
+export function LibrasLuumu({ config, patch, hosts, host, onHost }: { config: A11yConfig; patch: Patch; hosts: string[]; host: string | null; onHost: (h: string | null) => void }) {
+  const own = host ? config.libras.lookByHost[host] : undefined;
+  const editing = !host || !!own;
+  const look = own ?? config.libras.look;
+  const set = (p: Partial<InterpreterLook>) =>
+    patch((c) =>
+      host && c.libras.lookByHost[host]
+        ? { ...c, libras: { ...c.libras, lookByHost: { ...c.libras.lookByHost, [host]: { ...c.libras.lookByHost[host], ...p } } } }
+        : { ...c, libras: { ...c.libras, look: { ...c.libras.look, ...p } } }
+    );
+  const customize = (h: string) => patch((c) => ({ ...c, libras: { ...c.libras, lookByHost: { ...c.libras.lookByHost, [h]: { ...c.libras.look } } } }));
+  const backToDefault = (h: string) =>
+    patch((c) => {
+      const next = { ...c.libras.lookByHost };
+      delete next[h];
+      return { ...c, libras: { ...c.libras, lookByHost: next } };
+    });
+  const customized = Object.keys(config.libras.lookByHost);
+  const allHosts = [...new Set([...hosts, ...customized])];
   const pos = logoPosition(look) ?? { x: 0, y: 0 };
   const customBg = !(look.background in BACKGROUNDS);
 
   return (
     <>
+      <Card>
+        <SectionTitle
+          icon={<Globe className="size-4.5" />}
+          title="Plataforma"
+          description="Cada plataforma pode ter o próprio intérprete, camisa, logo e fundo. As que não forem personalizadas usam o padrão."
+          aside={customized.length ? <Badge tone="brand" dot={false}>{customized.length} {customized.length === 1 ? "personalizada" : "personalizadas"}</Badge> : undefined}
+        />
+        <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Plataforma em edição">
+          {[null, ...allHosts].map((h) => {
+            const on = h === host;
+            const custom = !!h && !!config.libras.lookByHost[h];
+            const off = !!h && !hostInScope(config.scope, h);
+            return (
+              <button
+                key={h ?? "padrao"}
+                type="button"
+                role="radio"
+                aria-checked={on}
+                onClick={() => onHost(h)}
+                className={cn("inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-left text-xs font-semibold transition", on ? "border-accent bg-surface-brand text-accent" : "border-line text-fg-soft hover:border-line-strong")}
+              >
+                {h ?? "Padrão (todas as plataformas)"}
+                {custom && <span className="rounded-full bg-accent/15 px-1.5 py-0.5 text-[10px] text-accent">próprio</span>}
+                {off && <span className="rounded-full bg-bg-sunken px-1.5 py-0.5 text-[10px] text-fg-mut">plugin desligado</span>}
+              </button>
+            );
+          })}
+        </div>
+        {!allHosts.length && <p className="mt-3 text-xs text-fg-mut">As plataformas aparecem aqui assim que o SDK do projeto rodar nelas.</p>}
+        {host && (
+          <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl bg-bg-sunken px-3 py-2.5 text-xs text-fg-soft">
+            {own ? (
+              <>
+                <span className="flex-1">
+                  <strong className="text-fg">{host}</strong> tem visual próprio. As mudanças abaixo valem só para ela.
+                </span>
+                <button type="button" onClick={() => backToDefault(host)} className="inline-flex items-center gap-1.5 rounded-lg border border-line-strong px-2.5 py-1.5 font-semibold hover:border-accent hover:text-accent">
+                  <RotateCcw className="size-3.5" /> Voltar ao padrão
+                </button>
+              </>
+            ) : (
+              <>
+                <span className="flex-1">
+                  <strong className="text-fg">{host}</strong> usa o visual padrão (mostrado abaixo e na prévia).
+                </span>
+                <button type="button" onClick={() => customize(host)} className="rounded-lg bg-accent px-3 py-1.5 font-semibold text-accent-contrast">
+                  Personalizar esta plataforma
+                </button>
+              </>
+            )}
+          </div>
+        )}
+      </Card>
+
+      <div className={cn("flex flex-col gap-4", !editing && "pointer-events-none select-none opacity-55")} aria-disabled={!editing}>
       <Card>
         <SectionTitle icon={<Users className="size-4.5" />} title="Intérprete" description="O personagem que faz os sinais. O movimento de cada sinal é o do VLibras." />
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6" role="radiogroup" aria-label="Intérprete">
@@ -172,6 +244,8 @@ export function LibrasLuumu({ config, patch }: { config: A11yConfig; patch: Patc
           </Field>
         </div>
       </Card>
+
+      </div>
 
       <Card>
         <SectionTitle icon={<Sparkles className="size-4.5" />} title="Sobre o beta" aside={<Badge tone="warn">Beta</Badge>} />

@@ -72,12 +72,14 @@ export function AccessibilityAdmin({
   const [config, setConfig] = useState<A11yConfig>(initial.config);
   const [tab, setTab] = useState<Tab>("activation");
   const [view, setView] = useState<PreviewView>("launcher");
+  // plataforma em edição no intérprete Luumu (null = padrão); a prévia mostra o visual dela
+  const [librasHost, setLibrasHost] = useState<string | null>(null);
   const [saving, startSaving] = useTransition();
 
   const patch = (fn: (c: A11yConfig) => A11yConfig) => setConfig((c) => fn(c));
 
   // a prévia recebe o que o SDK receberia (normalizado, sem plataformas nem lista de convidados)
-  const previewConfig = useMemo(() => publicA11yConfig(normalizeA11yConfig(config), inviteeCount > 0), [config, inviteeCount]);
+  const previewConfig = useMemo(() => publicA11yConfig(normalizeA11yConfig(config), inviteeCount > 0, librasHost), [config, inviteeCount, librasHost]);
   const dirty = JSON.stringify(normalizeA11yConfig(config)) !== JSON.stringify(live.config);
   const liveScope = scopeSummary(live.config.scope, { invitees: inviteeCount, projectHosts: hosts.length });
   const draftNobody = scopeReachesNobody(normalizeA11yConfig(config).scope, inviteeCount);
@@ -228,7 +230,19 @@ export function AccessibilityAdmin({
           )}
           {tab === "features" && <FeaturesTab config={config} patch={patch} />}
           {tab === "appearance" && <AppearanceTab config={config} patch={patch} projectLogo={projectLogo} />}
-          {tab === "libras" && <LibrasTab config={config} patch={patch} projectName={projectName} hosts={hosts} />}
+          {tab === "libras" && (
+            <LibrasTab
+              config={config}
+              patch={patch}
+              projectName={projectName}
+              hosts={hosts}
+              librasHost={librasHost}
+              onLibrasHost={(h) => {
+                setLibrasHost(h);
+                setView("libras");
+              }}
+            />
+          )}
           {tab === "nudge" && (
             <NudgeTab config={config} patch={patch} canManage={canManage} inviteeCount={inviteeCount} />
           )}
