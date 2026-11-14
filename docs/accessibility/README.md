@@ -210,6 +210,23 @@ nesta página depois do último `setUser` (um eco antigo não desfaz a mudança)
   `webhook: true`) e precisa ser https pública (`safeWebhookUrl`). Só estudantes identificados.
   "Testar webhook" no painel manda um evento `test`.
 
+## Cadastro de acessibilidade (página aberta)
+
+`luumu.com.br/cadastro-acessibilidade`: o time operacional cola o link do Google Planilhas ou
+envia o .csv/.xlsx da **planilha-modelo** (15 colunas) e recebe um link de CSV pronto para a
+plataforma externa importar, no formato `…/cadastro-acessibilidade/<código>/export?format=csv`.
+
+- Única transformação: "Perfis do convite" por extenso → ids (TDAH → `foco`, Dislexia → `leitura`,
+  Baixa visão → `visao`, Habilidades motoras → `ritmo`, Epilepsia → `calma`, Deficiência auditiva
+  → `libras`, Usuário cego (leitor de tela) → `ouvir`, Daltonismo → `cores`). Valor não
+  reconhecido fica sem perfil e é listado na tela. Regras em `src/lib/accessibility/cadastro.ts`.
+- Link do Google: o **servidor** baixa `…/export?format=csv&gid=<aba do link>` (só docs.google.com).
+- Guarda: Vercel Blob (`cadastro-acessibilidade/<código>.csv`, privado quando a conta permite),
+  `src/lib/accessibility/cadastro-store.ts`. O código traz a validade (7 dias, depois 410) e 32
+  caracteres aleatórios; vencidos são apagados a cada envio.
+- Sem login: limite de 30 envios/hora por IP, 5 MB, 20 mil linhas, só a planilha-modelo, `noindex`.
+- Local: o Blob da conta usa OIDC só em produção, então `pnpm dev` não grava (o envio responde 500).
+
 ## Verificação de identidade
 
 Sem ela, quem souber o ID de um estudante consegue pedir as preferências dele (que podem indicar
