@@ -142,8 +142,9 @@ export function CadastroForm() {
         className={cn("block cursor-pointer rounded-xl border-2 border-dashed p-4 text-center transition", over ? "border-accent bg-surface-brand" : "border-accent/30 bg-bg-sunken")}
       >
         <input ref={input} type="file" accept=".csv,.xlsx" className="sr-only" onChange={(e) => (pick(e.target.files?.[0]), (e.target.value = ""))} />
-        <span className="inline-flex items-center gap-1.5">
-          <Upload className="size-4 text-accent" /> <b className="text-accent">Escolher arquivo</b> ou arrastar aqui · .csv ou .xlsx
+        <span>
+          <Upload className="mr-1.5 inline size-4 align-[-3px] text-accent" />
+          <b className="text-accent">Escolher arquivo</b> ou arrastar aqui · .csv ou .xlsx
         </span>
         {file && <span className="mt-1 block font-semibold text-fg">{file.name}</span>}
       </label>
