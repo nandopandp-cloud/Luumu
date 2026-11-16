@@ -279,6 +279,7 @@ export const WIDGETS = {
   kpi_sessions_per_user: "Sessões por usuário",
   kpi_stickiness: "Aderência (WAU/MAU)",
   kpi_north_star: "North Star",
+  north_star_global: "North Star Jovens Gênios",
   kpi_task_success: "Task Success",
   kpi_activation: "Taxa de ativação",
   kpi_survey_conversion: "Conversão para pesquisa",

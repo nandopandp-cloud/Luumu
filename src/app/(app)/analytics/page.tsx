@@ -1,11 +1,12 @@
 import { AnalyticsShell } from "@/components/analytics/AnalyticsShell";
 import { savedPlatform } from "@/lib/platform/selected";
 import { AnalyticsUnavailable, EnableAnalytics, WaitingAnalytics } from "@/components/analytics/States";
-import { canManageWorkspace, getCurrentProject, getCurrentRole, requireUser } from "@/lib/auth/current";
+import { canManageWorkspace, getCurrentProject, getCurrentRole, getVisibleProjects, requireUser } from "@/lib/auth/current";
 import { collectingSince, getAnalyticsSettings, hasAnalyticsData, listViews, USER_SEGMENTS, type PeriodScope, USER_SORTS, type AnalyticsSettings, type UserSegment, type UserSort } from "@/lib/db/analytics";
 import type { UsersData } from "@/components/analytics/UsersView";
 import { listHosts } from "@/lib/db/hosts";
-import { northStarContext } from "@/lib/db/product-report";
+import { getGlobalNorthStar, northStarContext } from "@/lib/db/product-report";
+import type { GlobalNorthStar } from "@/lib/analytics/north-star";
 import { getAnalyticsPanel, listAnalyticsUsersPanel, type Freshness } from "@/lib/db/analytics-panel";
 import { parseViewConfig, viewHref, type ViewConfig } from "@/lib/analytics/core";
 import { datasetsFor, defaultSpan, TAB_LAYOUT, type Block } from "@/lib/analytics/derive";
@@ -76,6 +77,16 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
     : { data: {}, freshness: null as Freshness | null };
   let freshness = dataFreshness;
 
+  // North Star Jovens Gênios: as 3 plataformas no mesmo período (sem host/dispositivo, que são deste projeto)
+  let northStarGlobal: GlobalNorthStar | null = null;
+  if (blocks.some((b) => b.id === "north_star_global")) {
+    northStarGlobal = await getGlobalNorthStar(session.workspaceId, { period: period.period, from: period.from, to: period.to }, await getVisibleProjects());
+    // plataforma ainda calculando: a tela pergunta de novo sozinha, como nos outros blocos
+    if (northStarGlobal.platforms.some((p) => p.pending)) {
+      freshness = { at: freshness?.at ?? null, stale: freshness?.stale ?? false, pending: [...(freshness?.pending ?? []), "northStarGlobal"] };
+    }
+  }
+
   // aba Usuários: a lista (busca/segmento/ordem/página na URL) + os números do topo
   let users: UsersData | null = null;
   if (config.tab === "users") {
@@ -124,6 +135,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
       hosts={hosts}
       settings={{ northStarEvent: settings.northStarEvent, activationEvent: settings.activationEvent, taskStartEvent: settings.taskStartEvent, taskDoneEvent: settings.taskDoneEvent, adherenceBase: settings.adherenceBase }}
       northStar={northStar}
+      northStarGlobal={northStarGlobal}
       canManage={canManage}
       canConfigure={role === "owner" || role === "admin" || role === "editor"}
       enabled={settings.enabled}

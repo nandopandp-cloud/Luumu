@@ -85,7 +85,7 @@ export function buildCharts(m: ReportModel): ChartSpec[] {
       tag: `${label} - Aderência`,
       tagColor: PLATFORM_COLOR[p],
       title: `Aderência (Stickiness) - ${label}`,
-      info: "DAU médio da quinzena ÷ MAU (usuários ativos nos 30 dias até o fim da quinzena), do Analytics da Luumu.",
+      info: "WAU médio da quinzena ÷ MAU (usuários ativos nos 30 dias até o fim da quinzena), do Analytics da Luumu.",
       unit: "%",
       ticks,
       values: series(k),

@@ -12,7 +12,7 @@ import {
   viewHref,
 } from "@/lib/analytics/core";
 import { acquisitionKpis, channelSeries, channelTable, datasetsFor, hoursGrid, kpis, northStarKpi, retentionCurve, TAB_LAYOUT, WIDGET_DATASETS } from "@/lib/analytics/derive";
-import { northStarTargets, periodCsat, platformNorthStar } from "@/lib/analytics/north-star";
+import { averageNorthStar, buildGlobalNorthStar, northStarTargets, periodCsat, platformNorthStar } from "@/lib/analytics/north-star";
 import { WIDGET_IDS } from "@/lib/analytics/core";
 
 const now = Date.parse("2026-10-03T15:00:00Z");
@@ -221,4 +221,21 @@ test("identify: nome e foto pelos nomes de campo mais comuns", () => {
   assert.equal(whoFrom({ photoURL: "https://x.com/p.jpg" }).avatar, "https://x.com/p.jpg");
   assert.equal(whoFrom({ avatar: "http://x.com/p.jpg" }).avatar, null);
   assert.deepEqual(whoFrom({}), { id: null, email: null, name: null, avatar: null });
+});
+
+test("North Star Jovens Gênios: média simples das 3 plataformas, só com todas", () => {
+  const view = (key: "geniex" | "exploradores" | "educadores", now: number | null, prev: number | null) => ({
+    key,
+    label: key,
+    project: key,
+    now: now === null ? null : { value: now, components: [], missing: [] },
+    prev,
+    pending: false,
+  });
+  const g = buildGlobalNorthStar([view("geniex", 90, 80), view("exploradores", 60, 70), view("educadores", 75, 60)]);
+  assert.equal(g.value, 75);
+  assert.equal(g.prev, 70);
+  assert.equal(buildGlobalNorthStar([view("geniex", 90, 80), view("exploradores", null, 70), view("educadores", 75, 60)]).value, null);
+  assert.equal(averageNorthStar([]), null);
+  assert.ok(TAB_LAYOUT.overview.some((b) => b.id === "north_star_global"));
 });

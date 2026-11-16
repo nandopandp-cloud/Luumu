@@ -5,11 +5,12 @@ import { z } from "zod";
 import { requireProductReportAccess } from "@/lib/product-report/access";
 import { getVisibleProjects } from "@/lib/auth/current";
 import { syncPeriod } from "@/lib/product-report/collect";
-import { loadReportModel } from "@/lib/product-report/load";
-import { parsePeriod } from "@/lib/product-report/period";
+import { HISTORY_SIZE, loadReportModel } from "@/lib/product-report/load";
+import { isClosed, parsePeriod, periodsUntil, yearPeriodsUntil } from "@/lib/product-report/period";
+import { outdatedAdherence } from "@/lib/product-report/model";
 import { isGoalKey, METRICS, PLATFORM_KEYS } from "@/lib/product-report/indicators";
 import type { ManualValue } from "@/lib/product-report/model";
-import { insertRun, listStoredPeriods, saveProductReportSettings, saveStoredPeriod } from "@/lib/db/product-report";
+import { insertRun, latestSyncs, listStoredPeriods, saveProductReportSettings, saveStoredPeriod } from "@/lib/db/product-report";
 
 /*
   Toda action começa pelo guard do módulo: chamar a action direto (sem passar pela página)
@@ -22,19 +23,21 @@ const PATH = "/product-report";
 const period = z.string().refine((p) => parsePeriod(p) !== null, "Quinzena inválida.");
 const value = z.number().finite().min(0, "Valores não podem ser negativos.").max(100_000).nullable();
 
-/** Busca os indicadores da quinzena na Luumu e registra a execução (sucesso ou falha). */
+/**
+ * Busca os indicadores da quinzena na Luumu e registra a execução (sucesso ou falha). Também
+ * refaz as quinzenas encerradas mostradas no report (gráficos e média anual) cuja Aderência ainda
+ * está na regra antiga (DAU/MAU), uma por vez.
+ */
 export async function syncAction(input: unknown): Promise<Result> {
   const session = await requireProductReportAccess();
   const parsed = period.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Quinzena inválida." };
   const visible = await getVisibleProjects();
-  const run = await syncPeriod({
-    workspaceId: session.workspaceId,
-    period: parsed.data,
-    trigger: "manual",
-    userId: session.userId,
-    allowedProjectIds: visible.map((p) => p.id),
-  });
+  const opts = { workspaceId: session.workspaceId, trigger: "manual" as const, userId: session.userId, allowedProjectIds: visible.map((p) => p.id) };
+  const run = await syncPeriod({ ...opts, period: parsed.data });
+  const shown = [...new Set([...periodsUntil(parsed.data, HISTORY_SIZE), ...yearPeriodsUntil(parsed.data)])].filter((p) => p !== parsed.data && isClosed(p));
+  const { syncs } = await latestSyncs(session.workspaceId, shown);
+  for (const p of shown.filter((x) => outdatedAdherence(syncs[x]))) await syncPeriod({ ...opts, period: p });
   revalidatePath(PATH);
   if (run.status === "error") return { ok: false, error: `Não foi possível atualizar: ${run.error ?? "erro desconhecido"}.` };
   return { ok: true, id: run.id };

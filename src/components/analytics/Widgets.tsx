@@ -81,7 +81,7 @@ import {
 } from "@/lib/analytics/derive";
 import { Skeleton } from "@/components/ui/Skeleton";
 import type { AnalyticsData } from "@/lib/db/analytics";
-import { northStarTargets } from "@/lib/analytics/north-star";
+import { northStarTargets, type GlobalNorthStar, type PlatformNorthStarView } from "@/lib/analytics/north-star";
 
 /* ---------- contexto ---------- */
 
@@ -98,6 +98,8 @@ export interface WidgetCtx {
   pending?: ReadonlySet<string>;
   /** metas e pesos do card North Star; sem ele, metas padrão */
   northStar?: NorthStarCtx;
+  /** North Star Jovens Gênios (as 3 plataformas), carregada pela página quando o bloco está na tela */
+  northStarGlobal?: GlobalNorthStar | null;
 }
 
 const axis = { fontSize: 11, fill: "var(--text-mut)", fontFamily: "var(--font-mono)" };
@@ -276,7 +278,7 @@ function KpiCard({ id, k, fmt, ctx, label: forced, detail, hint }: { id: WidgetI
 }
 
 const NS_NAME = { csat: "CSAT", adherence: "Aderência", usage: "Uso" } as const;
-const nsValue = (metric: keyof typeof NS_NAME, v: number) => (metric === "usage" ? `${fmtDec(v)} min` : `${Math.round(v)}%`);
+const nsValue = (metric: keyof typeof NS_NAME, v: number) => `${v.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}${metric === "usage" ? " min" : "%"}`;
 
 /** North Star = CSAT, Aderência (WAU/MAU) e Tempo de uso ÷ metas da plataforma, ponderados. */
 function NorthStarCard({ ctx }: { ctx: WidgetCtx }) {
@@ -298,6 +300,81 @@ function NorthStarCard({ ctx }: { ctx: WidgetCtx }) {
   );
 }
 const DEFAULT_NS: NorthStarCtx = { targets: northStarTargets(null), platform: null };
+
+/** Pontos da North Star (100 = na meta) em %: "57,6%". */
+const nsPts = (v: number | null | undefined) => (v == null ? "–" : `${v.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`);
+
+function NsDelta({ now, prev }: { now: number | null; prev: number | null }) {
+  if (now == null || prev == null) return null;
+  const d = now - prev;
+  const flat = Math.abs(d) < 0.05;
+  return (
+    <span className={cn("text-xs font-bold tabular-nums", flat ? "text-fg-mut" : d > 0 ? "text-sucesso" : "text-erro")}>
+      {flat ? "=" : d > 0 ? "↑" : "↓"} {Math.abs(d).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} p.p.
+    </span>
+  );
+}
+
+function PlatformNsTile({ p }: { p: PlatformNorthStarView }) {
+  const status = !p.project
+    ? "Nenhum projeto da Luumu encontrado para esta plataforma."
+    : p.pending
+      ? "Calculando…"
+      : p.now?.missing.length
+        ? `Sem ${p.now.missing.map((m) => (m === "csat" ? "pesquisa CSAT respondida" : m === "usage" ? "sessões" : "WAU/MAU")).join(" e ")} no período.`
+        : null;
+  return (
+    <li className="flex min-w-0 flex-col gap-2 rounded-xl border border-line p-3.5" title={p.project ? `Projeto: ${p.project}` : undefined}>
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="truncate text-sm font-semibold text-fg-soft">{p.label}</span>
+        {p.pending ? <Skeleton className="h-5 w-14" /> : <span className="font-display text-lg font-extrabold tabular-nums text-luumu-verde">{nsPts(p.now?.value)}</span>}
+      </div>
+      {p.now && (
+        <ul className="flex flex-col gap-1 text-xs">
+          {p.now.components.map((c) => (
+            <li key={c.metric} className="flex justify-between gap-2 tabular-nums">
+              <span className="text-fg-mut">{NS_NAME[c.metric]}</span>
+              <span>
+                <b className="font-semibold text-fg-soft">{c.value == null ? "–" : nsValue(c.metric, c.value)}</b>
+                <span className="text-fg-mut"> / meta {nsValue(c.metric, c.target)}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="mt-auto flex items-center justify-between gap-2">
+        {status ? <span className="text-xs leading-snug text-fg-mut">{status}</span> : <NsDelta now={p.now?.value ?? null} prev={p.prev} />}
+      </div>
+    </li>
+  );
+}
+
+/** North Star Jovens Gênios = (GenieX + Exploradores + Educadores) ÷ 3, cada uma com as suas metas. */
+function GlobalNorthStarCard({ ctx }: { ctx: WidgetCtx }) {
+  const g = ctx.northStarGlobal;
+  return (
+    <Panel title="North Star Jovens Gênios" subtitle="Média da North Star das 3 plataformas no período, cada uma com as suas metas. 100% = todas na meta.">
+      {!g ? (
+        <Empty />
+      ) : (
+        <div className="grid gap-4 @3xl:grid-cols-[minmax(170px,210px)_1fr]">
+          <div className="flex flex-col justify-center gap-1.5 rounded-xl bg-luumu-verde/10 p-4">
+            <span className="font-display text-[38px] font-extrabold leading-none tabular-nums text-luumu-verde">{nsPts(g.value)}</span>
+            <NsDelta now={g.value} prev={g.prev} />
+            <span className="text-xs leading-snug text-fg-mut">
+              {g.value == null ? "Aparece quando as 3 plataformas tiverem North Star no período." : "(GenieX + Exploradores + Educadores) ÷ 3"}
+            </span>
+          </div>
+          <ul className="grid gap-3 @xl:grid-cols-3">
+            {g.platforms.map((p) => (
+              <PlatformNsTile key={p.key} p={p} />
+            ))}
+          </ul>
+        </div>
+      )}
+    </Panel>
+  );
+}
 
 /* ---------- bloco a bloco ---------- */
 
@@ -326,6 +403,8 @@ export function Widget({ id, ctx }: { id: WidgetId; ctx: WidgetCtx }) {
       return <KpiCard id={id} k={K.wau} fmt={fmtInt} ctx={ctx} />;
     case "kpi_north_star":
       return <NorthStarCard ctx={ctx} />;
+    case "north_star_global":
+      return <GlobalNorthStarCard ctx={ctx} />;
     case "kpi_task_success":
       return <KpiCard id={id} k={K.taskSuccess} fmt={fmtPct} ctx={ctx} />;
     case "kpi_new_users":

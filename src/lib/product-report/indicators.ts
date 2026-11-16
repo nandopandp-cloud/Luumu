@@ -24,6 +24,12 @@ export const METRIC_META: Record<Metric, { label: string; unit: "%" | "min"; sou
   usage: { label: "Tempo de uso", unit: "min", source: "Luumu · Analytics (tempo médio por sessão)" },
 };
 
+/**
+ * Regra de cálculo da Aderência gravada em cada atualização. Atualizações sem ela (ou com outra)
+ * foram feitas com a regra antiga (DAU médio ÷ MAU) e a Aderência delas não é usada.
+ */
+export const ADHERENCE_FORMULA = "wau_mau" as const;
+
 export const PLATFORMS = [
   { key: "geniex", label: "GenieX", metrics: ["csat", "adherence", "usage"] },
   { key: "exploradores", label: "Exploradores", metrics: ["csat", "adherence", "usage"] },

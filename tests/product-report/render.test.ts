@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildReportModel, type SyncSnapshot } from "@/lib/product-report/model";
-import { DEFAULT_WEIGHTS, formatCompact } from "@/lib/product-report/indicators";
+import { ADHERENCE_FORMULA, DEFAULT_WEIGHTS, formatCompact } from "@/lib/product-report/indicators";
 import { renderReportHtml } from "@/lib/product-report/render-html";
 import { pdfText, renderReportPdf } from "@/lib/product-report/render-pdf";
 import { buildCharts, chartSvg, layoutChart, segments } from "@/lib/product-report/charts";
@@ -10,6 +10,7 @@ import { defaultIntro, reportStatus } from "@/lib/product-report/html";
 const sync: SyncSnapshot = {
   createdAt: "2026-10-16T10:00:00.000Z",
   status: "ok",
+  formulas: { adherence: ADHERENCE_FORMULA },
   error: null,
   projects: {},
   values: {

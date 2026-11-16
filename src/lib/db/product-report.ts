@@ -4,8 +4,10 @@ import { db } from "./client";
 import { productReportPeriods, productReportRuns, productReportSettings } from "@/lib/db/schema";
 import { newId } from "./ids";
 import { DEFAULT_WEIGHTS, isGoalKey, METRICS, PLATFORM_KEYS, PLATFORMS, type PlatformKey, type Weights } from "@/lib/product-report/indicators";
-import { northStarTargets } from "@/lib/analytics/north-star";
-import type { NorthStarCtx } from "@/lib/analytics/derive";
+import { buildGlobalNorthStar, northStarTargets, type GlobalNorthStar, type PlatformNorthStarView } from "@/lib/analytics/north-star";
+import { northStarKpi, type NorthStarCtx } from "@/lib/analytics/derive";
+import { getAnalyticsSettings, type PeriodScope } from "./analytics";
+import { getAnalyticsPanel } from "./analytics-panel";
 import type { ManualValue, StoredPeriod, SyncSnapshot } from "@/lib/product-report/model";
 import type { PeriodId } from "@/lib/product-report/period";
 
@@ -57,6 +59,48 @@ export async function northStarContext(workspaceId: string, projectId: string, p
   const byName = PLATFORMS.find((p) => plain(projectName).includes(plain(p.label)))?.key;
   const key: PlatformKey | null = mapped ?? byName ?? null;
   return { targets: northStarTargets(key), weights: s?.weights ?? DEFAULT_WEIGHTS, platform: key ? PLATFORMS.find((p) => p.key === key)!.label : null };
+}
+
+/**
+ * North Star Jovens Gênios do Analytics: a North Star de cada plataforma (mesmo cálculo do card
+ * North Star, com as metas da plataforma) no período escolhido, e a média das três. O projeto de
+ * cada plataforma é o ligado no Report Quinzenal ou, sem ligação, o projeto com o nome dela;
+ * só entram projetos que quem vê pode acessar. Filtros de host e dispositivo não se aplicam (são
+ * do projeto aberto). Os números vêm dos resultados prontos do painel; o que faltar é calculado
+ * em segundo plano e a plataforma fica como "pending".
+ */
+export async function getGlobalNorthStar(
+  workspaceId: string,
+  period: Pick<PeriodScope, "period" | "from" | "to">,
+  visible: { id: string; name: string }[]
+): Promise<GlobalNorthStar> {
+  let s: ProductReportSettings | null = null;
+  try {
+    s = await getProductReportSettings(workspaceId);
+  } catch {
+    // sem a tabela do report: só pelo nome
+  }
+  const weights = s?.weights ?? DEFAULT_WEIGHTS;
+  const platforms = await Promise.all(
+    PLATFORMS.map(async (p): Promise<PlatformNorthStarView> => {
+      const mapped = s?.platformProjects[p.key];
+      const project = visible.find((x) => x.id === mapped) ?? visible.find((x) => plain(x.name).includes(plain(p.label)));
+      const base = { key: p.key, label: p.label, project: project?.name ?? null };
+      if (!project) return { ...base, now: null, prev: null, pending: false };
+      try {
+        const st = await getAnalyticsSettings(project.id);
+        const want = new Set(["totals", "wau", "csat"] as const);
+        const { data } = await getAnalyticsPanel({ projectId: project.id, ...period }, st, want);
+        if ([...want].some((k) => data[k] === undefined)) return { ...base, now: null, prev: null, pending: true };
+        const r = northStarKpi(data, { targets: northStarTargets(p.key), weights, platform: p.label });
+        return { ...base, now: r.now, prev: r.before.value, pending: false };
+      } catch (e) {
+        console.error(`[analytics] North Star global ${p.key}:`, e instanceof Error ? e.message.slice(0, 200) : e);
+        return { ...base, now: null, prev: null, pending: false };
+      }
+    })
+  );
+  return buildGlobalNorthStar(platforms);
 }
 
 export async function saveProductReportSettings(
@@ -164,6 +208,7 @@ function toSnapshot(r: { data: unknown; status: string; error: string | null; cr
     error: r.error,
     values: d.values ?? {},
     projects: d.projects ?? {},
+    formulas: d.formulas,
   };
 }
 

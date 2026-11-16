@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
-import { getCurrentProject } from "@/lib/auth/current";
+import { getCurrentProject, getVisibleProjects } from "@/lib/auth/current";
 import { getAnalytics, getAnalyticsSettings, listAnalyticsUsers, listViews, USER_SEGMENTS, USER_SORTS, type UserSegment, type UserSort } from "@/lib/db/analytics";
 import { parseViewConfig, TAB_META } from "@/lib/analytics/core";
 import { datasetsFor, TAB_LAYOUT } from "@/lib/analytics/derive";
 import { analyticsTables, usersTable, type ExportTable } from "@/lib/analytics/export";
 import { tablesToCsv } from "@/lib/export/csv";
-import { northStarContext } from "@/lib/db/product-report";
+import { getGlobalNorthStar, northStarContext } from "@/lib/db/product-report";
 import { tablesToXlsx } from "@/lib/export/xlsx";
 import { tablesToPdf } from "@/lib/export/pdf";
 import { normalizeHosts } from "@/lib/platform/hosts";
@@ -72,7 +72,10 @@ export async function GET(req: Request) {
     const widgets = config.tab === "custom" ? (config.widgets ?? []) : TAB_LAYOUT[config.tab].map((b) => b.id);
     const data = await getAnalytics(scope, settings, datasetsFor(widgets), { pagesLimit: 100, eventsLimit: 100 });
     const ns = widgets.includes("kpi_north_star") ? await northStarContext(session.workspaceId, projectId, project.name) : null;
-    tables = analyticsTables(data, widgets, ns);
+    const global = widgets.includes("north_star_global")
+      ? await getGlobalNorthStar(session.workspaceId, { period, from: config.from, to: config.to }, await getVisibleProjects())
+      : null;
+    tables = analyticsTables(data, widgets, ns, global);
   }
 
   const name = saved?.name ?? `Analytics: ${TAB_META[config.tab].label}`;

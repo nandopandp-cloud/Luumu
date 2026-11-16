@@ -4,7 +4,7 @@ import { getScoresBySurvey, type Scope } from "@/lib/db/responses";
 import { listProjects } from "@/lib/db/projects";
 import { insertRun, getProductReportSettings } from "@/lib/db/product-report";
 import { kpis } from "@/lib/analytics/derive";
-import { PLATFORMS, type Metric, type PlatformIndicatorKey, type PlatformKey } from "./indicators";
+import { ADHERENCE_FORMULA, PLATFORMS, type Metric, type PlatformIndicatorKey, type PlatformKey } from "./indicators";
 import { periodRange, type PeriodId } from "./period";
 import { csatFromSurveys } from "./csat";
 import type { CollectedValue, SyncSnapshot } from "./model";
@@ -126,7 +126,7 @@ export async function syncPeriod(input: {
     kind: "sync",
     status: result.status,
     trigger: input.trigger,
-    data: { values: result.values, projects: result.projects },
+    data: { values: result.values, projects: result.projects, formulas: { adherence: ADHERENCE_FORMULA } },
     error: result.error,
     createdBy: input.userId ?? null,
   });

@@ -1,5 +1,6 @@
 "use client";
 
+import type { GlobalNorthStar } from "@/lib/analytics/north-star";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "@/components/ui/Link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -72,6 +73,7 @@ export function AnalyticsShell({
   hosts,
   settings,
   northStar,
+  northStarGlobal = null,
   canManage,
   canConfigure,
   enabled,
@@ -90,6 +92,8 @@ export function AnalyticsShell({
   settings: Settings;
   /** metas e pesos do card North Star (plataforma do projeto no Report Quinzenal) */
   northStar: NorthStarCtx;
+  /** North Star Jovens Gênios (média das 3 plataformas), quando o bloco está na tela */
+  northStarGlobal?: GlobalNorthStar | null;
   canManage: boolean;
   canConfigure: boolean;
   enabled: boolean;
@@ -116,6 +120,7 @@ export function AnalyticsShell({
     canConfigure,
     settings,
     northStar,
+    northStarGlobal,
   };
 
   const here = `${pathname}${sp.toString() ? `?${sp.toString()}` : ""}`;

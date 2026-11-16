@@ -9,6 +9,8 @@ import { reportStatus } from "@/lib/product-report/html";
 import { lastClosedPeriod, parsePeriod, periodCode, periodDatesShort, periodLabel, periodOf, periodsUntil } from "@/lib/product-report/period";
 
 export const dynamic = "force-dynamic";
+// "Atualizar indicadores" pode refazer várias quinzenas (Aderência na regra antiga)
+export const maxDuration = 300;
 
 /** Quinzenas no seletor: a em andamento e as 24 anteriores (um ano). */
 const PICKER_SIZE = 25;

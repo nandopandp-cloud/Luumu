@@ -8,6 +8,7 @@
  * Sem nenhum dos dois o indicador fica vazio e vira alerta: nada é estimado ou preenchido.
  */
 import {
+  ADHERENCE_FORMULA,
   computeNorthStar,
   goalStatus,
   indicatorLabel,
@@ -92,7 +93,13 @@ export interface SyncSnapshot {
   error: string | null;
   values: Partial<Record<PlatformIndicatorKey, CollectedValue>>;
   projects: Partial<Record<PlatformKey, { id: string; name: string } | null>>;
+  /** regra de cálculo usada (ver ADHERENCE_FORMULA); ausente nas atualizações antigas */
+  formulas?: { adherence?: string };
 }
+
+/** Atualização feita com a regra antiga da Aderência (DAU/MAU): a Aderência dela não vale mais. */
+export const outdatedAdherence = (s: SyncSnapshot | undefined): boolean =>
+  !!s && s.status !== "error" && s.formulas?.adherence !== ADHERENCE_FORMULA && Object.keys(s.values).some((k) => k.endsWith(".adherence"));
 
 export interface ResolvedValue {
   value: number | null;
@@ -193,8 +200,10 @@ export function overridesOf(stored: StoredPeriod | undefined): Partial<Record<Go
  */
 export function resolveValues(sync: SyncSnapshot | undefined, stored: StoredPeriod | undefined): Record<PlatformIndicatorKey, ResolvedValue> {
   const out = {} as Record<PlatformIndicatorKey, ResolvedValue>;
+  const oldAdherence = outdatedAdherence(sync);
   for (const { key, metric } of PLATFORM_INDICATORS) {
-    const c = sync?.status !== "error" ? sync?.values[key] : undefined;
+    // Aderência calculada na regra antiga: ignorada (cai para a planilha, se houver, ou fica vazia)
+    const c = sync?.status !== "error" && !(metric === "adherence" && oldAdherence) ? sync?.values[key] : undefined;
     const m = stored?.manual[key];
     let auto: ResolvedValue;
     if (c && typeof c.value === "number") {
@@ -334,6 +343,9 @@ export function buildReportModel(input: {
     .filter((v): v is number => v !== null);
   const yearAverage = yearValues.length ? yearValues.reduce((a, v) => a + v, 0) / yearValues.length : null;
 
+  // quinzenas mostradas (tabela, gráficos, média anual) com a Aderência na regra antiga
+  const outdated = [...new Set([...history.map((h) => h.period), ...yearPeriodsUntil(period)])].filter((p) => outdatedAdherence(input.syncs[p])).sort();
+
   return {
     period,
     label: periodLabel(period),
@@ -350,7 +362,7 @@ export function buildReportModel(input: {
     groups,
     history,
     yearAverage,
-    alerts: buildAlerts({ period, now, sync, lastAttempt: input.lastAttempt, resolved: cur.resolved, components }),
+    alerts: buildAlerts({ period, now, sync, lastAttempt: input.lastAttempt, resolved: cur.resolved, components, outdated }),
     intro: byPeriod.get(period)?.intro ?? "",
     highlights: byPeriod.get(period)?.highlights ?? EMPTY_HIGHLIGHTS,
     notes: byPeriod.get(period)?.notes ?? "",
@@ -371,8 +383,16 @@ function buildAlerts(a: {
   lastAttempt: SyncSnapshot | undefined;
   resolved: Record<PlatformIndicatorKey, ResolvedValue>;
   components: (NorthStarComponent & { row: IndicatorRow })[];
+  outdated?: PeriodId[];
 }): Alert[] {
   const out: Alert[] = [];
+  if (a.outdated?.length) {
+    out.push({
+      tone: "warn",
+      text: `A Aderência de ${a.outdated.map(periodShortLabel).join(", ")} foi calculada com a regra antiga (DAU/MAU) e não está sendo usada. Use "Atualizar indicadores" para recalcular com WAU/MAU.`,
+    });
+  }
+  const oldHere = a.outdated?.includes(a.period) ?? false;
   const end = periodRange(a.period).to;
   const closed = end.getTime() <= a.now.getTime();
 
@@ -404,7 +424,7 @@ function buildAlerts(a: {
     const r = a.resolved[key];
     const name = `${platformLabel(platform)} · ${METRIC_META[metric].label}`;
     for (const w of r.warnings) out.push({ tone: "warn", text: `${name}: ${w}` });
-    if (r.value === null && a.sync) out.push({ tone: "warn", text: `${name}: sem dado nesta quinzena.` });
+    if (r.value === null && a.sync && !(metric === "adherence" && oldHere)) out.push({ tone: "warn", text: `${name}: sem dado nesta quinzena.` });
   }
 
   for (const c of a.components) {

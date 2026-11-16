@@ -3,6 +3,7 @@ import {
   AppWindow,
   BarChart3,
   CalendarCheck,
+  CalendarDays,
   CheckCircle2,
   Clock,
   Compass,
@@ -28,7 +29,8 @@ import {
   UserPlus,
   Users,
   Zap,
-  type LucideIcon, CalendarDays } from "lucide-react";
+  type LucideIcon,
+} from "lucide-react";
 import { WIDGETS, type WidgetId } from "@/lib/analytics/core";
 
 /** Categorias do painel "Adicionar bloco", na ordem em que aparecem. */
@@ -51,6 +53,7 @@ export const CATALOG: Record<WidgetId, { category: CategoryId; description: stri
   kpi_wau: { category: "metrics", description: "Usuários únicos nos 7 dias, em média.", icon: CalendarDays },
   kpi_task_success: { category: "metrics", description: "Taxa de conclusão da tarefa principal.", icon: CheckCircle2 },
   kpi_north_star: { category: "metrics", description: "CSAT, Aderência e Tempo de uso ponderados pelas metas da plataforma.", icon: Target },
+  north_star_global: { category: "metrics", description: "Média da North Star de GenieX, Exploradores e Educadores, cada uma com as suas metas.", icon: Target },
   kpi_pages_per_session: { category: "metrics", description: "Telas vistas por sessão, em média.", icon: Layers },
   kpi_sessions_per_user: { category: "metrics", description: "Quantas vezes cada usuário volta no período.", icon: Repeat },
 

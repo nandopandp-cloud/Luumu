@@ -76,7 +76,7 @@ São os mesmos cálculos das telas da Luumu, sem fórmula paralela:
 
 | Indicador | Fonte na Luumu |
 |---|---|
-| Aderência (%) | KPI de Aderência do Analytics, na base escolhida em **Métricas do produto**: DAU médio da quinzena ÷ MAU (diária, padrão) ou WAU médio ÷ MAU (semanal, ex.: Educadores). MAU = 30 dias até o fim da quinzena |
+| Aderência (%) | KPI de Aderência do Analytics: WAU médio da quinzena ÷ MAU (MAU = 30 dias até o fim da quinzena). Atualizações feitas antes dessa regra (DAU ÷ MAU) ficam marcadas: a Aderência delas não é usada e "Atualizar indicadores" refaz essas quinzenas (`ADHERENCE_FORMULA` em `indicators.ts`) |
 | Tempo de uso (min) | "Tempo médio de uso" do Analytics: duração média das sessões da quinzena |
 | CSAT (%) | Média simples das notas das **2 pesquisas CSAT mais recentes da quinzena** (as pesquisas são semanais). Cada nota é o score da pesquisa (`src/lib/surveys/scoring.ts`, % top-box) só com as respostas da quinzena; "mais recente" = a que recebeu a última resposta mais tarde. Com uma pesquisa só, vale a nota dela, com aviso (`src/lib/product-report/csat.ts`) |
 
@@ -92,6 +92,11 @@ A North Star segue a planilha "North Star" (`src/lib/product-report/indicators.t
   média parcial).
 
 Quinzenas: dias 1 a 15 e dia 16 até o fim do mês, no horário de Brasília.
+
+A North Star Jovens Gênios do **Analytics** (bloco "North Star Jovens Gênios" na Visão geral) é
+outra conta, por período livre: a média simples da North Star de cada plataforma, cada uma com as
+suas metas (CSAT 90%, Aderência 50%, Tempo de uso 15 min, ou 8 min no Exploradores), em
+`src/lib/analytics/north-star.ts`. O projeto de cada plataforma é o ligado em Fontes de dados.
 
 ## Atualização automática
 

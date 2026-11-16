@@ -5,6 +5,7 @@
 import { CHANNEL_LABEL, WIDGETS, type Channel, type WidgetId } from "./core";
 import { acquisitionKpis, kpis, northStarKpi, type Kpi, type NorthStarCtx } from "./derive";
 import type { AnalyticsData, UserRow } from "@/lib/db/analytics";
+import type { GlobalNorthStar } from "./north-star";
 
 export interface ExportTable {
   title: string;
@@ -65,10 +66,25 @@ function kpiTable(d: AnalyticsData, widgets: WidgetId[], ns: NorthStarCtx | null
 }
 
 /** Tabelas da visão, na ordem dos blocos, sem repetir a mesma consulta. */
-export function analyticsTables(d: AnalyticsData, widgets: WidgetId[], ns: NorthStarCtx | null = null): ExportTable[] {
+/** North Star Jovens Gênios: uma linha por plataforma e a média. Pontos em % (100 = na meta). */
+export function globalNorthStarTable(g: GlobalNorthStar): ExportTable {
+  const r1 = (v: number | null | undefined) => (v == null ? null : Math.round(v * 10) / 10);
+  const comp = (p: GlobalNorthStar["platforms"][number], m: "csat" | "adherence" | "usage") => r1(p.now?.components.find((c) => c.metric === m)?.value);
+  return {
+    title: "North Star Jovens Gênios",
+    columns: ["Plataforma", "North Star (%)", "Período anterior (%)", "CSAT (%)", "Aderência WAU/MAU (%)", "Tempo de uso (min)"],
+    rows: [
+      ...g.platforms.map((p) => [p.label, r1(p.now?.value), r1(p.prev), comp(p, "csat"), comp(p, "adherence"), comp(p, "usage")]),
+      ["Média das 3 plataformas", r1(g.value), r1(g.prev), null, null, null],
+    ],
+  };
+}
+
+export function analyticsTables(d: AnalyticsData, widgets: WidgetId[], ns: NorthStarCtx | null = null, global: GlobalNorthStar | null = null): ExportTable[] {
   const out: ExportTable[] = [];
   const kt = kpiTable(d, widgets, ns);
   if (kt) out.push(kt);
+  if (global && widgets.includes("north_star_global")) out.push(globalNorthStarTable(global));
   const done = new Set<string>();
   const add = (key: string, t: () => ExportTable | null) => {
     if (done.has(key)) return;

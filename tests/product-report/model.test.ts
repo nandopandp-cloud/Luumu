@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildReportModel, goalFor, resolveValues, type StoredPeriod, type SyncSnapshot } from "@/lib/product-report/model";
-import { DEFAULT_WEIGHTS } from "@/lib/product-report/indicators";
+import { buildReportModel, goalFor, outdatedAdherence, resolveValues, type StoredPeriod, type SyncSnapshot } from "@/lib/product-report/model";
+import { ADHERENCE_FORMULA, DEFAULT_WEIGHTS } from "@/lib/product-report/indicators";
 
 const NOW = new Date("2026-10-20T12:00:00Z"); // quinzena 2026-10-1 já fechada
 
@@ -9,6 +9,7 @@ const fullSync = (createdAt: string, over: Partial<SyncSnapshot["values"]> = {})
   createdAt,
   status: "ok",
   error: null,
+  formulas: { adherence: ADHERENCE_FORMULA },
   projects: { geniex: { id: "prj_g", name: "GenieX" }, exploradores: { id: "prj_x", name: "Exploradores" }, educadores: { id: "prj_e", name: "Educadores" } },
   values: {
     "educadores.adherence": { value: 64 }, "educadores.usage": { value: 13 }, "educadores.csat": { value: 86.5, detail: "CSAT Out" },
@@ -198,4 +199,17 @@ test("ajuste sobre valor da planilha: o original continua como automático", () 
   const row = m.groups.find((g) => g.key === "geniex")!.rows.find((r) => r.key === "geniex.usage")!;
   assert.equal(row.value, 25);
   assert.equal(row.auto, 22);
+});
+
+test("Aderência da regra antiga (DAU/MAU): ignorada, cai para a planilha e vira alerta", () => {
+  const old: SyncSnapshot = { ...fullSync("2026-10-16T10:00:00Z"), formulas: undefined };
+  assert.equal(outdatedAdherence(old), true);
+  assert.equal(outdatedAdherence(fullSync("2026-10-16T10:00:00Z")), false);
+  const r = resolveValues(old, stored("2026-10-1", { manual: { "geniex.adherence": { value: 61, source: "planilha" } } }));
+  assert.equal(r["geniex.adherence"].value, 61); // planilha no lugar do DAU/MAU antigo
+  assert.equal(r["educadores.adherence"].value, null);
+  assert.equal(r["educadores.usage"].value, 13); // o resto da atualização continua valendo
+  const m = buildReportModel({ period: "2026-10-1", stored: [stored("2026-10-1", { goals: GOALS })], syncs: { "2026-10-1": old }, weights: DEFAULT_WEIGHTS, now: NOW });
+  assert.ok(m.alerts.some((a) => /regra antiga/.test(a.text)));
+  assert.ok(!m.alerts.some((a) => /Aderência: sem dado/.test(a.text)));
 });

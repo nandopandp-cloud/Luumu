@@ -21,6 +21,7 @@ const b = (id: WidgetId, span: number): Block => ({ id, span });
 export const TAB_LAYOUT: Record<Exclude<AnalyticsTab, "custom" | "users">, Block[]> = {
   overview: [
     b("kpi_dau", 2), b("kpi_mau", 2), b("kpi_north_star", 2), b("kpi_wau", 2), b("kpi_session_time", 2), b("kpi_stickiness", 2),
+    b("north_star_global", 12),
     b("users_trend", 8), b("engagement_funnel", 4),
     b("top_pages", 5), b("devices", 4), b("session_time", 3),
     b("retention", 6), b("top_events", 6),
@@ -50,6 +51,7 @@ export const TAB_LAYOUT: Record<Exclude<AnalyticsTab, "custom" | "users">, Block
 /** Tamanho padrão de cada bloco na visão personalizada. */
 export function defaultSpan(id: WidgetId): number {
   if (id.startsWith("kpi_")) return 3;
+  if (id === "north_star_global") return 12;
   if (["users_trend", "channels_trend", "engagement_trend", "device_trend", "events_trend", "channels_table", "acquisition_funnel"].includes(id)) return 8;
   if (["top_pages", "top_events", "retention", "features", "hours"].includes(id)) return 6;
   return 4;
@@ -63,6 +65,8 @@ export const WIDGET_DATASETS: Record<WidgetId, Dataset[]> = {
   kpi_session_time: ["totals", "daily"],
   kpi_sessions_per_user: ["totals", "daily"],
   kpi_wau: ["wau"],
+  // dados das 3 plataformas vêm à parte (northStarGlobal na página); "totals" só para o catálogo
+  north_star_global: ["totals"],
   kpi_stickiness: ["totals", "wau"],
   kpi_north_star: ["totals", "wau", "csat"],
   kpi_task_success: ["configured"],
@@ -173,7 +177,7 @@ export interface NorthStarCtx {
  * (WAU/MAU) e Tempo médio de uso, normalizados pelas metas. Valor do card em fração (1 = na meta);
  * variação em p.p. contra o período anterior.
  */
-export function northStarKpi(d: AnalyticsData, ns: NorthStarCtx): { kpi: Kpi; now: PlatformNorthStar } {
+export function northStarKpi(d: AnalyticsData, ns: NorthStarCtx): { kpi: Kpi; now: PlatformNorthStar; before: PlatformNorthStar } {
   const t = d.totals;
   const w = d.wau;
   const weights = ns.weights ?? DEFAULT_WEIGHTS;
@@ -192,7 +196,7 @@ export function northStarKpi(d: AnalyticsData, ns: NorthStarCtx): { kpi: Kpi; no
     weights
   );
   const v = now.value === null ? null : now.value / 100;
-  return { kpi: { value: v, delta: pp(v, before.value === null ? null : before.value / 100), series: [] }, now };
+  return { kpi: { value: v, delta: pp(v, before.value === null ? null : before.value / 100), series: [] }, now, before };
 }
 
 export function acquisitionKpis(d: AnalyticsData) {

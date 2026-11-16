@@ -51,3 +51,39 @@ export function periodCsat(surveys: { value: number | null }[]): number | null {
   const vals = surveys.map((s) => s.value).filter(num);
   return vals.length ? vals.reduce((a, x) => a + x, 0) / vals.length : null;
 }
+
+/* ---------- North Star Jovens Gênios (média das 3 plataformas) ---------- */
+
+export interface PlatformNorthStarView {
+  key: PlatformKey;
+  label: string;
+  /** projeto da Luumu de onde vieram os dados; null = plataforma sem projeto encontrado */
+  project: string | null;
+  /** null enquanto o resultado está sendo calculado ou sem projeto */
+  now: PlatformNorthStar | null;
+  /** North Star do período anterior (pontos) */
+  prev: number | null;
+  pending: boolean;
+}
+
+export interface GlobalNorthStar {
+  /** pontos (100 = as três plataformas na meta); null se faltar alguma plataforma */
+  value: number | null;
+  prev: number | null;
+  platforms: PlatformNorthStarView[];
+}
+
+/** Média simples, só com todas presentes: média parcial mudaria o significado do número. */
+export function averageNorthStar(values: (number | null)[]): number | null {
+  if (!values.length || !values.every(num)) return null;
+  return (values as number[]).reduce((a, x) => a + x, 0) / values.length;
+}
+
+/** (North Star GenieX + Exploradores + Educadores) ÷ 3, cada uma com as metas da própria plataforma. */
+export function buildGlobalNorthStar(platforms: PlatformNorthStarView[]): GlobalNorthStar {
+  return {
+    value: averageNorthStar(platforms.map((p) => p.now?.value ?? null)),
+    prev: averageNorthStar(platforms.map((p) => p.prev)),
+    platforms,
+  };
+}
