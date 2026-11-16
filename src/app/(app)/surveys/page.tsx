@@ -11,6 +11,8 @@ import { listHosts } from "@/lib/db/hosts";
 import { getCurrentProjectId, getCurrentWorkspaceId } from "@/lib/auth/current";
 import { getWorkspace } from "@/lib/db/workspace";
 import { displayStatus, scheduleLabel, today } from "@/lib/surveys/schedule";
+import { recurrenceLabel } from "@/lib/surveys/recurrence";
+import { advanceRecurrences, listRecurrences } from "@/lib/db/survey-recurrences";
 import { timeAgo } from "@/lib/utils";
 import type { SurveyStatus } from "@/lib/surveys/types";
 
@@ -19,13 +21,20 @@ export const dynamic = "force-dynamic";
 export default async function SurveysPage() {
   const [projectId, workspaceId] = await Promise.all([getCurrentProjectId(), getCurrentWorkspaceId()]);
   // vigência vencida → arquivada (o cron diário faz o mesmo para todos os projetos)
-  await archiveExpiredSurveys(projectId).catch((e) => console.error("[surveys] arquivar vencidas", e));
-  const [rows, workspace, hosts, platform] = await Promise.all([
+  // e recorrentes cuja última rodada começou → próxima rodada agendada (idem no cron)
+  await Promise.all([
+    archiveExpiredSurveys(projectId).catch((e) => console.error("[surveys] arquivar vencidas", e)),
+    advanceRecurrences(projectId).catch((e) => console.error("[surveys] recorrências", e)),
+  ]);
+  const [rows, workspace, hosts, platform, recurrences] = await Promise.all([
     listSurveys(projectId),
     getWorkspace(workspaceId),
     listHosts(projectId),
     savedPlatform(projectId),
+    listRecurrences(projectId),
   ]);
+  // rodada → recorrência a que pertence (para o selo "Recorrente" e o "Parar recorrência")
+  const recurrenceOf = new Map((recurrences ?? []).flatMap((r) => ((r.surveyIds as string[]) ?? []).map((id) => [id, r] as const)));
   // "hoje" no fuso do workspace: a vigência é uma data civil do cliente, não do relógio
   // do navegador de quem abre o painel (que pode estar em outro fuso)
   const currentDate = today(workspace?.timezone);
@@ -43,6 +52,17 @@ export default async function SurveysPage() {
     responseCount: s.responseCount,
     score: s.score,
     updatedAtLabel: timeAgo(s.updatedAt),
+    recurrence: (() => {
+      const r = recurrenceOf.get(s.id);
+      if (!r) return null;
+      return {
+        id: r.id,
+        active: r.active,
+        label: s.startsAt && s.endsAt ? recurrenceLabel(r.intervalWeeks, s.startsAt, s.endsAt) : "Recorrente",
+        // a rodada mais nova da série (a agendada, quando a recorrência está ativa)
+        latest: r.lastSurveyId === s.id,
+      };
+    })(),
   }));
 
   return (
@@ -80,7 +100,7 @@ export default async function SurveysPage() {
           ]}
         />
       ) : (
-        <SurveysTable key={platform} items={items} currentDate={currentDate} hosts={hosts} initialHosts={hostList(platform).filter((h) => hosts.includes(h))} />
+        <SurveysTable key={platform} items={items} currentDate={currentDate} recurrenceReady={recurrences !== null} hosts={hosts} initialHosts={hostList(platform).filter((h) => hosts.includes(h))} />
       )}
     </div>
   );

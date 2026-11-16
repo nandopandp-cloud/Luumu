@@ -141,7 +141,8 @@ luumu/
 │   │   │                             workspace e projeto atuais + permissões)
 │   │   ├── api/                      cors.ts, keys.ts, ratelimit.ts da API pública
 │   │   ├── surveys/                  types.ts, templates.ts, builder.ts (blocos e aparência),
-│   │   │                             schedule.ts (vigência), scoring.ts (NPS/CSAT/CES),
+│   │   │                             schedule.ts (vigência), recurrence.ts (pesquisa
+│   │   │                             recorrente), scoring.ts (NPS/CSAT/CES),
 │   │   │                             sentiment.ts, moods.ts, school-years.ts, device.ts,
 │   │   │                             wordcloud.ts
 │   │   ├── tours/                    tipos, normalização, posição, alvo, condições,

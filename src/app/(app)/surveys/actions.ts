@@ -19,6 +19,8 @@ import { submitResponse } from "@/lib/db/responses";
 import { deriveSentiment } from "@/lib/surveys/sentiment";
 import { normalizeAppearance, isMessageBlock, isPlaceholderMissing, type QuestionConfig } from "@/lib/surveys/builder";
 import { isWithinSchedule, normalizeDate } from "@/lib/surveys/schedule";
+import { baseName, durationDays, intervalFits, isRecurrenceInterval, occurrenceName } from "@/lib/surveys/recurrence";
+import { advanceRecurrences, createRecurrence, listRecurrences, stopRecurrence } from "@/lib/db/survey-recurrences";
 import { normalizeHost } from "@/lib/platform/hosts";
 import { normalizeSchoolYears } from "@/lib/surveys/school-years";
 import { headers } from "next/headers";
@@ -176,8 +178,22 @@ const duplicateSchema = z
     endsAt: z.string().optional(),
     /** true = a cópia já nasce publicada com a vigência (agendada se o início for futuro) */
     schedule: z.boolean().optional(),
+    /** repetir a cada N semanas, sempre com a mesma duração de vigência (lib/surveys/recurrence.ts) */
+    repeatWeeks: z.number().int().optional(),
   })
   .refine((d) => !d.schedule || Boolean(normalizeDate(d.startsAt)), { message: "Escolha a data de início para agendar." })
+  .refine((d) => d.repeatWeeks === undefined || isRecurrenceInterval(d.repeatWeeks), { message: "Intervalo de recorrência inválido." })
+  .refine((d) => d.repeatWeeks === undefined || (d.schedule === true && Boolean(normalizeDate(d.startsAt)) && Boolean(normalizeDate(d.endsAt))), {
+    message: "Para repetir, escolha o início e o fim da vigência e publique a pesquisa.",
+  })
+  .refine(
+    (d) => {
+      const from = normalizeDate(d.startsAt);
+      const to = normalizeDate(d.endsAt);
+      return d.repeatWeeks === undefined || !from || !to || intervalFits(d.repeatWeeks, durationDays(from, to));
+    },
+    { message: "A vigência é mais longa que o intervalo: uma rodada começaria antes da anterior terminar." }
+  )
   .refine(
     (d) => {
       const from = normalizeDate(d.startsAt);
@@ -191,22 +207,54 @@ export async function duplicateSurveyAction(input: unknown) {
   const parsed = duplicateSchema.safeParse(input);
   if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0].message };
 
-  const [projectId, user] = await Promise.all([getCurrentProjectId(), requireUser()]);
+  const [workspaceId, projectId, user] = await Promise.all([getCurrentWorkspaceId(), getCurrentProjectId(), requireUser()]);
+  const startsAt = normalizeDate(parsed.data.startsAt);
+  const endsAt = normalizeDate(parsed.data.endsAt);
+  const repeat = parsed.data.repeatWeeks !== undefined && startsAt && endsAt ? { weeks: parsed.data.repeatWeeks, startsAt, endsAt } : null;
+  if (repeat && (await listRecurrences(projectId)) === null) {
+    return { ok: false as const, error: "Recorrência indisponível: aplique a migração drizzle/0047_survey_recurrences.sql." };
+  }
+  // recorrente: o nome digitado é o nome-base e cada rodada leva a vigência no nome
+  const base = parsed.data.name?.trim() || undefined;
   const newId = await duplicateSurvey(
     parsed.data.id,
     { projectId },
     {
-      name: parsed.data.name,
-      startsAt: normalizeDate(parsed.data.startsAt),
-      endsAt: normalizeDate(parsed.data.endsAt),
+      name: repeat && base ? occurrenceName(base, repeat.startsAt, repeat.endsAt) : base,
+      startsAt,
+      endsAt,
       publish: parsed.data.schedule === true,
     },
     user.userId
   );
+  if (repeat) {
+    const source = base ? null : await getSurvey(parsed.data.id, { projectId });
+    await createRecurrence({
+      workspaceId,
+      projectId,
+      name: base ?? baseName(source?.name ?? "Pesquisa"),
+      intervalWeeks: repeat.weeks,
+      durationDays: durationDays(repeat.startsAt, repeat.endsAt),
+      firstSurveyId: newId,
+      startsAt: repeat.startsAt,
+      createdBy: user.userId,
+    });
+    // se a 1ª rodada já começou, a próxima nasce agendada agora mesmo
+    await advanceRecurrences(projectId).catch((e) => console.error("[surveys] recorrência", e));
+  }
 
   revalidatePath("/surveys");
   revalidatePath("/dashboard");
   return { ok: true as const, id: newId };
+}
+
+/* ---------- Parar recorrência (as rodadas já criadas continuam) ---------- */
+export async function stopRecurrenceAction(id: string) {
+  const projectId = await getCurrentProjectId();
+  const ok = await stopRecurrence(String(id), projectId);
+  if (!ok) return { ok: false as const, error: "Recorrência não encontrada." };
+  revalidatePath("/surveys");
+  return { ok: true as const };
 }
 
 /* ---------- Excluir ---------- */

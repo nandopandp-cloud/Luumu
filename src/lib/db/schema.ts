@@ -975,6 +975,35 @@ export const colorFavorites = pgTable(
   (t) => [primaryKey({ columns: [t.workspaceId, t.color] })]
 );
 
+/**
+ * Pesquisa recorrente (lib/surveys/recurrence.ts, lib/db/survey-recurrences.ts): a cada
+ * `intervalWeeks` semanas a Luumu cria uma nova rodada copiando `lastSurveyId`, com vigência de
+ * `durationDays` + 1 dias. Fica numa tabela à parte (as rodadas estão em `surveyIds`) para que,
+ * sem a migração 0047, só a recorrência fique indisponível e a lista de pesquisas siga normal.
+ */
+export const surveyRecurrences = pgTable(
+  "survey_recurrences",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+    projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    // nome-base; cada rodada se chama "<name> · dd/mm a dd/mm"
+    name: text("name").notNull(),
+    intervalWeeks: integer("interval_weeks").notNull(),
+    durationDays: integer("duration_days").notNull(),
+    // modelo da próxima rodada: a última criada (null se foi excluída; aí vale a anterior)
+    lastSurveyId: text("last_survey_id").references(() => surveys.id, { onDelete: "set null" }),
+    lastStartsAt: text("last_starts_at").notNull(),
+    // todas as rodadas criadas, da mais antiga para a mais nova
+    surveyIds: jsonb("survey_ids").notNull().default([]),
+    active: boolean("active").notNull().default(true),
+    createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("survey_recurrences_project_idx").on(t.projectId)]
+);
+
 export type Workspace = typeof workspaces.$inferSelect;
 export type Survey = typeof surveys.$inferSelect;
 export type ScheduledReport = typeof scheduledReports.$inferSelect;

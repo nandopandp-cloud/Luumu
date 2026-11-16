@@ -6,17 +6,29 @@ import { createPortal } from "react-dom";
 import Link from "@/components/ui/Link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Search, MoreHorizontal, Pause, Play, Archive, Eye, Pencil, Type, Trash2, Loader2, AlertTriangle, Copy, CalendarRange } from "lucide-react";
+import { Search, MoreHorizontal, Pause, Play, Archive, Eye, Pencil, Type, Trash2, Loader2, AlertTriangle, Copy, CalendarRange, Repeat, RepeatOff } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Field, Input } from "@/components/ui/Input";
+import { Field, Input, Select } from "@/components/ui/Input";
 import { HostBadge } from "@/components/ui/HostBadge";
 import { SegmentedControl } from "@/components/ui/Tabs";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils";
-import { setStatusAction, renameSurveyAction, deleteSurveyAction, duplicateSurveyAction } from "@/app/(app)/surveys/actions";
+import { setStatusAction, renameSurveyAction, deleteSurveyAction, duplicateSurveyAction, stopRecurrenceAction } from "@/app/(app)/surveys/actions";
 import { addDays, formatDate, scheduleLabel } from "@/lib/surveys/schedule";
+import {
+  baseName,
+  defaultInterval,
+  durationDays,
+  INTERVAL_LABEL,
+  intervalFits,
+  nextOccurrence,
+  occurrenceName,
+  RECURRENCE_INTERVALS,
+  recurrenceLabel,
+  type RecurrenceInterval,
+} from "@/lib/surveys/recurrence";
 import { SURVEY_STATUS_LABEL, type SurveyDisplayStatus, type SurveyStatus } from "@/lib/surveys/types";
 
 export interface SurveyListItem {
@@ -34,7 +46,18 @@ export interface SurveyListItem {
   responseCount: number;
   score: number | null;
   updatedAtLabel: string;
+  /** rodada de uma pesquisa recorrente (lib/surveys/recurrence.ts); null = avulsa */
+  recurrence: {
+    id: string;
+    active: boolean;
+    /** "Toda semana, de segunda a domingo" */
+    label: string;
+    /** é a rodada mais nova da série (a agendada, com a recorrência ativa) */
+    latest: boolean;
+  } | null;
 }
+
+type DuplicateValues = { name: string; startsAt: string; endsAt: string; schedule: boolean; repeatWeeks?: RecurrenceInterval };
 
 const statusTone: Record<SurveyDisplayStatus, "success" | "warn" | "neutral" | "brand" | "info"> = {
   ativa: "success", agendada: "info", pausada: "warn", encerrada: "neutral", rascunho: "brand",
@@ -49,9 +72,12 @@ export function SurveysTable({
   currentDate,
   hosts = [],
   initialHosts = [],
+  recurrenceReady = false,
 }: {
   items: SurveyListItem[];
   currentDate: string;
+  /** a tabela de recorrências existe (migração 0047) */
+  recurrenceReady?: boolean;
   /** plataformas (hostnames) do projeto */
   hosts?: string[];
   /** plataformas escolhidas no seletor do header (a lista vem filtrada nelas) */
@@ -67,6 +93,7 @@ export function SurveysTable({
   const [renaming, setRenaming] = useState<SurveyListItem | null>(null);
   const [deleting, setDeleting] = useState<SurveyListItem | null>(null);
   const [duplicating, setDuplicating] = useState<SurveyListItem | null>(null);
+  const [stopping, setStopping] = useState<SurveyListItem | null>(null);
   const [, startTransition] = useTransition();
   const router = useRouter();
   const toast = useToast();
@@ -124,12 +151,16 @@ export function SurveysTable({
     });
   }
 
-  function doDuplicate(values: { name: string; startsAt: string; endsAt: string; schedule: boolean }) {
+  function doDuplicate(values: DuplicateValues) {
     if (!duplicating) return;
     const target = duplicating;
     startTransition(async () => {
       const res = await duplicateSurveyAction({ id: target.id, ...values });
-      if (res.ok && values.schedule) {
+      if (res.ok && values.repeatWeeks) {
+        setDuplicating(null);
+        toast("success", `Pesquisa recorrente criada: ${recurrenceLabel(values.repeatWeeks, values.startsAt, values.endsAt).toLowerCase()}.`);
+        router.refresh();
+      } else if (res.ok && values.schedule) {
         setDuplicating(null);
         // agendada: entra no ar sozinha no início da vigência; fica na lista, na aba Agendadas
         toast("success", values.startsAt > currentDate ? `Pesquisa agendada: ${scheduleLabel(values.startsAt, values.endsAt)}.` : "Pesquisa duplicada e publicada.");
@@ -141,6 +172,21 @@ export function SurveysTable({
         router.push(`/surveys/${res.id}/builder`);
       } else {
         toast("error", res.error ?? "Não foi possível duplicar.");
+      }
+    });
+  }
+
+  function doStopRecurrence() {
+    const target = stopping?.recurrence;
+    if (!target) return;
+    startTransition(async () => {
+      const res = await stopRecurrenceAction(target.id);
+      if (res.ok) {
+        setStopping(null);
+        toast("success", "Recorrência parada. Nenhuma rodada nova será criada.");
+        router.refresh();
+      } else {
+        toast("error", res.error ?? "Não foi possível parar a recorrência.");
       }
     });
   }
@@ -200,6 +246,11 @@ export function SurveysTable({
                 <tr key={s.id} className="group border-b border-line last:border-0 transition-colors hover:bg-bg-sunken/50">
                   <td className="px-6 py-3.5">
                     <Link href={`/surveys/${s.id}/builder`} className="font-semibold hover:text-accent">{s.name}</Link>
+                    {s.recurrence?.active && (
+                      <div className="mt-0.5 flex items-center gap-1 text-[11px] text-fg-mut" title="Pesquisa recorrente: a próxima rodada é criada sozinha">
+                        <Repeat className="size-3 text-accent" /> {s.recurrence.label}
+                      </div>
+                    )}
                   </td>
                   {multiHost && (
                     <td className="px-3 py-3.5">
@@ -295,6 +346,9 @@ export function SurveysTable({
                               {s.status !== "encerrada" && (
                                 <MenuBtn onClick={() => changeStatus(s.id, "encerrada", "Pesquisa arquivada.")} icon={<Archive className="size-4" />}>Arquivar</MenuBtn>
                               )}
+                              {s.recurrence?.active && (
+                                <MenuBtn onClick={() => { setMenuFor(null); setMenuPos(null); setStopping(s); }} icon={<RepeatOff className="size-4" />}>Parar recorrência</MenuBtn>
+                              )}
                               <div className="my-1 border-t border-line" />
                               <MenuBtn onClick={() => { setMenuFor(null); setMenuPos(null); setDeleting(s); }} icon={<Trash2 className="size-4" />} danger>Excluir</MenuBtn>
                             </div>
@@ -325,8 +379,19 @@ export function SurveysTable({
         <DuplicateDialog
           survey={duplicating}
           currentDate={currentDate}
+          recurrenceReady={recurrenceReady}
           onCancel={() => setDuplicating(null)}
           onConfirm={doDuplicate}
+        />
+      )}
+
+      {stopping?.recurrence && (
+        <StopRecurrenceDialog
+          survey={stopping}
+          // a rodada mais nova da série: se ainda não começou, segue agendada depois de parar
+          scheduled={items.find((x) => x.recurrence?.id === stopping.recurrence?.id && x.recurrence?.latest && x.display === "agendada") ?? null}
+          onCancel={() => setStopping(null)}
+          onConfirm={doStopRecurrence}
         />
       )}
 
@@ -383,29 +448,61 @@ function RenameDialog({ initial, onCancel, onConfirm }: { initial: string; onCan
  * Diálogo de duplicar. A vigência da nova pesquisa é a primeira coisa que aparece —
  * é a decisão que muda entre uma rodada e outra (a cópia herda todo o resto da original).
  * Já vem pré-preenchida com um período de 30 dias a partir de hoje, que é o caso comum.
+ *
+ * "Repetir" transforma a cópia na 1ª rodada de uma pesquisa recorrente: a cada N semanas a
+ * Luumu cria a próxima, com a mesma duração e começando no mesmo dia da semana.
  */
 function DuplicateDialog({
   survey,
   currentDate,
+  recurrenceReady,
   onCancel,
   onConfirm,
 }: {
   survey: SurveyListItem;
   currentDate: string;
+  recurrenceReady: boolean;
   onCancel: () => void;
-  onConfirm: (values: { name: string; startsAt: string; endsAt: string; schedule: boolean }) => void;
+  onConfirm: (values: DuplicateValues) => void;
 }) {
-  const [name, setName] = useState(`${survey.name} (cópia)`);
+  const defaultName = `${survey.name} (cópia)`;
+  const [name, setName] = useState(defaultName);
   const [startsAt, setStartsAt] = useState(currentDate);
   const [endsAt, setEndsAt] = useState(() => addDays(currentDate, 30));
   // agendar (publica já com a vigência) ou criar como rascunho para revisar antes
   const [schedule, setSchedule] = useState(true);
+  const [repeat, setRepeat] = useState(false);
+  const [every, setEvery] = useState<RecurrenceInterval>(1);
   const [saving, start] = useTransition();
 
   const invalidRange = Boolean(startsAt && endsAt && startsAt > endsAt);
   const endPassed = Boolean(schedule && endsAt && endsAt < currentDate);
-  const valid = name.trim().length > 0 && !invalidRange && !endPassed && (!schedule || Boolean(startsAt));
   const future = Boolean(startsAt && startsAt > currentDate);
+  const duration = startsAt && endsAt && !invalidRange ? durationDays(startsAt, endsAt) : null;
+  const repeatFits = duration !== null && intervalFits(every, duration);
+  const valid =
+    name.trim().length > 0 && !invalidRange && !endPassed && (!schedule || Boolean(startsAt)) && (!repeat || repeatFits);
+
+  function toggleRepeat(on: boolean) {
+    setRepeat(on);
+    if (!on) return;
+    // recorrente sempre publica: cada rodada entra no ar sozinha na data de início
+    setSchedule(true);
+    // nome-base: cada rodada ganha a vigência no nome, o "(cópia)" sobra
+    if (name === defaultName) setName(baseName(survey.name));
+    // vigência longa demais para repetir (ex.: os 30 dias sugeridos): uma semana a partir do início
+    const from = startsAt || currentDate;
+    let d = startsAt && endsAt && startsAt <= endsAt ? durationDays(startsAt, endsAt) : null;
+    if (d === null || defaultInterval(d) === null) {
+      if (!startsAt) setStartsAt(from);
+      setEndsAt(addDays(from, 6));
+      d = 6;
+    }
+    setEvery(defaultInterval(d) ?? 1);
+  }
+
+  const next = repeat && repeatFits && startsAt ? nextOccurrence(startsAt, every, duration!, startsAt) : null;
+  const finalName = name.trim() || "Pesquisa";
 
   return (
     <Backdrop onClose={onCancel}>
@@ -439,9 +536,49 @@ function DuplicateDialog({
             ? "A data de fim não pode ser anterior à de início."
             : `Vigência: ${scheduleLabel(startsAt, endsAt)}. Fora desse período a pesquisa não é exibida.`}
         </p>
+
+        <div className="mt-3 border-t border-line pt-3">
+          <label className={cn("flex items-center gap-2 text-sm font-semibold", recurrenceReady ? "cursor-pointer text-fg-soft" : "text-fg-mut")}>
+            <input
+              type="checkbox"
+              className="accent-[var(--accent)]"
+              checked={repeat}
+              disabled={!recurrenceReady}
+              onChange={(e) => toggleRepeat(e.target.checked)}
+            />
+            <Repeat className="size-4 text-accent" /> Repetir esta pesquisa
+          </label>
+          {!recurrenceReady && (
+            <p className="mt-1.5 text-xs text-fg-mut">Indisponível até aplicar a migração drizzle/0047_survey_recurrences.sql.</p>
+          )}
+          {repeat && (
+            <div className="mt-3 grid gap-2">
+              <Select value={every} onChange={(e) => setEvery(Number(e.target.value) as RecurrenceInterval)} aria-label="Intervalo">
+                {RECURRENCE_INTERVALS.map((w) => (
+                  <option key={w} value={w} disabled={duration !== null && !intervalFits(w, duration)}>
+                    {INTERVAL_LABEL[w]}
+                  </option>
+                ))}
+              </Select>
+              {!startsAt || !endsAt ? (
+                <p className="text-xs text-erro">Para repetir, escolha o início e o fim da vigência.</p>
+              ) : !repeatFits ? (
+                <p className="text-xs text-erro">
+                  A vigência ({(duration ?? 0) + 1} dias) é mais longa que o intervalo: uma rodada começaria antes da anterior terminar.
+                </p>
+              ) : (
+                <p className="text-xs text-fg-mut">
+                  {recurrenceLabel(every, startsAt, endsAt)}, até você parar a recorrência. A próxima rodada
+                  {next ? ` (${scheduleLabel(next.startsAt, next.endsAt)})` : ""} é criada sozinha, já agendada, quando esta começar.
+                  Cada rodada se chama <strong>{occurrenceName(finalName, startsAt, endsAt)}</strong>.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
-      <Field label="Nome da cópia" className="mt-4">
+      <Field label={repeat ? "Nome da pesquisa recorrente" : "Nome da cópia"} className="mt-4">
         <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome da pesquisa" />
       </Field>
 
@@ -457,11 +594,19 @@ function DuplicateDialog({
             </span>
           </span>
         </label>
-        <label className={cn("flex cursor-pointer items-start gap-3 rounded-xl border p-3 text-sm transition", !schedule ? "border-accent bg-surface-brand" : "border-line")}>
-          <input type="radio" className="mt-0.5 accent-[var(--accent)]" checked={!schedule} onChange={() => setSchedule(false)} />
+        <label
+          className={cn(
+            "flex items-start gap-3 rounded-xl border p-3 text-sm transition",
+            !schedule ? "border-accent bg-surface-brand" : "border-line",
+            repeat ? "cursor-not-allowed opacity-60" : "cursor-pointer"
+          )}
+        >
+          <input type="radio" className="mt-0.5 accent-[var(--accent)]" checked={!schedule} disabled={repeat} onChange={() => setSchedule(false)} />
           <span>
             <span className="font-semibold">Salvar como rascunho</span>
-            <span className="block text-xs text-fg-mut">Abre a cópia no editor para revisar e publicar depois.</span>
+            <span className="block text-xs text-fg-mut">
+              {repeat ? "Indisponível com repetição: cada rodada entra no ar sozinha." : "Abre a cópia no editor para revisar e publicar depois."}
+            </span>
           </span>
         </label>
         {schedule && !startsAt && <p className="text-xs text-erro">Escolha a data de início para agendar.</p>}
@@ -473,10 +618,62 @@ function DuplicateDialog({
         <Button
           size="sm"
           disabled={!valid || saving}
-          onClick={() => start(() => onConfirm({ name: name.trim(), startsAt, endsAt, schedule }))}
+          onClick={() =>
+            start(() => onConfirm({ name: name.trim(), startsAt, endsAt, schedule, ...(repeat ? { repeatWeeks: every } : {}) }))
+          }
         >
-          {saving ? <Loader2 className="size-4 animate-spin" /> : schedule ? <CalendarRange className="size-4" /> : <Copy className="size-4" />}{" "}
-          {schedule ? (future ? "Duplicar e agendar" : "Duplicar e publicar") : "Duplicar"}
+          {saving ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : repeat ? (
+            <Repeat className="size-4" />
+          ) : schedule ? (
+            <CalendarRange className="size-4" />
+          ) : (
+            <Copy className="size-4" />
+          )}{" "}
+          {repeat ? "Duplicar e repetir" : schedule ? (future ? "Duplicar e agendar" : "Duplicar e publicar") : "Duplicar"}
+        </Button>
+      </div>
+    </Backdrop>
+  );
+}
+
+function StopRecurrenceDialog({
+  survey,
+  scheduled,
+  onCancel,
+  onConfirm,
+}: {
+  survey: SurveyListItem;
+  /** rodada já criada e ainda não iniciada (continua agendada depois de parar) */
+  scheduled: SurveyListItem | null;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const [saving, start] = useTransition();
+  return (
+    <Backdrop onClose={onCancel}>
+      <div className="flex items-start gap-3">
+        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-surface-brand text-accent">
+          <RepeatOff className="size-5" />
+        </span>
+        <div>
+          <h3 className="font-display text-lg font-bold">Parar recorrência?</h3>
+          <p className="mt-1 text-sm text-fg-soft">
+            Nenhuma rodada nova de <strong>{baseName(survey.name)}</strong> será criada ({survey.recurrence?.label.toLowerCase()}).
+            As rodadas que já existem continuam como estão.
+          </p>
+          {scheduled && (
+            <p className="mt-2 text-sm text-fg-soft">
+              A rodada <strong>{scheduled.name}</strong> já está agendada e vai entrar no ar. Se não quiser, exclua-a depois pelo menu (⋯).
+            </p>
+          )}
+        </div>
+      </div>
+      <div className="mt-5 flex justify-end gap-2">
+        <Button variant="ghost" size="sm" onClick={onCancel}>Cancelar</Button>
+        <Button size="sm" disabled={saving} onClick={() => start(onConfirm)}>
+          {saving ? <Loader2 className="size-4 animate-spin" /> : <RepeatOff className="size-4" />} Parar recorrência
         </Button>
       </div>
     </Backdrop>
