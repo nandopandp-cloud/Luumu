@@ -8,6 +8,8 @@ import { sharedCache } from "./shared-cache";
 import { rollupPlan, rollupQueries } from "./analytics-rollup";
 import { periodToRange, startOfTodayBR } from "@/lib/utils/period";
 import { hostList } from "@/lib/platform/hosts";
+import { getScoresBySurvey } from "./responses";
+import { periodCsat } from "@/lib/analytics/north-star";
 import { sanitizeSvg, svgHash } from "@/lib/analytics/svg-avatar";
 import { joinSvgParts, partHashes, splitSvgParts } from "@/lib/analytics/svg-parts";
 import {
@@ -44,7 +46,7 @@ export interface AnalyticsSettings {
   activationEvent: string | null;
   taskStartEvent: string | null;
   taskDoneEvent: string | null;
-  /** base da Aderência: "daily" = DAU médio ÷ MAU; "weekly" = WAU médio ÷ MAU (uso semanal esperado) */
+  /** base antiga da Aderência (não usada: a Aderência é sempre WAU médio ÷ MAU); a coluna fica para não quebrar o banco */
   adherenceBase: AdherenceBase;
 }
 
@@ -494,6 +496,18 @@ async function wauAvg(s: AnalyticsScope, p: AnalyticsScope) {
   return { wau: r?.wau == null ? 0 : Number(r.wau), wau_prev: r?.wau_prev == null ? null : Number(r.wau_prev) };
 }
 
+/*
+  CSAT do período (e do anterior) para a North Star: média das notas (% top-box) das pesquisas
+  CSAT do projeto, cada uma só com as respostas do período e da plataforma filtrada — a mesma nota
+  do painel de respostas. O fim do período é exclusivo aqui e inclusivo no escopo de respostas.
+*/
+async function csatPeriod(s: AnalyticsScope, p: AnalyticsScope) {
+  const scope = (x: AnalyticsScope) => ({ projectId: x.projectId, dateFrom: x.from, dateTo: new Date(x.to.getTime() - 1), host: x.host, surveyType: "CSAT" });
+  const [cur, prev] = await Promise.all([getScoresBySurvey(scope(s)), getScoresBySurvey(scope(p))]);
+  const answered = cur.reduce((a, x) => a + x.answered, 0);
+  return { csat: periodCsat(cur), csat_prev: periodCsat(prev), surveys: cur.filter((x) => x.value !== null).length, answered };
+}
+
 /** Usuários que fizeram cada evento configurado (período e anterior). */
 async function configured(s: AnalyticsScope, p: AnalyticsScope, st: AnalyticsSettings) {
   const ev = (name: string | null, col: string) =>
@@ -759,6 +773,7 @@ export const DATASETS = [
   "mau",
   "wau",
   "configured",
+  "csat",
   "funnel",
   "pages",
   "devices",
@@ -786,6 +801,7 @@ export interface AnalyticsData {
   mau?: Awaited<ReturnType<typeof mauSeries>>;
   wau?: Awaited<ReturnType<typeof wauAvg>>;
   configured?: Awaited<ReturnType<typeof configured>>;
+  csat?: Awaited<ReturnType<typeof csatPeriod>>;
   funnel?: Awaited<ReturnType<typeof engagementFunnel>>;
   pages?: Awaited<ReturnType<typeof topPages>>;
   devices?: Awaited<ReturnType<typeof devices>>;
@@ -822,6 +838,7 @@ export function runDataset(k: Dataset, s: AnalyticsScope, st: AnalyticsSettings,
     case "mau": return mauSeries(s);
     case "wau": return wauAvg(s, p);
     case "configured": return configured(s, p, st);
+    case "csat": return csatPeriod(s, p);
     case "funnel": return engagementFunnel(s, st);
     case "pages": return topPages(s, opts.pagesLimit ?? 10);
     case "devices": return devices(s);

@@ -12,7 +12,7 @@ import { DataFilters } from "@/components/ui/DataFilters";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { TAB_META, TABS, eventLabel, viewHref, type ViewConfig } from "@/lib/analytics/core";
-import { defaultSpan, TAB_LAYOUT, type Block } from "@/lib/analytics/derive";
+import { defaultSpan, TAB_LAYOUT, type Block, type NorthStarCtx } from "@/lib/analytics/derive";
 import type { AnalyticsData, SavedView } from "@/lib/db/analytics";
 import type { Freshness } from "@/lib/db/analytics-panel";
 import { listMetricEventsAction, saveMetricsAction, updateViewAction } from "@/app/(app)/analytics/actions";
@@ -71,6 +71,7 @@ export function AnalyticsShell({
   dirty,
   hosts,
   settings,
+  northStar,
   canManage,
   canConfigure,
   enabled,
@@ -87,6 +88,8 @@ export function AnalyticsShell({
   dirty: boolean;
   hosts: string[];
   settings: Settings;
+  /** metas e pesos do card North Star (plataforma do projeto no Report Quinzenal) */
+  northStar: NorthStarCtx;
   canManage: boolean;
   canConfigure: boolean;
   enabled: boolean;
@@ -112,6 +115,7 @@ export function AnalyticsShell({
     onConfigure: () => setDialog("metrics"),
     canConfigure,
     settings,
+    northStar,
   };
 
   const here = `${pathname}${sp.toString() ? `?${sp.toString()}` : ""}`;
@@ -420,18 +424,9 @@ function MetricsDialog({ settings, onClose }: { settings: Settings; onClose: () 
         </p>
       ) : (
         <div className="grid gap-5 sm:grid-cols-2">
-          {field("northStarEvent", "North Star", "A ação que mais representa o valor do seu produto. Card: % dos ativos que a realizaram.")}
           {field("activationEvent", "Evento de ativação", "Quando um novo usuário “pega” o produto. Sem ele, conta qualquer ação nos primeiros 7 dias.")}
           {field("taskStartEvent", "Início da tarefa principal", "Usado no Task Success e no funil de engajamento.")}
           {field("taskDoneEvent", "Conclusão da tarefa principal", "Task Success = concluíram ÷ iniciaram.")}
-          <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-semibold text-fg-soft">Base da Aderência</span>
-            <Select value={v.adherenceBase} onChange={(e) => setV({ ...v, adherenceBase: e.target.value === "weekly" ? "weekly" : "daily" })} aria-label="Base da Aderência" className="py-2 text-sm">
-              <option value="daily">Diária (DAU ÷ MAU)</option>
-              <option value="weekly">Semanal (WAU ÷ MAU)</option>
-            </Select>
-            <span className="text-xs text-fg-mut">Semanal para produtos que não se espera usar todo dia. Vale para o card e o Report Quinzenal.</span>
-          </label>
         </div>
       )}
     </Dialog>

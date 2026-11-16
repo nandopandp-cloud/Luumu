@@ -19,6 +19,7 @@ import {
   Activity,
   ArrowRight,
   CalendarCheck,
+  CalendarDays,
   CheckCircle2,
   Clock,
   FileText,
@@ -62,7 +63,7 @@ import {
 } from "@/lib/analytics/core";
 import {
   acquisitionKpis,
-  adherenceLabel,
+  ADHERENCE_LABEL,
   campaignTable,
   channelSeries,
   channelShares,
@@ -70,6 +71,8 @@ import {
   entryTable,
   hoursGrid,
   kpis,
+  northStarKpi,
+  type NorthStarCtx,
   retentionCurve,
   retentionMatrix,
   weekly,
@@ -78,13 +81,14 @@ import {
 } from "@/lib/analytics/derive";
 import { Skeleton } from "@/components/ui/Skeleton";
 import type { AnalyticsData } from "@/lib/db/analytics";
+import { northStarTargets } from "@/lib/analytics/north-star";
 
 /* ---------- contexto ---------- */
 
 export interface WidgetCtx {
   data: AnalyticsData;
   multiHost: boolean;
-  /** abre o diálogo de métricas (North Star, tarefa, ativação) */
+  /** abre o diálogo de métricas (tarefa, ativação) */
   onConfigure?: () => void;
   canConfigure: boolean;
   /** KPIs em faixa cheia (5–6 por linha): versão compacta */
@@ -92,6 +96,8 @@ export interface WidgetCtx {
   settings: { northStarEvent: string | null; activationEvent: string | null; taskStartEvent: string | null; taskDoneEvent: string | null; adherenceBase: "daily" | "weekly" };
   /** datasets ainda sendo calculados (o bloco que depende deles mostra "Calculando…") */
   pending?: ReadonlySet<string>;
+  /** metas e pesos do card North Star; sem ele, metas padrão */
+  northStar?: NorthStarCtx;
 }
 
 const axis = { fontSize: 11, fill: "var(--text-mut)", fontFamily: "var(--font-mono)" };
@@ -212,11 +218,12 @@ function Td({ children, className }: { children: React.ReactNode; className?: st
 const KPI_META: Partial<Record<WidgetId, { icon: LucideIcon; tone: Tone; hint: string }>> = {
   kpi_dau: { icon: Activity, tone: "roxo", hint: "Média de usuários únicos por dia no período." },
   kpi_mau: { icon: Users, tone: "roxo", hint: "Usuários únicos nos 30 dias que terminam no fim do período." },
+  kpi_wau: { icon: CalendarDays, tone: "roxo", hint: "Média de usuários únicos em 7 dias corridos no período." },
   kpi_new_users: { icon: UserPlus, tone: "roxo", hint: "Usuários vistos pela primeira vez no período." },
   kpi_session_time: { icon: Clock, tone: "laranja", hint: "Tempo ATIVO médio por sessão (aba visível e com interação)." },
   kpi_sessions_per_user: { icon: Repeat, tone: "azul", hint: "Sessões no período ÷ usuários ativos." },
-  kpi_stickiness: { icon: Heart, tone: "roxo", hint: "DAU médio ÷ MAU: quanto do público mensal volta todo dia." },
-  kpi_north_star: { icon: Target, tone: "verde", hint: "% dos usuários ativos que realizaram o evento North Star." },
+  kpi_stickiness: { icon: Heart, tone: "roxo", hint: "WAU médio ÷ MAU: quanto do público mensal volta toda semana." },
+  kpi_north_star: { icon: Target, tone: "verde", hint: "CSAT, Aderência e Tempo de uso, cada um ÷ a meta, ponderados (30/40/30). 100% = as três na meta." },
   kpi_task_success: { icon: CheckCircle2, tone: "azul", hint: "Dos que iniciaram a tarefa, % que concluíram." },
   kpi_activation: { icon: Zap, tone: "azul", hint: "Novos usuários que se ativaram nos primeiros 7 dias." },
   kpi_survey_conversion: { icon: Sparkles, tone: "verde", hint: "Novos usuários que responderam uma pesquisa nos primeiros 7 dias." },
@@ -248,16 +255,11 @@ function SetupKpi({ label, icon: Icon, text, ctx }: { label: string; icon: Lucid
   );
 }
 
-function KpiCard({ id, k, fmt, ctx }: { id: WidgetId; k: Kpi | null; fmt: (v: number) => string; ctx: WidgetCtx }) {
+function KpiCard({ id, k, fmt, ctx, label: forced, detail, hint }: { id: WidgetId; k: Kpi | null; fmt: (v: number) => string; ctx: WidgetCtx; label?: string; detail?: string; hint?: string }) {
   const m = KPI_META[id]!;
   const Icon = m.icon;
-  if (id === "kpi_north_star" && !k) return <SetupKpi label="North Star" icon={Target} text="Escolha o evento que representa o valor principal do seu produto." ctx={ctx} />;
   if (id === "kpi_task_success" && !k) return <SetupKpi label="Task Success" icon={CheckCircle2} text="Escolha os eventos de início e de conclusão da tarefa principal." ctx={ctx} />;
-  const label =
-    id === "kpi_north_star" && ctx.settings.northStarEvent ? `North Star · ${eventLabel(ctx.settings.northStarEvent)}`
-    : id === "kpi_stickiness" ? adherenceLabel(ctx.settings.adherenceBase)
-    : WIDGETS[id];
-  const hint = id === "kpi_stickiness" && ctx.settings.adherenceBase === "weekly" ? "WAU médio ÷ MAU: quanto do público mensal volta toda semana." : m.hint;
+  const label = forced ?? (id === "kpi_stickiness" ? ADHERENCE_LABEL : WIDGETS[id]);
   return (
     <InsightCard
       label={label}
@@ -266,17 +268,42 @@ function KpiCard({ id, k, fmt, ctx }: { id: WidgetId; k: Kpi | null; fmt: (v: nu
       icon={<Icon className="size-5" />}
       series={k?.series ?? []}
       delta={k?.delta ? { value: k.delta.value, unit: k.delta.unit } : null}
-      hint={hint}
+      hint={hint ?? m.hint}
+      detail={detail}
       dense={ctx.dense}
     />
   );
 }
 
+const NS_NAME = { csat: "CSAT", adherence: "Aderência", usage: "Uso" } as const;
+const nsValue = (metric: keyof typeof NS_NAME, v: number) => (metric === "usage" ? `${fmtDec(v)} min` : `${Math.round(v)}%`);
+
+/** North Star = CSAT, Aderência (WAU/MAU) e Tempo de uso ÷ metas da plataforma, ponderados. */
+function NorthStarCard({ ctx }: { ctx: WidgetCtx }) {
+  const ns = ctx.northStar ?? DEFAULT_NS;
+  const { kpi, now } = useMemo(() => northStarKpi(ctx.data, ns), [ctx.data, ns]);
+  const detail = now.components.map((c) => `${NS_NAME[c.metric]} ${c.value == null ? "–" : nsValue(c.metric, c.value)}`).join(" · ");
+  const goals = now.components.map((c) => `${NS_NAME[c.metric]} ${nsValue(c.metric, c.target)} (peso ${c.weight})`).join(", ");
+  const missing = now.missing.length ? ` Sem ${now.missing.map((m) => (m === "csat" ? "pesquisa CSAT respondida" : m === "usage" ? "sessões" : "WAU/MAU")).join(" e ")} no período.` : "";
+  return (
+    <KpiCard
+      id="kpi_north_star"
+      k={kpi}
+      fmt={fmtPct}
+      ctx={ctx}
+      label={ns.platform ? `North Star · ${ns.platform}` : "North Star"}
+      detail={detail}
+      hint={`Cada métrica ÷ a meta × peso, somados. 100% = as três na meta. Metas: ${goals}. CSAT: pesquisas CSAT respondidas no período.${missing}`}
+    />
+  );
+}
+const DEFAULT_NS: NorthStarCtx = { targets: northStarTargets(null), platform: null };
+
 /* ---------- bloco a bloco ---------- */
 
 export function Widget({ id, ctx }: { id: WidgetId; ctx: WidgetCtx }) {
   const d = ctx.data;
-  const K = useMemo(() => kpis(d, ctx.settings.adherenceBase), [d, ctx.settings.adherenceBase]);
+  const K = useMemo(() => kpis(d), [d]);
   const A = useMemo(() => acquisitionKpis(d), [d]);
   const active = d.configured?.active ?? d.totals?.users ?? 0;
 
@@ -295,8 +322,10 @@ export function Widget({ id, ctx }: { id: WidgetId; ctx: WidgetCtx }) {
       return <KpiCard id={id} k={K.pagesPerSession} fmt={fmtDec} ctx={ctx} />;
     case "kpi_stickiness":
       return <KpiCard id={id} k={K.stickiness} fmt={fmtPct} ctx={ctx} />;
+    case "kpi_wau":
+      return <KpiCard id={id} k={K.wau} fmt={fmtInt} ctx={ctx} />;
     case "kpi_north_star":
-      return <KpiCard id={id} k={K.northStar} fmt={fmtPct} ctx={ctx} />;
+      return <NorthStarCard ctx={ctx} />;
     case "kpi_task_success":
       return <KpiCard id={id} k={K.taskSuccess} fmt={fmtPct} ctx={ctx} />;
     case "kpi_new_users":

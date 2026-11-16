@@ -28,8 +28,7 @@ import {
   UserPlus,
   Users,
   Zap,
-  type LucideIcon,
-} from "lucide-react";
+  type LucideIcon, CalendarDays } from "lucide-react";
 import { WIDGETS, type WidgetId } from "@/lib/analytics/core";
 
 /** Categorias do painel "Adicionar bloco", na ordem em que aparecem. */
@@ -49,8 +48,9 @@ export type CategoryId = (typeof CATEGORIES)[number]["id"];
 export const CATALOG: Record<WidgetId, { category: CategoryId; description: string; icon: LucideIcon }> = {
   kpi_dau: { category: "metrics", description: "Usuários únicos por dia, em média.", icon: Activity },
   kpi_mau: { category: "metrics", description: "Usuários únicos nos últimos 30 dias.", icon: Users },
+  kpi_wau: { category: "metrics", description: "Usuários únicos nos 7 dias, em média.", icon: CalendarDays },
   kpi_task_success: { category: "metrics", description: "Taxa de conclusão da tarefa principal.", icon: CheckCircle2 },
-  kpi_north_star: { category: "metrics", description: "Principal indicador de valor do produto.", icon: Target },
+  kpi_north_star: { category: "metrics", description: "CSAT, Aderência e Tempo de uso ponderados pelas metas da plataforma.", icon: Target },
   kpi_pages_per_session: { category: "metrics", description: "Telas vistas por sessão, em média.", icon: Layers },
   kpi_sessions_per_user: { category: "metrics", description: "Quantas vezes cada usuário volta no período.", icon: Repeat },
 
@@ -67,7 +67,7 @@ export const CATALOG: Record<WidgetId, { category: CategoryId; description: stri
   acquisition_funnel: { category: "users", description: "Da visita à primeira resposta de pesquisa.", icon: Filter },
 
   kpi_session_time: { category: "engagement", description: "Tempo ativo médio por sessão.", icon: Clock },
-  kpi_stickiness: { category: "engagement", description: "DAU ou WAU ÷ MAU: quanto do público mensal volta (base diária ou semanal, nas métricas do produto).", icon: Heart },
+  kpi_stickiness: { category: "engagement", description: "WAU ÷ MAU: quanto do público mensal volta toda semana.", icon: Heart },
   session_time: { category: "engagement", description: "Tempo de sessão com a evolução diária.", icon: Timer },
   features: { category: "engagement", description: "Ações mais usadas pelo alcance entre ativos.", icon: Sparkles },
 

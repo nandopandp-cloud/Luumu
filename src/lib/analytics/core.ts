@@ -273,10 +273,11 @@ export const TAB_META: Record<AnalyticsTab, { label: string; title: string; subt
 export const WIDGETS = {
   kpi_dau: "Usuários ativos diários (DAU)",
   kpi_mau: "Usuários ativos mensais (MAU)",
+  kpi_wau: "Usuários ativos semanais (WAU)",
   kpi_new_users: "Novos usuários",
   kpi_session_time: "Tempo médio de uso",
   kpi_sessions_per_user: "Sessões por usuário",
-  kpi_stickiness: "Aderência",
+  kpi_stickiness: "Aderência (WAU/MAU)",
   kpi_north_star: "North Star",
   kpi_task_success: "Task Success",
   kpi_activation: "Taxa de ativação",

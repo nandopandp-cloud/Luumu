@@ -3,7 +3,9 @@
   composições das abas e quais consultas cada bloco exige. PURO e testado.
 */
 import { CHANNELS, pctChange, type AnalyticsTab, type Channel, type WidgetId } from "./core";
-import type { AdherenceBase, AnalyticsData, Dataset } from "@/lib/db/analytics";
+import type { AnalyticsData, Dataset } from "@/lib/db/analytics";
+import { platformNorthStar, type NorthStarTargets, type PlatformNorthStar } from "./north-star";
+import { DEFAULT_WEIGHTS, type Weights } from "@/lib/product-report/indicators";
 
 /* ---------- composição das abas ---------- */
 
@@ -18,7 +20,7 @@ const b = (id: WidgetId, span: number): Block => ({ id, span });
 /** Abas montadas por blocos (Usuários e Personalizada têm tela própria). */
 export const TAB_LAYOUT: Record<Exclude<AnalyticsTab, "custom" | "users">, Block[]> = {
   overview: [
-    b("kpi_dau", 2), b("kpi_mau", 2), b("kpi_north_star", 2), b("kpi_task_success", 2), b("kpi_session_time", 2), b("kpi_stickiness", 2),
+    b("kpi_dau", 2), b("kpi_mau", 2), b("kpi_north_star", 2), b("kpi_wau", 2), b("kpi_session_time", 2), b("kpi_stickiness", 2),
     b("users_trend", 8), b("engagement_funnel", 4),
     b("top_pages", 5), b("devices", 4), b("session_time", 3),
     b("retention", 6), b("top_events", 6),
@@ -60,8 +62,9 @@ export const WIDGET_DATASETS: Record<WidgetId, Dataset[]> = {
   kpi_new_users: ["newUsers"],
   kpi_session_time: ["totals", "daily"],
   kpi_sessions_per_user: ["totals", "daily"],
-  kpi_stickiness: ["daily", "totals", "wau"],
-  kpi_north_star: ["configured"],
+  kpi_wau: ["wau"],
+  kpi_stickiness: ["totals", "wau"],
+  kpi_north_star: ["totals", "wau", "csat"],
   kpi_task_success: ["configured"],
   kpi_activation: ["outcomes", "outcomesPrev", "newUsers"],
   kpi_survey_conversion: ["outcomes", "outcomesPrev", "newUsers"],
@@ -118,11 +121,10 @@ const pc = (cur: number, prev: number | null | undefined) => {
 };
 const ratio = (a: number | undefined, b: number | undefined) => (a !== undefined && b ? a / b : null);
 
-/** Nome do card de Aderência conforme a base configurada no projeto. */
-export const adherenceLabel = (base: AdherenceBase = "daily") => (base === "weekly" ? "Aderência (WAU/MAU)" : "Aderência (DAU/MAU)");
+/** Aderência = WAU médio ÷ MAU: quanto do público mensal volta toda semana (produtos de uso semanal). */
+export const ADHERENCE_LABEL = "Aderência (WAU/MAU)";
 
-/** Aderência: DAU médio ÷ MAU ("daily", padrão) ou WAU médio ÷ MAU ("weekly", produto de uso semanal). */
-export function kpis(d: AnalyticsData, adherenceBase: AdherenceBase = "daily") {
+export function kpis(d: AnalyticsData) {
   const cur = d.daily?.cur ?? [];
   const prev = d.daily?.prev ?? [];
   const t = d.totals;
@@ -143,18 +145,11 @@ export function kpis(d: AnalyticsData, adherenceBase: AdherenceBase = "daily") {
       delta: t && t.sessions_prev ? pc(t.pv / Math.max(1, t.sessions), t.pv_prev / t.sessions_prev) : null,
       series: cur.map((x) => (x.sessions ? x.pv / x.sessions : 0)),
     } as Kpi,
+    wau: { value: d.wau ? Math.round(d.wau.wau) : null, delta: d.wau ? pc(d.wau.wau, d.wau.wau_prev) : null, series: [] } as Kpi,
     stickiness: (() => {
-      const weekly = adherenceBase === "weekly";
-      const num = weekly ? (d.wau ? d.wau.wau : null) : dau;
-      const numPrev = weekly ? (d.wau?.wau_prev ?? null) : dauPrev;
-      const v = t?.mau && num !== null ? num / t.mau : null;
-      const p = t?.mau_prev && numPrev !== null ? numPrev / t.mau_prev : null;
+      const v = t?.mau && d.wau ? d.wau.wau / t.mau : null;
+      const p = t?.mau_prev && d.wau?.wau_prev != null ? d.wau.wau_prev / t.mau_prev : null;
       return { value: v, delta: pp(v, p), series: [] } as Kpi;
-    })(),
-    northStar: (() => {
-      if (c.ns === undefined) return null;
-      const v = ratio(c.ns, c.active);
-      return { value: v, delta: pp(v, ratio(c.ns_prev, c.active_prev)), series: [] } as Kpi;
     })(),
     taskSuccess: (() => {
       if (c.td === undefined || c.ts === undefined) return null;
@@ -163,6 +158,41 @@ export function kpis(d: AnalyticsData, adherenceBase: AdherenceBase = "daily") {
     })(),
   };
   return out;
+}
+
+/** Contexto da North Star da plataforma (metas da plataforma do projeto; pesos do report). */
+export interface NorthStarCtx {
+  targets: NorthStarTargets;
+  weights?: Weights;
+  /** nome da plataforma do projeto no report (GenieX, Exploradores…), se houver */
+  platform: string | null;
+}
+
+/**
+ * North Star do período (lib/analytics/north-star.ts): CSAT das pesquisas do período, Aderência
+ * (WAU/MAU) e Tempo médio de uso, normalizados pelas metas. Valor do card em fração (1 = na meta);
+ * variação em p.p. contra o período anterior.
+ */
+export function northStarKpi(d: AnalyticsData, ns: NorthStarCtx): { kpi: Kpi; now: PlatformNorthStar } {
+  const t = d.totals;
+  const w = d.wau;
+  const weights = ns.weights ?? DEFAULT_WEIGHTS;
+  const now = platformNorthStar(
+    { csat: d.csat?.csat ?? null, adherence: t?.mau && w ? (w.wau / t.mau) * 100 : null, usage: t && t.sessions ? t.ms / 60_000 : null },
+    ns.targets,
+    weights
+  );
+  const before = platformNorthStar(
+    {
+      csat: d.csat?.csat_prev ?? null,
+      adherence: t?.mau_prev && w?.wau_prev != null ? (w.wau_prev / t.mau_prev) * 100 : null,
+      usage: t && t.sessions_prev ? t.ms_prev / 60_000 : null,
+    },
+    ns.targets,
+    weights
+  );
+  const v = now.value === null ? null : now.value / 100;
+  return { kpi: { value: v, delta: pp(v, before.value === null ? null : before.value / 100), series: [] }, now };
 }
 
 export function acquisitionKpis(d: AnalyticsData) {

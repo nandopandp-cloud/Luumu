@@ -12,8 +12,7 @@ import type { CollectedValue, SyncSnapshot } from "./model";
 /*
   Busca os indicadores de uma quinzena nos projetos de cada plataforma, com as MESMAS consultas
   das telas da Luumu (nada de fórmula paralela):
-    - Aderência: KPI de Aderência do Analytics (lib/analytics/derive.ts → stickiness), na base
-      configurada no projeto: DAU médio ÷ MAU ou WAU médio ÷ MAU
+    - Aderência: KPI de Aderência do Analytics (lib/analytics/derive.ts → stickiness): WAU médio ÷ MAU
     - Tempo de uso: "Tempo médio de uso" do Analytics (média de duração das sessões)
     - CSAT: média das notas das 2 pesquisas CSAT mais recentes da quinzena (csat.ts); cada nota é
       o score da pesquisa (lib/surveys/scoring.ts, % top-box) só com as respostas da quinzena
@@ -34,8 +33,8 @@ async function collectAnalytics(projectId: string, from: Date, to: Date): Promis
     const none = { value: null, warnings: [...warnings, "nenhuma sessão registrada na quinzena"] };
     return { adherence: none, usage: none };
   }
-  const stickiness = kpis(d, st.adherenceBase).stickiness.value;
-  const base = st.adherenceBase === "weekly" ? `WAU ${Math.round(d.wau?.wau ?? 0)}` : `${t.users} usuários ativos`;
+  const stickiness = kpis(d).stickiness.value;
+  const base = `WAU ${Math.round(d.wau?.wau ?? 0)}`;
   return {
     adherence: { value: stickiness === null ? null : stickiness * 100, detail: `${base} · MAU ${t.mau}`, warnings },
     usage: { value: t.ms / 60_000, detail: `${t.sessions} sessões`, warnings },

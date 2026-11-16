@@ -3,7 +3,9 @@ import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { db } from "./client";
 import { productReportPeriods, productReportRuns, productReportSettings } from "@/lib/db/schema";
 import { newId } from "./ids";
-import { DEFAULT_WEIGHTS, isGoalKey, METRICS, PLATFORM_KEYS, type PlatformKey, type Weights } from "@/lib/product-report/indicators";
+import { DEFAULT_WEIGHTS, isGoalKey, METRICS, PLATFORM_KEYS, PLATFORMS, type PlatformKey, type Weights } from "@/lib/product-report/indicators";
+import { northStarTargets } from "@/lib/analytics/north-star";
+import type { NorthStarCtx } from "@/lib/analytics/derive";
 import type { ManualValue, StoredPeriod, SyncSnapshot } from "@/lib/product-report/model";
 import type { PeriodId } from "@/lib/product-report/period";
 
@@ -35,6 +37,26 @@ function parseSettings(row: typeof productReportSettings.$inferSelect | undefine
 export async function getProductReportSettings(workspaceId: string): Promise<ProductReportSettings> {
   const [row] = await db.select().from(productReportSettings).where(eq(productReportSettings.workspaceId, workspaceId)).limit(1);
   return parseSettings(row);
+}
+
+const plain = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+/**
+ * Metas e pesos do card North Star do Analytics para um projeto: a plataforma é a que o Report
+ * Quinzenal liga ao projeto; sem ligação, tenta pelo nome do projeto (ex.: "Exploradores"). Sem
+ * plataforma, valem as metas padrão (Tempo de uso 15 min).
+ */
+export async function northStarContext(workspaceId: string, projectId: string, projectName = ""): Promise<NorthStarCtx> {
+  let s: ProductReportSettings | null = null;
+  try {
+    s = await getProductReportSettings(workspaceId);
+  } catch {
+    // sem a tabela do report: metas padrão
+  }
+  const mapped = s ? PLATFORM_KEYS.find((k) => s!.platformProjects[k] === projectId) : undefined;
+  const byName = PLATFORMS.find((p) => plain(projectName).includes(plain(p.label)))?.key;
+  const key: PlatformKey | null = mapped ?? byName ?? null;
+  return { targets: northStarTargets(key), weights: s?.weights ?? DEFAULT_WEIGHTS, platform: key ? PLATFORMS.find((p) => p.key === key)!.label : null };
 }
 
 export async function saveProductReportSettings(

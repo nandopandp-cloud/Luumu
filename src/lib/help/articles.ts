@@ -302,8 +302,8 @@ export const HELP: HelpCategory[] = [
       },
       {
         id: "north-star",
-        q: "Como defino a North Star e o Task Success?",
-        a: "Em Analytics → Métricas, escolha entre os eventos reais do seu produto: o evento North Star (a ação que mais representa valor), o evento de ativação e os eventos de início e conclusão da tarefa principal. Enquanto não forem escolhidos, os cards pedem a configuração em vez de mostrar um número.",
+        q: "Como a North Star é calculada? E o Task Success?",
+        a: "A North Star é a média ponderada de três indicadores da plataforma, cada um dividido pela sua meta: CSAT (meta 90%, peso 30%), Aderência WAU/MAU (meta 50%, peso 40%) e Tempo de uso (meta 15 min, ou 8 min no Exploradores; peso 30%). 100% = as três na meta. O CSAT vem das pesquisas CSAT respondidas no período escolhido. Para o Task Success, em Analytics → Métricas escolha os eventos de início e conclusão da tarefa principal; enquanto não forem escolhidos, o card pede a configuração.",
         keywords: ["north star", "task success", "ativação", "métricas", "funil"],
       },
       {

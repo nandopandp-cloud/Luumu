@@ -5,6 +5,7 @@ import { canManageWorkspace, getCurrentProject, getCurrentRole, requireUser } fr
 import { collectingSince, getAnalyticsSettings, hasAnalyticsData, listViews, USER_SEGMENTS, type PeriodScope, USER_SORTS, type AnalyticsSettings, type UserSegment, type UserSort } from "@/lib/db/analytics";
 import type { UsersData } from "@/components/analytics/UsersView";
 import { listHosts } from "@/lib/db/hosts";
+import { northStarContext } from "@/lib/db/product-report";
 import { getAnalyticsPanel, listAnalyticsUsersPanel, type Freshness } from "@/lib/db/analytics-panel";
 import { parseViewConfig, viewHref, type ViewConfig } from "@/lib/analytics/core";
 import { datasetsFor, defaultSpan, TAB_LAYOUT, type Block } from "@/lib/analytics/derive";
@@ -34,7 +35,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
   }
 
   // tudo leve e independente: uma rodada só (o que não for usado nos avisos abaixo é descartado)
-  const [canManage, role, hasData, views, hosts, since, platform] = await Promise.all([
+  const [canManage, role, hasData, views, hosts, since, platform, northStar] = await Promise.all([
     canManageWorkspace(),
     getCurrentRole(),
     hasAnalyticsData(projectId),
@@ -42,6 +43,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
     listHosts(projectId),
     collectingSince(projectId),
     savedPlatform(projectId),
+    northStarContext(session.workspaceId, projectId, project!.name),
   ]);
   if (!settings.enabled && !hasData) return <EnableAnalytics canManage={canManage} />;
   if (!hasData) return <WaitingAnalytics canManage={canManage} />;
@@ -121,6 +123,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
       dirty={!!saved && !same(saved.config, config)}
       hosts={hosts}
       settings={{ northStarEvent: settings.northStarEvent, activationEvent: settings.activationEvent, taskStartEvent: settings.taskStartEvent, taskDoneEvent: settings.taskDoneEvent, adherenceBase: settings.adherenceBase }}
+      northStar={northStar}
       canManage={canManage}
       canConfigure={role === "owner" || role === "admin" || role === "editor"}
       enabled={settings.enabled}

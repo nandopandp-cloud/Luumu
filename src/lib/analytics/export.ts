@@ -3,8 +3,8 @@
   só; cada consulta dos blocos da visão vira uma tabela com colunas em português. PURO e testado.
 */
 import { CHANNEL_LABEL, WIDGETS, type Channel, type WidgetId } from "./core";
-import { acquisitionKpis, adherenceLabel, kpis, type Kpi } from "./derive";
-import type { AdherenceBase, AnalyticsData, UserRow } from "@/lib/db/analytics";
+import { acquisitionKpis, kpis, northStarKpi, type Kpi, type NorthStarCtx } from "./derive";
+import type { AnalyticsData, UserRow } from "@/lib/db/analytics";
 
 export interface ExportTable {
   title: string;
@@ -37,8 +37,9 @@ const dev = (d: string) => DEVICE[d] ?? d;
 const FREQ: Record<string, string> = { daily: "Diário", weekly: "Semanal", monthly: "Mensal", sporadic: "Esporádico" };
 
 /** KPIs da visão: valor formatado e variação contra o período anterior. */
-function kpiTable(d: AnalyticsData, widgets: WidgetId[], adherenceBase: AdherenceBase): ExportTable | null {
-  const k = kpis(d, adherenceBase);
+function kpiTable(d: AnalyticsData, widgets: WidgetId[], ns: NorthStarCtx | null): ExportTable | null {
+  const k = kpis(d);
+  const n = ns && widgets.includes("kpi_north_star") ? northStarKpi(d, ns) : null;
   const a = acquisitionKpis(d);
   const r = d.retention;
   const map: Partial<Record<WidgetId, [string | number | null, string | null]>> = {
@@ -47,8 +48,9 @@ function kpiTable(d: AnalyticsData, widgets: WidgetId[], adherenceBase: Adherenc
     kpi_session_time: [fmtDuration(k.sessionTime.value), delta(k.sessionTime)],
     kpi_sessions_per_user: [dec(k.sessionsPerUser.value), delta(k.sessionsPerUser)],
     kpi_pages_per_session: [dec(k.pagesPerSession.value), delta(k.pagesPerSession)],
+    kpi_wau: [k.wau.value, delta(k.wau)],
     kpi_stickiness: [pct(k.stickiness.value), delta(k.stickiness)],
-    kpi_north_star: [k.northStar ? pct(k.northStar.value) : "Não configurado", delta(k.northStar)],
+    kpi_north_star: [n ? pct(n.kpi.value) : null, n ? delta(n.kpi) : null],
     kpi_task_success: [k.taskSuccess ? pct(k.taskSuccess.value) : "Não configurado", delta(k.taskSuccess)],
     kpi_new_users: [a.newUsers.value, delta(a.newUsers)],
     kpi_activation: [pct(a.activation.value), delta(a.activation)],
@@ -58,14 +60,14 @@ function kpiTable(d: AnalyticsData, widgets: WidgetId[], adherenceBase: Adherenc
     kpi_d7: [pct(r?.d7), null],
     kpi_d30: [pct(r?.d30), null],
   };
-  const rows = widgets.filter((w) => w in map).map((w) => [w === "kpi_stickiness" ? adherenceLabel(adherenceBase) : WIDGETS[w], ...map[w]!]);
+  const rows = widgets.filter((w) => w in map).map((w) => [WIDGETS[w], ...map[w]!]);
   return rows.length ? { title: "Indicadores", columns: ["Indicador", "Valor", "Variação vs. período anterior"], rows } : null;
 }
 
 /** Tabelas da visão, na ordem dos blocos, sem repetir a mesma consulta. */
-export function analyticsTables(d: AnalyticsData, widgets: WidgetId[], adherenceBase: AdherenceBase = "daily"): ExportTable[] {
+export function analyticsTables(d: AnalyticsData, widgets: WidgetId[], ns: NorthStarCtx | null = null): ExportTable[] {
   const out: ExportTable[] = [];
-  const kt = kpiTable(d, widgets, adherenceBase);
+  const kt = kpiTable(d, widgets, ns);
   if (kt) out.push(kt);
   const done = new Set<string>();
   const add = (key: string, t: () => ExportTable | null) => {

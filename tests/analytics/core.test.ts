@@ -11,7 +11,8 @@ import {
   parseViewConfig,
   viewHref,
 } from "@/lib/analytics/core";
-import { acquisitionKpis, channelSeries, channelTable, datasetsFor, hoursGrid, kpis, retentionCurve, TAB_LAYOUT, WIDGET_DATASETS } from "@/lib/analytics/derive";
+import { acquisitionKpis, channelSeries, channelTable, datasetsFor, hoursGrid, kpis, northStarKpi, retentionCurve, TAB_LAYOUT, WIDGET_DATASETS } from "@/lib/analytics/derive";
+import { northStarTargets, periodCsat, platformNorthStar } from "@/lib/analytics/north-star";
 import { WIDGET_IDS } from "@/lib/analytics/core";
 
 const now = Date.parse("2026-10-03T15:00:00Z");
@@ -108,33 +109,76 @@ test("todo bloco das abas existe no catálogo e sabe de quais dados precisa", ()
   assert.deepEqual([...datasetsFor(["kpi_dau", "users_trend"])].sort(), ["daily", "mau"]);
 });
 
-test("KPIs: médias, variações e métricas não configuradas", () => {
+test("KPIs: médias, variações, WAU e métricas não configuradas", () => {
   const d = {
     daily: { cur: [{ d: "2026-10-01", users: 10, sessions: 20, ms: 60000, pv: 40 }, { d: "2026-10-02", users: 20, sessions: 30, ms: 120000, pv: 60 }], prev: [{ d: "2026-09-01", users: 10, sessions: 10, ms: 60000, pv: 10 }] },
     totals: { users: 25, users_prev: 10, sessions: 50, sessions_prev: 10, ms: 90000, ms_prev: 60000, pv: 100, pv_prev: 10, identified: 5, mau: 100, mau_prev: 50 },
     configured: { active: 25, active_prev: 10, any_event: 20, surveyed: 3 },
+    wau: { wau: 40.4, wau_prev: 25 },
   };
   const k = kpis(d as never);
   assert.equal(k.dau.value, 15);
   assert.deepEqual(k.dau.delta, { value: 50, unit: "%" });
-  assert.equal(k.stickiness.value, 0.15);
-  assert.deepEqual(k.stickiness.delta, { value: -5, unit: "p.p." }); // 15/100 vs 10/50
-  assert.equal(k.northStar, null); // sem evento configurado: o card pede configuração
+  assert.equal(k.wau.value, 40);
+  assert.equal(k.wau.delta?.unit, "%");
   assert.equal(k.taskSuccess, null);
   assert.equal(k.sessionsPerUser.value, 2);
 });
 
-test("Aderência semanal: WAU médio ÷ MAU, variação em p.p.", () => {
+test("Aderência: WAU médio ÷ MAU, variação em p.p.", () => {
   const d = {
     daily: { cur: [{ d: "2026-10-01", users: 10, sessions: 20, ms: 60000, pv: 40 }], prev: [] },
     totals: { users: 25, users_prev: 10, sessions: 50, sessions_prev: 10, ms: 90000, ms_prev: 60000, pv: 100, pv_prev: 10, identified: 5, mau: 100, mau_prev: 50 },
     wau: { wau: 40, wau_prev: 25 },
   };
-  const k = kpis(d as never, "weekly");
+  const k = kpis(d as never);
   assert.equal(k.stickiness.value, 0.4);
   assert.deepEqual(k.stickiness.delta, { value: -10, unit: "p.p." }); // 40/100 vs 25/50
-  assert.equal(kpis(d as never).stickiness.value, 0.1); // padrão continua DAU/MAU
-  assert.equal(kpis({ ...d, wau: undefined } as never, "weekly").stickiness.value, null); // sem o dado, sem valor
+  assert.equal(kpis({ ...d, wau: undefined } as never).stickiness.value, null); // sem o dado, sem valor
+});
+
+test("North Star: metas por plataforma (Exploradores 8 min; demais 15 min)", () => {
+  assert.deepEqual(northStarTargets("geniex"), { csat: 90, adherence: 50, usage: 15 });
+  assert.deepEqual(northStarTargets("educadores"), { csat: 90, adherence: 50, usage: 15 });
+  assert.deepEqual(northStarTargets("exploradores"), { csat: 90, adherence: 50, usage: 8 });
+  assert.deepEqual(northStarTargets(null), { csat: 90, adherence: 50, usage: 15 });
+});
+
+test("North Star: CSAT, Aderência e Uso ÷ meta × peso (30/40/30), somados", () => {
+  const t = northStarTargets("geniex");
+  // tudo na meta = 100
+  assert.equal(platformNorthStar({ csat: 90, adherence: 50, usage: 15 }, t).value, 100);
+  // 81/90×30 + 25/50×40 + 15/15×30 = 27 + 20 + 30
+  assert.equal(platformNorthStar({ csat: 81, adherence: 25, usage: 15 }, t).value, 77);
+  // sem teto: acima da meta passa de 100
+  assert.ok(platformNorthStar({ csat: 99, adherence: 60, usage: 20 }, t).value! > 100);
+  // faltando uma métrica, sem valor
+  const r = platformNorthStar({ csat: null, adherence: 50, usage: 15 }, t);
+  assert.equal(r.value, null);
+  assert.deepEqual(r.missing, ["csat"]);
+  // Exploradores: 8 min já é a meta
+  assert.equal(platformNorthStar({ csat: 90, adherence: 50, usage: 8 }, northStarTargets("exploradores")).value, 100);
+});
+
+test("North Star: CSAT do período = média das pesquisas CSAT com nota", () => {
+  assert.equal(periodCsat([{ value: 80 }, { value: 90 }, { value: null }]), 85);
+  assert.equal(periodCsat([]), null);
+});
+
+test("North Star no card: WAU/MAU, tempo médio e CSAT do período; variação em p.p.", () => {
+  const d = {
+    // 60 sessões, 15 min em média
+    totals: { users: 50, users_prev: 40, sessions: 60, sessions_prev: 40, ms: 15 * 60_000, ms_prev: 7.5 * 60_000, pv: 0, pv_prev: 0, identified: 0, mau: 100, mau_prev: 100 },
+    wau: { wau: 50, wau_prev: 25 },
+    csat: { csat: 90, csat_prev: 90, surveys: 2, answered: 30 },
+  };
+  const { kpi, now } = northStarKpi(d as never, { targets: northStarTargets("geniex"), platform: "GenieX" });
+  assert.equal(kpi.value, 1); // 100 pontos = 100%
+  assert.equal(now.components.find((c) => c.metric === "adherence")!.value, 50);
+  // antes: 30 + 25/50×40 + 7,5/15×30 = 30 + 20 + 15 = 65
+  assert.deepEqual(kpi.delta, { value: 35, unit: "p.p." });
+  const semCsat = northStarKpi({ ...d, csat: undefined } as never, { targets: northStarTargets(null), platform: null });
+  assert.equal(semCsat.kpi.value, null);
 });
 
 test("aquisição: ativação e canais somando os novos", () => {

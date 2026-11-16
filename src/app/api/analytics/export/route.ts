@@ -6,6 +6,7 @@ import { parseViewConfig, TAB_META } from "@/lib/analytics/core";
 import { datasetsFor, TAB_LAYOUT } from "@/lib/analytics/derive";
 import { analyticsTables, usersTable, type ExportTable } from "@/lib/analytics/export";
 import { tablesToCsv } from "@/lib/export/csv";
+import { northStarContext } from "@/lib/db/product-report";
 import { tablesToXlsx } from "@/lib/export/xlsx";
 import { tablesToPdf } from "@/lib/export/pdf";
 import { normalizeHosts } from "@/lib/platform/hosts";
@@ -70,7 +71,8 @@ export async function GET(req: Request) {
   } else {
     const widgets = config.tab === "custom" ? (config.widgets ?? []) : TAB_LAYOUT[config.tab].map((b) => b.id);
     const data = await getAnalytics(scope, settings, datasetsFor(widgets), { pagesLimit: 100, eventsLimit: 100 });
-    tables = analyticsTables(data, widgets, settings.adherenceBase);
+    const ns = widgets.includes("kpi_north_star") ? await northStarContext(session.workspaceId, projectId, project.name) : null;
+    tables = analyticsTables(data, widgets, ns);
   }
 
   const name = saved?.name ?? `Analytics: ${TAB_META[config.tab].label}`;
