@@ -49,8 +49,9 @@ export function periodToRange(
   customTo?: string | null
 ): { from?: Date; to?: Date } {
   if (period === "custom") {
-    const from = customFrom ? new Date(`${customFrom}T00:00:00`) : undefined;
-    const to = customTo ? new Date(`${customTo}T23:59:59.999`) : undefined;
+    // datas do seletor são dias de Brasília (UTC−3), não do fuso do servidor
+    const from = customFrom ? new Date(`${customFrom}T00:00:00-03:00`) : undefined;
+    const to = customTo ? new Date(`${customTo}T23:59:59.999-03:00`) : undefined;
     return { from, to };
   }
   return { from: periodToDateFrom(period || DEFAULT_PERIOD), to: undefined };

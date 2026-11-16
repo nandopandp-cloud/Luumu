@@ -4,7 +4,7 @@
  * "2. Highlights", "3. Evolução dos Indicadores" (6 gráficos) e "Observações e conclusões executivas".
  * Um arquivo só, estilos inline e gráficos em SVG: abre offline e imprime em PDF pelo navegador.
  */
-import { formatCompact, type GoalStatus } from "./indicators";
+import { formatCompact, type GoalStatus, northStarRuleText } from "./indicators";
 import type { IndicatorRow, ReportModel } from "./model";
 import { buildCharts, chartCardHtml, PLATFORM_COLOR } from "./charts";
 import { escapeHtml, formatLongTs, highlightsHtml, ICON_MET, ICON_MISSED, introText, REPORT_STATUS, type ReportStatus } from "./html";
@@ -100,6 +100,6 @@ ${highlightsHtml(m.highlights, { font: "inherit", color: TXT, muted: MUT })}
 
 <p style="font-size:10.5px;color:${MUT};margin:16px 0 0">Gerado em ${escapeHtml(formatLongTs(opts.generatedAt))}${
     m.sync.at ? ` · dados da Luumu atualizados em ${escapeHtml(formatLongTs(m.sync.at))}` : ""
-  } · NorthStar = soma de (realizado ÷ meta × peso) de CSAT (${m.weights.csat}), Aderência (${m.weights.adherence}) e Tempo de uso (${m.weights.usage}), com a média das plataformas.</p>
+  } · ${northStarRuleText(m.period, m.weights)}</p>
 </main></body></html>`;
 }

@@ -56,11 +56,18 @@ interface Spec {
   to?: string;
   host?: string;
   device?: string;
-  /** dia de Brasília, só em "Hoje" (o resultado de ontem não vale para hoje) */
+  /**
+   * dia de Brasília, só em "Hoje" (o resultado de ontem não vale para hoje). Nos períodos
+   * personalizados vale "br": as datas passaram a ser lidas no horário de Brasília (antes, no fuso
+   * do servidor), e a marca separa esses resultados dos calculados antes da correção.
+   */
   day?: string;
   /** o que mais muda o resultado: eventos configurados, opções da lista de usuários */
   extra?: unknown;
 }
+
+/** Regra do CSAT do período (lib/analytics/north-star.ts → periodCsat): pesquisas semanais mais recentes. */
+const CSAT_RULE = "weekly-latest";
 
 const SETTINGS_USED: Partial<Record<Dataset, (keyof AnalyticsSettings)[]>> = {
   configured: ["northStarEvent", "activationEvent", "taskStartEvent", "taskDoneEvent"],
@@ -79,8 +86,9 @@ function specOf(k: Id, p: PeriodScope, st: AnalyticsSettings, extra?: unknown): 
     to: custom ? p.to : undefined,
     host: p.host || undefined,
     device: p.device || undefined,
-    day: p.period === "today" ? brDay(new Date()) : undefined,
-    extra: k === "usersList" ? extra : used ? Object.fromEntries(used.map((x) => [x, st[x]])) : undefined,
+    day: p.period === "today" ? brDay(new Date()) : custom ? "br" : undefined,
+    // CSAT: a regra entra na chave (resultado de uma regra antiga não é reaproveitado)
+    extra: k === "usersList" ? extra : k === "csat" ? { rule: CSAT_RULE } : used ? Object.fromEntries(used.map((x) => [x, st[x]])) : undefined,
   };
 }
 

@@ -505,7 +505,8 @@ async function csatPeriod(s: AnalyticsScope, p: AnalyticsScope) {
   const scope = (x: AnalyticsScope) => ({ projectId: x.projectId, dateFrom: x.from, dateTo: new Date(x.to.getTime() - 1), host: x.host, surveyType: "CSAT" });
   const [cur, prev] = await Promise.all([getScoresBySurvey(scope(s)), getScoresBySurvey(scope(p))]);
   const answered = cur.reduce((a, x) => a + x.answered, 0);
-  return { csat: periodCsat(cur), csat_prev: periodCsat(prev), surveys: cur.filter((x) => x.value !== null).length, answered };
+  const days = (x: AnalyticsScope) => (x.to.getTime() - x.from.getTime()) / 86_400_000;
+  return { csat: periodCsat(cur, days(s)), csat_prev: periodCsat(prev, days(p)), surveys: cur.filter((x) => x.value !== null).length, answered };
 }
 
 /** Usuários que fizeram cada evento configurado (período e anterior). */

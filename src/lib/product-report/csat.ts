@@ -10,6 +10,9 @@
 
 export const CSAT_SURVEYS_PER_PERIOD = 2;
 
+/** Pesquisas CSAT (semanais) que cabem num período de `days` dias: 2 numa quinzena, 4 em 30 dias. */
+export const csatSurveysFor = (days: number) => Math.max(1, Math.round(days / 7));
+
 export interface SurveyCsat {
   surveyName: string;
   /** % top-box; null = pesquisa sem nota calculável */
@@ -30,11 +33,11 @@ export interface PeriodCsat {
 
 const pct = (v: number) => `${v.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
 
-export function csatFromSurveys(surveys: SurveyCsat[]): PeriodCsat {
+export function csatFromSurveys(surveys: SurveyCsat[], count = CSAT_SURVEYS_PER_PERIOD): PeriodCsat {
   const used = surveys
     .filter((s): s is SurveyCsat & { value: number } => typeof s.value === "number" && Number.isFinite(s.value))
     .sort((a, b) => b.lastAt - a.lastAt)
-    .slice(0, CSAT_SURVEYS_PER_PERIOD);
+    .slice(0, count);
   if (!used.length) return { value: null, used: [], warnings: ["nenhuma resposta de pesquisa CSAT na quinzena"] };
 
   const value = used.reduce((a, s) => a + s.value, 0) / used.length;
@@ -43,6 +46,6 @@ export function csatFromSurveys(surveys: SurveyCsat[]): PeriodCsat {
     value,
     used,
     detail: used.length > 1 ? `Média das ${used.length} últimas pesquisas · ${each}` : each,
-    warnings: used.length < CSAT_SURVEYS_PER_PERIOD ? ["só 1 pesquisa CSAT com respostas na quinzena: o CSAT é o dela, sem média com outra"] : [],
+    warnings: used.length < count && count === CSAT_SURVEYS_PER_PERIOD ? ["só 1 pesquisa CSAT com respostas na quinzena: o CSAT é o dela, sem média com outra"] : [],
   };
 }

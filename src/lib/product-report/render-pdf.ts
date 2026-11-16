@@ -2,7 +2,7 @@ import "server-only";
 // mesmo build do pdfkit de lib/export/pdf.ts (o standalone embute as fontes; ver comentário lá)
 import PDFDocument from "pdfkit/js/pdfkit.standalone.js";
 import { drawFooters } from "@/lib/export/pdf";
-import { formatCompact, type GoalStatus } from "./indicators";
+import { formatCompact, type GoalStatus, northStarRuleText } from "./indicators";
 import type { ReportModel } from "./model";
 import { buildCharts, layoutChart, REF_COLOR, SERIES_COLOR, type ChartSpec, type Prim } from "./charts";
 import { formatLongTs, HIGHLIGHT_BLOCKS, introText, REPORT_STATUS, type ReportStatus } from "./html";
@@ -290,7 +290,7 @@ export function renderReportPdf(m: ReportModel, opts: { generatedAt: string; sta
     ensureSpace(doc, 30);
     text(
       doc,
-      `Gerado em ${formatLongTs(opts.generatedAt)}${m.sync.at ? ` · dados da Luumu atualizados em ${formatLongTs(m.sync.at)}` : ""} · NorthStar = soma de (realizado ÷ meta × peso) de CSAT (${m.weights.csat}), Aderência (${m.weights.adherence}) e Tempo de uso (${m.weights.usage}), com a média das plataformas.`,
+      `Gerado em ${formatLongTs(opts.generatedAt)}${m.sync.at ? ` · dados da Luumu atualizados em ${formatLongTs(m.sync.at)}` : ""} · ${northStarRuleText(m.period, m.weights)}`,
       MARGIN,
       doc.y,
       { size: 6.5, color: MUT, width: w, lineBreak: true }

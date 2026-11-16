@@ -10,6 +10,11 @@
  *   - North Star = soma dos 3 resultados. Sem teto: passar da meta num componente compensa
  *     outro (a planilha não limita, ex.: aderência 57,6% com meta 50% vale 46,05 de 40).
  *
+ * A partir de PLATFORM_NORTH_STAR_FROM a regra é outra, a mesma do Analytics (bloco "North Star
+ * Jovens Gênios"): a North Star de CADA plataforma = soma de (realizado ÷ meta da plataforma ×
+ * peso), com as metas de NORTH_STAR_TARGETS (Tempo de uso 8 min no Exploradores); a North Star
+ * do report = média simples das 3. As quinzenas anteriores continuam como na planilha.
+ *
  * Puro (sem banco): usado pela tela, pela exportação e pelos testes.
  */
 
@@ -85,6 +90,56 @@ export type Weights = Record<Metric, number>;
 /** Pesos da planilha (somam 100: North Star "na meta" = 100). */
 export const DEFAULT_WEIGHTS: Weights = { csat: 30, adherence: 40, usage: 30 };
 
+/* ---------- North Star por plataforma (Analytics e report desde PLATFORM_NORTH_STAR_FROM) ---------- */
+
+export type NorthStarTargets = Record<Metric, number>;
+/** Metas da North Star de cada plataforma: CSAT 90% e Aderência (WAU/MAU) 50% em todas; Tempo de uso 15 min. */
+export const NORTH_STAR_TARGETS: NorthStarTargets = { csat: 90, adherence: 50, usage: 15 };
+/** Metas de tempo de uso (min) que mudam por plataforma. */
+export const USAGE_TARGET_BY_PLATFORM: Partial<Record<PlatformKey, number>> = { exploradores: 8 };
+
+export function northStarTargets(platform: PlatformKey | null): NorthStarTargets {
+  const usage = (platform && USAGE_TARGET_BY_PLATFORM[platform]) ?? NORTH_STAR_TARGETS.usage;
+  return { ...NORTH_STAR_TARGETS, usage };
+}
+
+/** Primeira quinzena em que a North Star do report é a média das North Stars das plataformas. */
+export const PLATFORM_NORTH_STAR_FROM: PeriodId = "2026-11-1";
+export const northStarByPlatform = (period?: PeriodId) => !!period && period >= PLATFORM_NORTH_STAR_FROM;
+
+/** CSAT e Aderência em %, Tempo de uso em minutos. */
+export type NorthStarInputs = Record<Metric, number | null>;
+
+export interface PlatformNorthStar {
+  /** pontos (100 = na meta); null se faltar alguma das três métricas */
+  value: number | null;
+  components: { metric: Metric; value: number | null; target: number; weight: number; result: number | null }[];
+  missing: Metric[];
+}
+
+export function platformNorthStar(v: NorthStarInputs, targets: NorthStarTargets, weights: Weights = DEFAULT_WEIGHTS): PlatformNorthStar {
+  const components = METRICS.map((metric) => {
+    const value = v[metric];
+    const target = targets[metric];
+    return { metric, value, target, weight: weights[metric], result: num(value) && target > 0 ? (value / target) * weights[metric] : null };
+  });
+  const missing = components.filter((c) => c.result === null).map((c) => c.metric);
+  return { value: missing.length ? null : components.reduce((a, c) => a + (c.result as number), 0), components, missing };
+}
+
+/** Média simples, só com todas presentes: média parcial mudaria o significado do número. */
+export function averageNorthStar(values: (number | null)[]): number | null {
+  if (!values.length || !values.every(num)) return null;
+  return (values as number[]).reduce((a, x) => a + x, 0) / values.length;
+}
+
+/** Explicação da North Star da quinzena (rodapé do HTML/PDF). */
+export function northStarRuleText(period: PeriodId, w: Weights): string {
+  return northStarByPlatform(period)
+    ? `NorthStar = média da NorthStar de GenieX, Exploradores e Educadores; cada uma = soma de (realizado ÷ meta × peso) de CSAT (meta ${NORTH_STAR_TARGETS.csat}%, peso ${w.csat}), Aderência (meta ${NORTH_STAR_TARGETS.adherence}%, peso ${w.adherence}) e Tempo de uso (meta ${NORTH_STAR_TARGETS.usage} min, ${USAGE_TARGET_BY_PLATFORM.exploradores} min no Exploradores; peso ${w.usage}).`
+    : `NorthStar = soma de (realizado ÷ meta × peso) de CSAT (${w.csat}), Aderência (${w.adherence}) e Tempo de uso (${w.usage}), com a média das plataformas.`;
+}
+
 export type PlatformValues = Partial<Record<PlatformIndicatorKey, number | null>>;
 export type Targets = Partial<Record<GoalKey, number | null>>;
 
@@ -103,9 +158,15 @@ export interface NorthStarComponent {
 export interface NorthStarResult {
   value: number | null;
   components: NorthStarComponent[];
+  /** regra da quinzena: média das plataformas por componente (planilha) ou média das North Stars das plataformas */
+  rule: "consolidated" | "platforms";
+  /** North Star de cada plataforma (só na regra "platforms") */
+  platforms: { platform: PlatformKey; value: number | null; missing: Metric[] }[];
 }
 
-const num = (v: number | null | undefined): v is number => typeof v === "number" && Number.isFinite(v);
+function num(v: number | null | undefined): v is number {
+  return typeof v === "number" && Number.isFinite(v);
+}
 
 /**
  * Média só com todas as plataformas presentes: média parcial mudaria o significado do número
@@ -150,9 +211,18 @@ export function computeNorthStar(
       missing: c.missing,
     };
   });
+  if (northStarByPlatform(period)) {
+    // mesma conta do Analytics: North Star de cada plataforma com as metas dela, depois a média
+    const platforms = PLATFORMS.map((p) => {
+      const r = platformNorthStar(Object.fromEntries(METRICS.map((m) => [m, values[`${p.key}.${m}`] ?? null])) as NorthStarInputs, northStarTargets(p.key), weights);
+      return { platform: p.key as PlatformKey, value: r.value, missing: r.missing };
+    });
+    const computed = averageNorthStar(platforms.map((p) => p.value));
+    return { value: num(overrides[NORTH_STAR]) ? (overrides[NORTH_STAR] as number) : computed, components, rule: "platforms", platforms };
+  }
   const computed = components.every((c) => c.result !== null) ? components.reduce((a, c) => a + (c.result as number), 0) : null;
   const value = num(overrides[NORTH_STAR]) ? (overrides[NORTH_STAR] as number) : computed;
-  return { value, components };
+  return { value, components, rule: "consolidated", platforms: [] };
 }
 
 export type GoalStatus = "met" | "missed" | "no_target" | "no_data";

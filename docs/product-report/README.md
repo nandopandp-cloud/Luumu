@@ -91,6 +91,18 @@ A North Star segue a planilha "North Star" (`src/lib/product-report/indicators.t
 - se faltar o dado de uma plataforma, o consolidado e a North Star ficam vazios (não é feita
   média parcial).
 
+A partir da **Q1 de novembro/2026** (`PLATFORM_NORTH_STAR_FROM` em `indicators.ts`) a North Star do
+report segue a mesma regra do bloco "North Star Jovens Gênios" do Analytics, para os dois números
+baterem:
+
+- North Star de cada plataforma = soma de (realizado ÷ meta × peso), com metas fixas: CSAT 90%,
+  Aderência 50% e Tempo de uso 15 min (8 min no Exploradores);
+- North Star do report = (GenieX + Exploradores + Educadores) ÷ 3, só com as três presentes;
+- as metas consolidadas (`ns.*`) e os ajustes manuais dos consolidados não entram nessa conta; o
+  ajuste manual de uma plataforma e o da própria North Star continuam valendo;
+- no Analytics, o CSAT de um período usa a regra deste report (pesquisas semanais mais recentes: 2
+  numa quinzena) e as datas do período personalizado são dias de Brasília.
+
 Quinzenas: dias 1 a 15 e dia 16 até o fim do mês, no horário de Brasília.
 
 A North Star Jovens Gênios do **Analytics** (bloco "North Star Jovens Gênios" na Visão geral) é

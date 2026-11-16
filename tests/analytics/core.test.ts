@@ -13,6 +13,8 @@ import {
 } from "@/lib/analytics/core";
 import { acquisitionKpis, channelSeries, channelTable, datasetsFor, hoursGrid, kpis, northStarKpi, retentionCurve, TAB_LAYOUT, WIDGET_DATASETS } from "@/lib/analytics/derive";
 import { averageNorthStar, buildGlobalNorthStar, northStarTargets, periodCsat, platformNorthStar } from "@/lib/analytics/north-star";
+import { computeNorthStar, PLATFORM_NORTH_STAR_FROM } from "@/lib/product-report/indicators";
+import { periodToRange } from "@/lib/utils/period";
 import { WIDGET_IDS } from "@/lib/analytics/core";
 
 const now = Date.parse("2026-10-03T15:00:00Z");
@@ -160,9 +162,33 @@ test("North Star: CSAT, Aderência e Uso ÷ meta × peso (30/40/30), somados", (
   assert.equal(platformNorthStar({ csat: 90, adherence: 50, usage: 8 }, northStarTargets("exploradores")).value, 100);
 });
 
-test("North Star: CSAT do período = média das pesquisas CSAT com nota", () => {
-  assert.equal(periodCsat([{ value: 80 }, { value: 90 }, { value: null }]), 85);
-  assert.equal(periodCsat([]), null);
+test("North Star: CSAT do período = as pesquisas semanais mais recentes (mesma regra do report)", () => {
+  const sv = (value: number | null, lastAt: number) => ({ surveyName: `s${lastAt}`, value, answered: 10, lastAt });
+  const list = [sv(70, 1), sv(80, 2), sv(90, 3), sv(null, 4)];
+  assert.equal(periodCsat(list, 15), 85); // quinzena: as 2 mais recentes com nota
+  assert.equal(periodCsat(list, 30), 80); // 30 dias: até 4 semanas (aqui, as 3 com nota)
+  assert.equal(periodCsat(list, 7), 90); // 7 dias: a última
+  assert.equal(periodCsat([], 15), null);
+});
+
+test("North Star: Analytics e Report Quinzenal dão o mesmo número na mesma quinzena", () => {
+  const v = { geniex: { csat: 84, adherence: 65, usage: 12.5 }, exploradores: { csat: 80, adherence: 43.7, usage: 6 }, educadores: { csat: 88, adherence: 64, usage: 13 } };
+  const analytics = averageNorthStar(
+    (["geniex", "exploradores", "educadores"] as const).map((k) => platformNorthStar(v[k], northStarTargets(k)).value)
+  );
+  const values = Object.fromEntries(Object.entries(v).flatMap(([k, m]) => Object.entries(m).map(([metric, x]) => [`${k}.${metric}`, x])));
+  // metas consolidadas da quinzena não entram na regra por plataforma
+  const report = computeNorthStar(values, { "ns.csat": 95, "ns.adherence": 60, "ns.usage": 20 }, undefined, {}, PLATFORM_NORTH_STAR_FROM);
+  assert.equal(report.rule, "platforms");
+  assert.ok(Math.abs(report.value! - analytics!) < 1e-9);
+  // antes do corte, a fórmula da planilha (consolidado ÷ meta consolidada)
+  assert.equal(computeNorthStar(values, { "ns.csat": 90, "ns.adherence": 50, "ns.usage": 15 }, undefined, {}, "2026-10-2").rule, "consolidated");
+});
+
+test("período personalizado: dias de Brasília, não do fuso do servidor", () => {
+  const r = periodToRange("custom", "2026-11-01", "2026-11-15");
+  assert.equal(r.from!.toISOString(), "2026-11-01T03:00:00.000Z");
+  assert.equal(r.to!.toISOString(), "2026-11-16T02:59:59.999Z");
 });
 
 test("North Star no card: WAU/MAU, tempo médio e CSAT do período; variação em p.p.", () => {

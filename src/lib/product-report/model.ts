@@ -10,6 +10,7 @@
 import {
   ADHERENCE_FORMULA,
   computeNorthStar,
+  northStarByPlatform,
   goalStatus,
   indicatorLabel,
   METRIC_META,
@@ -311,7 +312,7 @@ export function buildReportModel(input: {
     return row(key, r.value, { source: r.source, updatedAt: r.updatedAt, detail: r.detail, warnings: r.warnings, overridden: r.overridden });
   };
 
-  const derivedSource = "Calculado: fórmula da planilha North Star";
+  const derivedSource = cur.ns.rule === "platforms" ? "Calculado: média da North Star das 3 plataformas (mesma regra do Analytics)" : "Calculado: fórmula da planilha North Star";
   const components = cur.ns.components.map((c) => ({
     ...c,
     row: row(`ns.${c.metric}`, c.value, {
@@ -428,7 +429,8 @@ function buildAlerts(a: {
   }
 
   for (const c of a.components) {
-    if (c.value !== null && c.target === null) out.push({ tone: "warn", text: `${METRIC_META[c.metric].label}: sem meta definida, a North Star não pode ser calculada.` });
+    // na regra por plataforma as metas são fixas (NORTH_STAR_TARGETS): a meta consolidada não entra
+    if (c.value !== null && c.target === null && !northStarByPlatform(a.period)) out.push({ tone: "warn", text: `${METRIC_META[c.metric].label}: sem meta definida, a North Star não pode ser calculada.` });
   }
   return out;
 }
