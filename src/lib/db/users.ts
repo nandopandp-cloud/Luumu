@@ -1,8 +1,8 @@
 import "server-only";
 import { and, asc, count, eq, ne } from "drizzle-orm";
 import { db } from "./client";
-import { users, memberships, workspaces } from "@/lib/db/schema";
-import { newId } from "./ids";
+import { users, memberships, membershipProjects, workspaces } from "@/lib/db/schema";
+import { membershipProjectId, newId } from "./ids";
 import { hashPassword } from "@/lib/auth/password";
 import { createProject } from "./projects";
 import { getScopesByMembership, setMembershipProjects } from "./member-projects";
@@ -59,6 +59,25 @@ export async function addMemberToWorkspace(input: {
   if (input.projectIds && input.projectIds.length > 0) {
     await setMembershipProjects(membershipId, input.workspaceId, input.projectIds);
   }
+  return userId;
+}
+
+/**
+ * Conta criada no 1º login com Google (lib/auth/google-sso.ts): Leitor no workspace, vendo só
+ * `projectIds`. Usuário, membership e projetos vão num único `db.batch()` (uma transação no Neon):
+ * uma membership sem linhas de projeto veria TODOS os projetos, então ou entra tudo ou nada.
+ * A senha é aleatória e nunca mostrada: a conta entra pelo Google (ou depois de "trocar senha").
+ */
+export async function provisionViewer(input: { workspaceId: string; name: string; email: string; password: string; projectIds: string[] }) {
+  if (input.projectIds.length === 0) throw new Error("Conta sem projetos: o escopo vazio liberaria todos.");
+  const userId = newId("usr");
+  const membershipId = newId("mem");
+  const passwordHash = await hashPassword(input.password);
+  await db.batch([
+    db.insert(users).values({ id: userId, email: input.email.toLowerCase(), name: input.name, passwordHash }),
+    db.insert(memberships).values({ id: membershipId, userId, workspaceId: input.workspaceId, role: "viewer" }),
+    db.insert(membershipProjects).values(input.projectIds.map((projectId) => ({ id: membershipProjectId(), membershipId, projectId }))),
+  ]);
   return userId;
 }
 

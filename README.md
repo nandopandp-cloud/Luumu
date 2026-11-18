@@ -138,7 +138,8 @@ luumu/
 │   │   │   └── *.ts                  uma query por agregado: surveys, responses, tours,
 │   │   │                             heatmaps, analytics, reports, users, workspace…
 │   │   ├── auth/                     session.ts (JWT), password.ts, current.ts (usuário,
-│   │   │                             workspace e projeto atuais + permissões)
+│   │   │                             workspace e projeto atuais + permissões), google.ts e
+│   │   │                             google-sso.ts (login com Google), next.ts (destino pós-login)
 │   │   ├── api/                      cors.ts, keys.ts, ratelimit.ts da API pública
 │   │   ├── surveys/                  types.ts, templates.ts, builder.ts (blocos e aparência),
 │   │   │                             schedule.ts (vigência), recurrence.ts (pesquisa

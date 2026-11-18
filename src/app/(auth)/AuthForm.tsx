@@ -22,11 +22,12 @@ function SubmitButton({ label }: { label: string }) {
 }
 
 /** Formulário de login. Contas novas não se cadastram sozinhas: entram por convite de um workspace. */
-export function AuthForm({ next }: { next?: string }) {
-  const [state, formAction] = useActionState<AuthResult, FormData>(loginAction, {});
+export function AuthForm({ next, initialError, compact = false }: { next?: string; initialError?: string; compact?: boolean }) {
+  // initialError: erro do login com Google (vem na URL); some quando o formulário é enviado
+  const [state, formAction] = useActionState<AuthResult, FormData>(loginAction, initialError ? { error: initialError } : {});
 
   return (
-    <form action={formAction} className="mt-8 flex flex-col gap-4">
+    <form action={formAction} className={compact ? "mt-6 flex flex-col gap-4" : "mt-8 flex flex-col gap-4"}>
       {/* destino pretendido antes do login; a action revalida antes de redirecionar */}
       {next ? <input type="hidden" name="next" value={next} /> : null}
       <Field label="E-mail de trabalho">

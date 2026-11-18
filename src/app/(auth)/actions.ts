@@ -8,6 +8,8 @@ import { findUserByEmail, getUserWorkspace } from "@/lib/db/users";
 import { verifyPassword } from "@/lib/auth/password";
 import { createSession, destroySession } from "@/lib/auth/session";
 import { checkRateLimit } from "@/lib/api/ratelimit";
+import { safeNext } from "@/lib/auth/next";
+import { isDbUnavailable } from "@/lib/db/unavailable";
 
 async function clientIp(): Promise<string> {
   const h = await headers();
@@ -18,24 +20,6 @@ const loginSchema = z.object({
   email: z.string().email("E-mail inválido."),
   password: z.string().min(1, "Informe a senha."),
 });
-
-/**
- * Rotas protegidas às quais o login pode devolver o usuário (espelha PROTECTED do proxy.ts).
- * As áreas de LOCKED_ROUTES ficam de fora: o proxy as devolveria para /dashboard.
- */
-const NEXT_ALLOWED = [
-  "/dashboard", "/surveys", "/responses", "/reports", "/sdk", "/settings", "/tours", "/insights", "/billing", "/heatmaps", "/help", "/analytics", "/product-report",
-];
-
-/**
- * Destino pós-login: só caminho interno de rota protegida. `next` vem da URL (entrada do
- * usuário), então "//evil.com" e URLs absolutas são descartadas para não virar open redirect.
- */
-function safeNext(raw: FormDataEntryValue | null): string {
-  const next = typeof raw === "string" ? raw : "";
-  if (!next.startsWith("/") || next.startsWith("//")) return "/dashboard";
-  return NEXT_ALLOWED.some((p) => next === p || next.startsWith(p + "/")) ? next : "/dashboard";
-}
 
 export type AuthResult = { error?: string };
 
@@ -83,23 +67,6 @@ export async function loginAction(_prev: AuthResult, formData: FormData): Promis
   }
   // devolve o usuário à página que ele tentou abrir antes do login (o proxy a guarda em ?next=)
   redirect(safeNext(formData.get("next")));
-}
-
-/**
- * Falha de infraestrutura do banco (indisponível), não erro de credencial.
- * Cobre a quota do Neon (HTTP 402 / 429), indisponibilidade do serviço (5xx) e falha de
- * rede do driver neon-http (`fetch failed`). Percorre a cadeia de `cause` porque o Drizzle
- * embrulha o NeonDbError original dentro do seu próprio erro de query.
- */
-function isDbUnavailable(err: unknown): boolean {
-  for (let e: unknown = err, depth = 0; e && depth < 5; depth++) {
-    const msg = e instanceof Error ? e.message : String(e);
-    if (/HTTP status (402|429|5\d\d)|exceeded the data transfer quota|fetch failed|Failed query/i.test(msg)) {
-      return true;
-    }
-    e = e instanceof Error ? (e as { cause?: unknown }).cause : undefined;
-  }
-  return false;
 }
 
 export async function logoutAction() {
