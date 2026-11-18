@@ -34,11 +34,11 @@ export default async function LoginPage({
           {google && <GoogleButton next={next} />}
           <AuthForm next={next} initialError={googleError} compact={google} />
 
-          <p className="mt-6 text-center text-sm text-fg-mut">
+          {/* <p className="mt-6 text-center text-sm text-fg-mut">
             {google
               ? `Quem tem e-mail @${SSO_DOMAIN} entra com o Google. Os demais acessos são por convite.`
               : "O acesso é feito por convite. Peça a quem administra o seu workspace."}
-          </p>
+          </p> */}
         </div>
       </div>
 
