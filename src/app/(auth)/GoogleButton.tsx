@@ -14,7 +14,7 @@ export function GoogleButton({ next }: { next?: string }) {
       >
         <GoogleMark /> Entrar com Google
       </a>
-      <p className="mt-2 text-center text-xs text-fg-mut">Para contas @{SSO_DOMAIN}</p>
+      {/* <p className="mt-2 text-center text-xs text-fg-mut">Para contas @{SSO_DOMAIN}</p> */}
       <div className="mt-6 flex items-center gap-3 text-xs text-fg-mut" aria-hidden>
         <span className="h-px flex-1 bg-line" /> ou entre com e-mail e senha <span className="h-px flex-1 bg-line" />
       </div>
