@@ -225,7 +225,7 @@ Camadas, a tabela "onde colocar cada coisa" e as convenções estão em
 - [Arquitetura e convenções](docs/ARQUITETURA.md)
 - Product Tours: [arquitetura](docs/tours/ARQUITETURA.md) · [integração no produto](docs/tours/INTEGRACAO.md)
 - [Plugin de Acessibilidade](docs/accessibility/README.md)
-- [Notificações](docs/notifications/README.md)
+- Notificações: [arquitetura](docs/notifications/README.md) · [integração no produto](docs/notifications/INTEGRACAO.md)
 - [Report Quinzenal](docs/product-report/README.md)
 - [Custos do Neon](docs/infra/neon-custos.md)
 

@@ -7,7 +7,7 @@ nov/2026), então nada é "enviado" — o navegador do estudante puxa os recados
 Fase 1:
 **recados** escritos no painel da Luumu. As notificações automáticas (nova Tarefa, nova Prova
 Genial, prazo de 24h) entram quando o cliente enviar as atividades (proposta enviada ao time do
-GenieX: Opção A `Luumu.notifications.setActivities` ou Opção B webhook).
+GenieX). Escolhida a **Opção A**: o contrato com o produto está em [INTEGRACAO.md](INTEGRACAO.md).
 
 ## Peças
 
