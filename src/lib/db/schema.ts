@@ -1004,6 +1004,62 @@ export const surveyRecurrences = pgTable(
   (t) => [index("survey_recurrences_project_idx").on(t.projectId)]
 );
 
+/**
+ * Notificações no produto do cliente (lib/notifications/model.ts, lib/db/notifications.ts):
+ * configuração do sino por projeto, recados escritos no painel e métricas por usuário. Tabelas
+ * à parte: sem a migração 0048, só o módulo Notificações fica indisponível.
+ */
+export const notificationSettings = pgTable("notification_settings", {
+  projectId: text("project_id").primaryKey().references(() => projects.id, { onDelete: "cascade" }),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  // BellSettings (normalizeBellSettings)
+  settings: jsonb("settings").notNull().default({}),
+  updatedBy: text("updated_by").references(() => users.id, { onDelete: "set null" }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+    projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    // "recado" (escrito no painel); os automáticos (tarefa, prova, prazo) entram na fase 3
+    kind: text("kind").notNull().default("recado"),
+    category: text("category").notNull().default("aviso"),
+    title: text("title").notNull(),
+    body: text("body").notNull().default(""),
+    ctaLabel: text("cta_label"),
+    ctaUrl: text("cta_url"),
+    // { schoolYears: string[], list: string[] } — list = ids/e-mails do identify
+    audience: jsonb("audience").notNull().default({}),
+    // plataformas onde aparece; [] = todas as do sino
+    hosts: jsonb("hosts").notNull().default([]),
+    pinned: boolean("pinned").notNull().default(false),
+    // rascunho | teste | publicada | arquivada
+    status: text("status").notNull().default("rascunho"),
+    publishAt: timestamp("publish_at", { withTimezone: true }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("notifications_project_idx").on(t.projectId, t.status)]
+);
+
+/** Uma linha por (recado, usuário, tipo): recebida, vista no painel, clicada. user_key = hash. */
+export const notificationEvents = pgTable(
+  "notification_events",
+  {
+    notificationId: text("notification_id").notNull().references(() => notifications.id, { onDelete: "cascade" }),
+    userKey: text("user_key").notNull(),
+    kind: text("kind").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.notificationId, t.kind, t.userKey] })]
+);
+
 export type Workspace = typeof workspaces.$inferSelect;
 export type Survey = typeof surveys.$inferSelect;
 export type ScheduledReport = typeof scheduledReports.$inferSelect;

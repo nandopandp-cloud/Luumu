@@ -54,6 +54,12 @@ export const getCurrentRole = cache(async (): Promise<Role | null> => {
   return (m?.role as Role) ?? null;
 });
 
+/** Pode criar e alterar conteúdo publicado no produto do cliente (owner, admin ou editor). */
+export async function canEditContent(): Promise<boolean> {
+  const role = await getCurrentRole();
+  return role === "owner" || role === "admin" || role === "editor";
+}
+
 /** Garante que o usuário atual pode administrar o workspace (owner ou admin). */
 export async function canManageWorkspace(): Promise<boolean> {
   const role = await getCurrentRole();

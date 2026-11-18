@@ -244,6 +244,49 @@ export const HELP: HelpCategory[] = [
     ],
   },
   {
+    id: "notificacoes",
+    title: "Notificações",
+    subtitle: "Recados no sino dos estudantes, dentro do produto.",
+    icon: "bell",
+    articles: [
+      {
+        id: "o-que-e-notificacao",
+        q: "O que são as Notificações?",
+        a: "Um sino que a Luumu coloca no header do produto do cliente, no ambiente logado. Ao clicar, o estudante vê os recados escritos no painel da Luumu: um simulado, uma trilha nova, um aviso da escola. Em breve, também avisos automáticos de novas tarefas, provas e prazos.",
+        link: { label: "Abrir Notificações", href: "/notifications" },
+        keywords: ["sino", "recado", "aviso", "push"],
+      },
+      {
+        id: "instalar-sino",
+        q: "Como coloco o sino no produto?",
+        a: "Em Notificações → Sino e instalação, ligue o sino e escolha onde ele fica: num espaço reservado do header (o produto coloca <div id=\"luumu-bell\"></div>, o recomendado), dentro de um elemento indicado por seletor CSS, ou flutuante num canto da tela. O sino só aparece para quem foi identificado pelo Luumu.identify.",
+        keywords: ["luumu-bell", "header", "seletor", "instalação"],
+      },
+      {
+        id: "publico-recado",
+        q: "Como escolho quem recebe um recado?",
+        a: "No editor do recado: todos os estudantes, alguns anos escolares, ou uma lista de IDs/e-mails (os mesmos do identify). Também dá para limitar a plataformas, agendar a entrada no ar, definir quando sai e fixar no topo.",
+        keywords: ["público", "ano escolar", "agendar"],
+      },
+      {
+        id: "testar-recado",
+        q: "Dá para testar antes de enviar para todos?",
+        a: "Sim. Cadastre usuários de teste em Sino e instalação e use \"Enviar para teste\" no editor: o recado aparece só para eles. Depois é só publicar.",
+      },
+      {
+        id: "quem-envia",
+        q: "Quem pode criar e publicar recados?",
+        a: "Donos, administradores e editores do workspace. Leitores veem a lista e as métricas, mas não alteram nada.",
+        keywords: ["permissão", "editor", "leitor"],
+      },
+      {
+        id: "metricas-recado",
+        q: "O que significam recebidos, vistos e cliques?",
+        a: "Recebidos: estudantes que tiveram o recado no sino. Vistos: abriram o painel com ele na lista. Cliques: clicaram no recado ou no botão. Cada estudante conta uma vez por recado.",
+      },
+    ],
+  },
+  {
     id: "insights",
     title: "Analytics e Insights",
     subtitle: "Uso do produto, indicadores e conversa com seus dados.",

@@ -1,20 +1,4 @@
-import {
-  LayoutDashboard,
-  ClipboardList,
-  MessageSquare,
-  Flame,
-  PlayCircle,
-  BarChart3,
-  Sparkles,
-  FileText,
-  Settings,
-  Route,
-  Crown,
-  CircleHelp,
-  CalendarRange,
-  Accessibility,
-  type LucideIcon,
-} from "lucide-react";
+import { LayoutDashboard, ClipboardList, MessageSquare, Flame, PlayCircle, BarChart3, Sparkles, FileText, Settings, Route, Crown, CircleHelp, CalendarRange, Accessibility, type LucideIcon, Bell } from "lucide-react";
 import { LOCKED_ROUTES } from "@/lib/config/locked-routes";
 
 const locked = (href: string) => (LOCKED_ROUTES as readonly string[]).includes(href);
@@ -54,6 +38,7 @@ export const NAV: NavGroup[] = [
       { href: "/responses", label: "Respostas", icon: MessageSquare },
       { href: "/tours", label: "Tours", icon: Route, badge: "Novo" },
       { href: "/accessibility", label: "Acessibilidade", icon: Accessibility, badge: "Novo" },
+      { href: "/notifications", label: "Notificações", icon: Bell, badge: "Novo" },
     ],
   },
   {

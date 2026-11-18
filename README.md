@@ -78,6 +78,7 @@ luumu/
 │   │   │   │                         settings, versions
 │   │   │   ├── accessibility/        plugin de acessibilidade: recursos, aparência,
 │   │   │   │                         Libras (VLibras), convite e prévia ao vivo
+│   │   │   ├── notifications/        sino no produto: recados, sino e instalação, métricas
 │   │   │   ├── heatmaps/             mapas de clique, movimento e scroll
 │   │   │   ├── replay/               session replay (bloqueado, dados mock)
 │   │   │   ├── analytics/            analytics de produto
@@ -113,6 +114,7 @@ luumu/
 │   │   │   └── builder/              builder drag-and-drop de perguntas
 │   │   ├── tours/                    builder de tours, editor de passos, alvo, versões, analytics
 │   │   ├── accessibility/            editor do plugin de acessibilidade, Libras e prévia
+│   │   ├── notifications/            lista de recados, editor, configuração e prévia do sino
 │   │   ├── responses/                feed de respostas e exportação
 │   │   ├── insights/                 telas de insights + chat/ (perguntas à IA)
 │   │   ├── analytics/                views, widgets e lista de usuários
@@ -149,6 +151,7 @@ luumu/
 │   │   ├── tours/                    tipos, normalização, posição, alvo, condições,
 │   │   │                             frequência, render do card, token, sdk-version.ts (gerado)
 │   │   ├── heatmaps/                 core.ts (limites, compactação), draw.ts (render)
+│   │   ├── notifications/            model.ts: status, público (hash), validação, recorte do /config
 │   │   ├── accessibility/            features (recursos, perfis), config, audience (convite),
 │   │   │                             nudge (frequência), vlibras (Libras pelo gov.br),
 │   │   │                             scope (onde fica ativo), invitees (convidados),
@@ -176,6 +179,7 @@ luumu/
 │   │   ├── analytics/                coletor de analytics e identidade (sob demanda)
 │   │   ├── accessibility/            plugin de acessibilidade: widget, efeitos na página,
 │   │   │                             VLibras e navegação por rosto (sob demanda)
+│   │   ├── notifications/            sino e painel de notificações (sob demanda)
 │   │   └── shared/                   dom.ts, memory.ts (localStorage)
 │   │
 │   ├── types/                        declarações de tipos de terceiros
@@ -197,6 +201,7 @@ luumu/
 │   ├── ARQUITETURA.md                camadas, onde colocar cada coisa, convenções
 │   ├── tours/                        arquitetura e integração dos product tours
 │   ├── accessibility/                plugin de acessibilidade (peças, LGPD, Libras)
+│   ├── notifications/                sino de notificações (recados, SDK, métricas)
 │   ├── product-report/               Report Quinzenal
 │   ├── infra/                        custos do Neon
 │   └── design/                       protótipos HTML e arte-fonte
@@ -220,6 +225,7 @@ Camadas, a tabela "onde colocar cada coisa" e as convenções estão em
 - [Arquitetura e convenções](docs/ARQUITETURA.md)
 - Product Tours: [arquitetura](docs/tours/ARQUITETURA.md) · [integração no produto](docs/tours/INTEGRACAO.md)
 - [Plugin de Acessibilidade](docs/accessibility/README.md)
+- [Notificações](docs/notifications/README.md)
 - [Report Quinzenal](docs/product-report/README.md)
 - [Custos do Neon](docs/infra/neon-custos.md)
 

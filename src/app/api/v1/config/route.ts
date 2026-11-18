@@ -7,6 +7,7 @@ import { getIdentityCapture, listCaptureRules, resolveCaptureRule } from "@/lib/
 import { getAnalyticsSettings } from "@/lib/db/analytics";
 import { accessibilityConfigured, getAccessibilityForSdk } from "@/lib/db/accessibility";
 import { SDK_BUNDLE_VERSION } from "@/lib/tours/sdk-version";
+import { notificationsForSdk } from "@/lib/db/notifications";
 import { normalizeAppearance } from "@/lib/surveys/builder";
 import { resolveKey } from "@/lib/api/keys";
 import { allowedOrigin, jsonCors, preflight } from "@/lib/api/cors";
@@ -73,7 +74,7 @@ export async function GET(req: Request) {
   }
 
   const host = normalizeHost(searchParams.get("host"));
-  const [active, eventCatalog, hostState, tours, heatmaps, analytics, capture, captureRules, a11y, a11yWatch] = await Promise.all([
+  const [active, eventCatalog, hostState, tours, heatmaps, analytics, capture, captureRules, a11y, a11yWatch, notif] = await Promise.all([
     listActiveSurveysForSdk(resolved.projectId),
     eventCatalogForSdk(resolved.projectId, host),
     hostStateForSdk(resolved.projectId, host),
@@ -94,6 +95,8 @@ export async function GET(req: Request) {
     getAccessibilityForSdk(resolved.projectId, host).catch(() => null),
     // projeto que usa o plugin (mesmo desligado): o SDK guarda o catálogo por 5 min, não 30
     accessibilityConfigured(resolved.projectId).catch(() => false),
+    // sino de notificações (sem a migração 0048 ou desligado = null): recados no ar desta plataforma
+    notificationsForSdk(resolved.projectId, host).catch(() => null),
   ]);
   // heatmaps: taxa de amostragem (cota do plano) + páginas que já têm cópia (o SDK não pergunta)
   const plan = heatmaps ? await heatmapPlan(resolved.workspaceId, resolved.projectId, host).catch(() => null) : null;
@@ -134,6 +137,8 @@ export async function GET(req: Request) {
       // plugin de acessibilidade ligado: o SDK baixa sdk-a11y.js só se vier preenchido
       a11y,
       a11yWatch,
+      // sino de notificações: o SDK baixa sdk-notifications.js só se vier preenchido
+      notif,
       // versão atual de sdk-tours.js / sdk-builder.js (o core pode estar em cache e ser mais velho)
       sdk: SDK_BUNDLE_VERSION,
     },

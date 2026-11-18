@@ -9,6 +9,7 @@ import { readFileSync, writeFileSync } from "node:fs";
    - public/sdk-heatmaps.js gravador de heatmaps (só em projetos com a coleta ativa)
    - public/sdk-analytics.js coletor de analytics de produto (idem)
    - public/sdk-a11y.js     plugin de acessibilidade (só em projetos com o plugin ligado)
+   - public/sdk-notifications.js sino de notificações (só em projetos com o sino ligado)
    - public/sdk-libras3d.js intérprete de Libras da Luumu, Three.js (só quando o estudante abre
                             Libras num projeto que usa esse intérprete; carregado pelo sdk-a11y)
    - public/sdk.js          core: pesquisas, eventos e a ponte dos tours (carregado em toda página)
@@ -30,6 +31,7 @@ const lazy = [
   ["src/sdk/heatmaps/recorder.ts", "public/sdk-heatmaps.js"],
   ["src/sdk/analytics/collector.ts", "public/sdk-analytics.js"],
   ["src/sdk/accessibility/widget.ts", "public/sdk-a11y.js"],
+  ["src/sdk/notifications/bell.ts", "public/sdk-notifications.js"],
 ];
 const lazyResults = await Promise.all(
   lazy.map(([entry, outfile]) => build({ ...common, entryPoints: [entry], outfile, define: { __LIBRAS3D_VERSION__: JSON.stringify(LIBRAS3D_VERSION) } }))
@@ -40,7 +42,7 @@ for (const [, outfile] of lazy) hash.update(readFileSync(outfile));
 const VERSION = hash.digest("hex").slice(0, 10);
 writeFileSync(
   "src/lib/tours/sdk-version.ts",
-  `// Gerado por scripts/build-sdk.mjs — não editar. Hash do conteúdo de sdk-tours.js + sdk-builder.js + sdk-heatmaps.js + sdk-analytics.js + sdk-a11y.js.\nexport const SDK_BUNDLE_VERSION = "${VERSION}";\n`
+  `// Gerado por scripts/build-sdk.mjs — não editar. Hash do conteúdo de sdk-tours.js + sdk-builder.js + sdk-heatmaps.js + sdk-analytics.js + sdk-a11y.js + sdk-notifications.js.\nexport const SDK_BUNDLE_VERSION = "${VERSION}";\n`
 );
 
 const core = await build({

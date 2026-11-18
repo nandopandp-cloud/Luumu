@@ -9,7 +9,7 @@
  * As áreas de LOCKED_ROUTES ficam de fora: o proxy as devolveria para /dashboard.
  */
 const NEXT_ALLOWED = [
-  "/dashboard", "/surveys", "/responses", "/reports", "/sdk", "/settings", "/tours", "/insights", "/billing", "/heatmaps", "/help", "/analytics", "/product-report",
+  "/dashboard", "/surveys", "/responses", "/reports", "/sdk", "/settings", "/tours", "/insights", "/billing", "/heatmaps", "/help", "/analytics", "/product-report", "/accessibility", "/notifications",
 ];
 
 export function safeNext(raw: unknown): string {

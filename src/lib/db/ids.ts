@@ -30,3 +30,4 @@ export const heatmapPageviewId = () => newId("hpv");
 export const heatmapSnapshotId = () => newId("hsn");
 export const analyticsViewId = () => newId("avw");
 export const surveyRecurrenceId = () => newId("rec");
+export const notificationId = () => newId("ntf");

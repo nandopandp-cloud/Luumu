@@ -21,6 +21,8 @@ import type { AnalyticsCollector } from "./analytics/collector";
 import type { A11yView, A11yWidget } from "./accessibility/widget";
 import type { PublicA11yConfig } from "../lib/accessibility/config";
 import type { A11yEvent } from "../lib/accessibility/integration";
+import type { PublicNotifications } from "../lib/notifications/model";
+import type { BellWidget } from "./notifications/bell";
 import { whoFrom } from "./analytics/identity";
 // = SURVEY_EVENT de lib/analytics/core (repetido aqui para não puxar aquele módulo para o core)
 const SURVEY_EVENT = "luumu_survey_response";
@@ -175,6 +177,7 @@ const isMessage = (q: Question) => MESSAGE_BLOCKS.indexOf(q.blockId) >= 0;
     idc: { n: string; a: string } | null; // ler nome/foto da página (configuração da workspace)
     a11y: PublicA11yConfig | null; // plugin de acessibilidade ligado (config pública) ou null
     a11yWatch: boolean; // o projeto usa o plugin (mesmo desligado agora): catálogo dura menos
+    notif: PublicNotifications | null; // sino de notificações ligado nesta plataforma (recados) ou null
   };
   let eventsOpen: boolean | null = null;
   let serverKnown: Record<string, 1> = {};
@@ -674,6 +677,12 @@ const isMessage = (q: Question) => MESSAGE_BLOCKS.indexOf(q.blockId) >= 0;
     fica só nos projetos que configuraram o plugin (`a11yWatch`); os outros seguem com 30 min.
   */
   const A11Y_CATALOG_TTL_MS = 5 * 60 * 1000;
+  /*
+    Catálogo de projeto com o sino de notificações: 10 min. É o atraso máximo para um recado
+    publicado agora aparecer para quem já está navegando (os agendados vêm antes e entram na hora
+    pelo próprio sino). Uma ida ao /config — cacheado na borda — a cada 10 min de uso.
+  */
+  const NOTIF_CATALOG_TTL_MS = 10 * 60 * 1000;
   const catalogKey = (key: string) => `luumu_catalog_${key}`;
 
   // aceita só o formato esperado; qualquer outra coisa vira "não sabemos" (null)
@@ -701,10 +710,11 @@ const isMessage = (q: Question) => MESSAGE_BLOCKS.indexOf(q.blockId) >= 0;
         a11yWatch?: unknown;
         hmRate?: unknown;
         hmFresh?: unknown;
+        notif?: unknown;
       };
       if (!parsed || typeof parsed.t !== "number" || !Array.isArray(parsed.surveys)) return null;
       // vale também para o plugin DESLIGADO num projeto que o usa: religar precisa chegar logo
-      const ttl = parsed.a11y || parsed.a11yWatch === true ? A11Y_CATALOG_TTL_MS : CATALOG_TTL_MS;
+      const ttl = parsed.a11y || parsed.a11yWatch === true ? A11Y_CATALOG_TTL_MS : parsed.notif ? NOTIF_CATALOG_TTL_MS : CATALOG_TTL_MS;
       if (Date.now() - parsed.t > ttl) return null;
       return {
         surveys: parsed.surveys,
@@ -719,6 +729,7 @@ const isMessage = (q: Question) => MESSAGE_BLOCKS.indexOf(q.blockId) >= 0;
         a11yWatch: parsed.a11yWatch === true,
         hmRate: typeof parsed.hmRate === "number" ? parsed.hmRate : 1,
         hmFresh: Array.isArray(parsed.hmFresh) ? (parsed.hmFresh as string[]) : [],
+        notif: parseNotif(parsed.notif),
       };
     } catch {
       // localStorage indisponível (modo privado, storage bloqueado) ou JSON corrompido:
@@ -745,6 +756,7 @@ const isMessage = (q: Question) => MESSAGE_BLOCKS.indexOf(q.blockId) >= 0;
           a11yWatch: catalog.a11yWatch,
           hmRate: catalog.hmRate,
           hmFresh: catalog.hmFresh,
+          notif: catalog.notif,
         })
       );
     } catch {}
@@ -775,6 +787,7 @@ const isMessage = (q: Question) => MESSAGE_BLOCKS.indexOf(q.blockId) >= 0;
           a11yWatch: d.a11yWatch === true,
           hmRate: typeof d.hmRate === "number" ? d.hmRate : 1,
           hmFresh: Array.isArray(d.hmFresh) ? d.hmFresh : [],
+          notif: parseNotif(d.notif),
         },
         status: r.status,
       };
@@ -805,6 +818,8 @@ const isMessage = (q: Question) => MESSAGE_BLOCKS.indexOf(q.blockId) >= 0;
     if (catalog.analytics) safe(() => loadAnalytics(key, catalog.idc));
     if (catalog.a11y) safe(() => loadA11y(key, catalog.a11y!));
     else safe(unloadA11y); // desligado no painel (ou fora do escopo): sai da página
+    if (catalog.notif) safe(() => loadBell(key, catalog.notif!));
+    else safe(unloadBell);
   }
 
   /* ---------- Product Tours: ponte com o runtime carregado sob demanda ----------
@@ -1046,6 +1061,43 @@ const isMessage = (q: Question) => MESSAGE_BLOCKS.indexOf(q.blockId) >= 0;
       })
       .catch(() => {
         a11yLoading = false;
+      });
+  }
+
+  /* ---------- Sino de notificações: baixado só quando o projeto ligou o sino nesta plataforma ---------- */
+  let bell: BellWidget | null = null;
+  let bellLoading = false;
+  let bellPendingOpen = false;
+
+  // a forma vem do servidor (publicNotifications); aqui só barra lixo de cache antigo
+  function parseNotif(v: unknown): PublicNotifications | null {
+    const o = v as PublicNotifications | null;
+    return o && typeof o === "object" && typeof o.salt === "string" && o.cfg && Array.isArray(o.items) ? o : null;
+  }
+
+  function unloadBell() {
+    bell?.destroy();
+    bell = null;
+    bellLoading = false;
+  }
+
+  function loadBell(key: string, data: PublicNotifications) {
+    if (builderToken) return;
+    if (bell) return bell.update(data);
+    if (bellLoading) return;
+    bellLoading = true;
+    loadScript("sdk-notifications.js")
+      .then(() => {
+        const wdg = (window as unknown as { __luumuBell?: BellWidget }).__luumuBell || null;
+        // carregou depois de um catálogo novo dizer "desligado": não monta
+        if (!bellLoading) return;
+        wdg?.boot({ api: API, key, data, identity: audienceTraits });
+        bell = wdg;
+        if (bellPendingOpen) bell?.open();
+        bellPendingOpen = false;
+      })
+      .catch(() => {
+        bellLoading = false;
       });
   }
 
@@ -1818,6 +1870,17 @@ const isMessage = (q: Question) => MESSAGE_BLOCKS.indexOf(q.blockId) >= 0;
       (Luumu.accessibility.open() ou .open("libras" | "face")). Antes do widget carregar, o
       pedido fica guardado e é atendido assim que ele chegar.
     */
+    // sino de notificações (ligado no painel da Luumu): abrir/fechar a partir do produto
+    notifications: {
+      open() {
+        if (bell) bell.open();
+        else bellPendingOpen = true;
+      },
+      close() {
+        bellPendingOpen = false;
+        bell?.close();
+      },
+    },
     accessibility: {
       open(view: A11yView = "panel") {
         if (a11y) a11y.open(view);
@@ -1899,6 +1962,8 @@ const isMessage = (q: Question) => MESSAGE_BLOCKS.indexOf(q.blockId) >= 0;
       } catch {}
       // login sem recarregar a página (SPA): o plugin reavalia quem é o estudante na hora
       safe(() => a11y?.identify());
+      // e o sino aparece (ou troca de dono) sem esperar outra página
+      safe(() => bell?.identify());
     },
     // Diagnóstico do ano escolar, para rodar no console do produto logado: Luumu.debugGrade()
     debugGrade() {
@@ -1956,6 +2021,8 @@ const isMessage = (q: Question) => MESSAGE_BLOCKS.indexOf(q.blockId) >= 0;
       // logout: as escolhas e o convite do estudante anterior saem da tela
       a11yExternal = null;
       safe(() => a11y?.identify());
+      // logout: o sino sai da tela
+      safe(() => bell?.identify());
     },
   };
 

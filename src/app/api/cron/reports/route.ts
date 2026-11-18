@@ -19,6 +19,7 @@ import { pruneBehaviorData } from "@/lib/db/retention";
 import { archiveExpiredSurveys } from "@/lib/db/surveys";
 import { runProductReportCron } from "@/lib/product-report/cron";
 import { advanceRecurrences } from "@/lib/db/survey-recurrences";
+import { pruneNotifications } from "@/lib/db/notifications";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -172,9 +173,11 @@ export async function GET(req: Request) {
   const archivedSurveys = await archiveExpiredSurveys().catch((e) => ({ error: String(e) }));
   // pesquisas recorrentes: cria (já agendada) a próxima rodada das que começaram
   const recurringSurveys = await advanceRecurrences().catch((e) => ({ error: String(e) }));
+  // recados do sino encerrados há mais de 90 dias saem com as métricas (sem a migração 0048: erro ignorado)
+  const prunedNotifications = await pruneNotifications().catch((e) => ({ error: String(e) }));
 
   // Report Quinzenal de Produto: atualiza a quinzena encerrada (só onde a automação foi ligada)
   const productReport = await runProductReportCron().catch(() => [{ period: "", status: "error" }]);
 
-  return NextResponse.json({ processed: results.length, results, pruned, archivedSurveys, recurringSurveys, productReport });
+  return NextResponse.json({ processed: results.length, results, pruned, archivedSurveys, recurringSurveys, prunedNotifications, productReport });
 }

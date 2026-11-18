@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { HELP, HELP_EXAMPLES, searchHelp, totalArticles } from "@/lib/help/articles";
 
 test("categorias e artigos com ids únicos e links internos", () => {
-  assert.equal(HELP.length, 12);
+  assert.equal(HELP.length, 13);
   const ids = HELP.flatMap((c) => c.articles.map((a) => a.id));
   assert.equal(new Set(ids).size, ids.length, "id de artigo repetido (o link ?a= ficaria ambíguo)");
   assert.equal(totalArticles(), ids.length);

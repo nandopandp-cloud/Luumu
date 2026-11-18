@@ -4,6 +4,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import Link from "@/components/ui/Link";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  Bell,
   ArrowRight,
   ChevronDown,
   ClipboardList,
@@ -32,6 +33,7 @@ const ICON: Record<string, LucideIcon> = {
   surveys: ClipboardList,
   responses: MessageSquare,
   route: Route,
+  bell: Bell,
   sparkles: Sparkles,
   flame: Flame,
   plug: Plug,
