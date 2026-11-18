@@ -1,6 +1,10 @@
 # Notificações
 
-Sino no header do produto do cliente (ambiente logado) com um painel de notificações. Fase 1:
+Sino no header do produto do cliente (ambiente logado) com um painel de notificações. As
+notificações só existem dentro do produto: não há push no celular nem e-mail (decisão de produto,
+nov/2026), então nada é "enviado" — o navegador do estudante puxa os recados e decide o que mostrar.
+
+Fase 1:
 **recados** escritos no painel da Luumu. As notificações automáticas (nova Tarefa, nova Prova
 Genial, prazo de 24h) entram quando o cliente enviar as atividades (proposta enviada ao time do
 GenieX: Opção A `Luumu.notifications.setActivities` ou Opção B webhook).
@@ -21,8 +25,8 @@ GenieX: Opção A `Luumu.notifications.setActivities` ou Opção B webhook).
 1. Publicado no painel, o recado entra no `notif` do `/config` (cacheado 60 s na borda) só para as
    plataformas onde o sino está ligado. Vão os recados no ar e os agendados para as próximas 24h;
    o sino mostra os agendados na hora marcada.
-2. O core do SDK guarda o catálogo por **10 min** quando há sino (30 min sem). Um recado publicado
-   agora chega em até ~10 min a quem já está navegando; quem abre o produto depois vê na hora.
+2. O core do SDK guarda o catálogo por **20 min** quando há sino (30 min sem). Um recado publicado
+   agora chega em até ~20 min a quem já está navegando; quem abre o produto depois vê na hora.
 3. O core baixa `sdk-notifications.js` só se `notif` vier preenchido. O sino aparece só com o
    usuário identificado (`Luumu.identify` com id ou e-mail).
 4. Público: anos escolares (mesma regra das pesquisas) e/ou lista de ids/e-mails. A lista **não**
@@ -63,6 +67,6 @@ métricas (`canEditContent()` em `src/lib/auth/current.ts`; as actions recusam t
 ## Custo
 
 Sem requisição nova por página: os recados vêm no `/config` que o SDK já busca (cache na borda), e o
-TTL menor (10 min) só vale para projetos com o sino ligado. As métricas são um POST em lote por
+TTL menor (20 min) só vale para projetos com o sino ligado. As métricas são um POST em lote por
 usuário e recado, só quando há algo novo. Consultas por índice (`notifications_project_idx` e a
 chave primária de `notification_events`).

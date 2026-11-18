@@ -678,11 +678,12 @@ const isMessage = (q: Question) => MESSAGE_BLOCKS.indexOf(q.blockId) >= 0;
   */
   const A11Y_CATALOG_TTL_MS = 5 * 60 * 1000;
   /*
-    Catálogo de projeto com o sino de notificações: 10 min. É o atraso máximo para um recado
+    Catálogo de projeto com o sino de notificações: 20 min. É o atraso máximo para um recado
     publicado agora aparecer para quem já está navegando (os agendados vêm antes e entram na hora
-    pelo próprio sino). Uma ida ao /config — cacheado na borda — a cada 10 min de uso.
+    pelo próprio sino). Uma ida ao /config — cacheado na borda — a cada 20 min de uso; 20 e não
+    10 porque em redes grandes cada ida a mais vira Edge Request cobrado (docs/notifications).
   */
-  const NOTIF_CATALOG_TTL_MS = 10 * 60 * 1000;
+  const NOTIF_CATALOG_TTL_MS = 20 * 60 * 1000;
   const catalogKey = (key: string) => `luumu_catalog_${key}`;
 
   // aceita só o formato esperado; qualquer outra coisa vira "não sabemos" (null)

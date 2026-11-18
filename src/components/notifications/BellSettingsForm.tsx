@@ -34,7 +34,7 @@ export function BellSettingsForm({ initial, hosts, canEdit }: { initial: BellSet
     start(async () => {
       const res = await saveBellSettingsAction({ ...s, testers });
       if (res.ok) {
-        toast("success", s.enabled ? "Sino salvo. As mudanças chegam ao produto em até 10 minutos." : "Configuração salva. O sino está desligado.");
+        toast("success", s.enabled ? "Sino salvo. As mudanças chegam ao produto em até 20 minutos." : "Configuração salva. O sino está desligado.");
         router.refresh();
       } else toast("error", res.error);
     });

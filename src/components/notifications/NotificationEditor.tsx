@@ -248,7 +248,7 @@ export function NotificationEditor({
               </Field>
             </div>
             <p className="text-xs text-fg-mut">
-              Horários de Brasília. Um recado publicado agora chega em até 10 minutos para quem já está navegando; os agendados entram na hora marcada.
+              Horários de Brasília. Um recado publicado agora chega em até 20 minutos para quem já está navegando; os agendados entram na hora marcada.
             </p>
           </Card>
         </fieldset>
