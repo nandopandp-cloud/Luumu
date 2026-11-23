@@ -4,7 +4,7 @@ import { recordSurveyView } from "@/lib/db/survey-views";
 import { hostFromOrigin } from "@/lib/db/hosts";
 import { isDeviceKind } from "@/lib/surveys/device";
 import { resolveKey } from "@/lib/api/keys";
-import { checkRateLimit } from "@/lib/api/ratelimit";
+import { sdkSendAllowed } from "@/lib/api/ratelimit";
 import { allowedOrigin, jsonCors, preflight } from "@/lib/api/cors";
 
 export const dynamic = "force-dynamic";
@@ -53,7 +53,8 @@ export async function POST(req: Request) {
   }
 
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "0.0.0.0";
-  const ok = await checkRateLimit(`svv:${ip}:${key}`, 60, 60);
+  // por estudante; sem identificação, por IP (escola inteira atrás de um IP)
+  const ok = await sdkSendAllowed("svv", ip, key ?? "", data.respondent, 60);
   if (!ok) return jsonCors({ error: "Muitas requisições." }, { status: 429, origin: allowOrigin });
 
   const survey = await getSurvey(data.surveyId, { projectId: resolved.projectId });

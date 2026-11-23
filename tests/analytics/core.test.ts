@@ -265,3 +265,14 @@ test("North Star Jovens Gênios: média simples das 3 plataformas, só com todas
   assert.equal(averageNorthStar([]), null);
   assert.ok(TAB_LAYOUT.overview.some((b) => b.id === "north_star_global"));
 });
+
+test("chave de pessoa: id do produto, e-mail, anônimo e links antigos por navegador", async () => {
+  const { parsePersonKey } = await import("@/lib/analytics/core");
+  assert.deepEqual(parsePersonKey("u:01a06409-859e"), { kind: "u", value: "01a06409-859e" });
+  assert.deepEqual(parsePersonKey("e:ana@escola.com"), { kind: "e", value: "ana@escola.com" });
+  assert.deepEqual(parsePersonKey("a:42uzh7qhmwnh6ab2"), { kind: "a", value: "42uzh7qhmwnh6ab2" });
+  assert.deepEqual(parsePersonKey("42uzh7qhmwnh6ab2"), { kind: "a", value: "42uzh7qhmwnh6ab2" });
+  assert.equal(parsePersonKey("x:1"), null);
+  assert.equal(parsePersonKey("u:"), null);
+  assert.equal(parsePersonKey("abc"), null);
+});

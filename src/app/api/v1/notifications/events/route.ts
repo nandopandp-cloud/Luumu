@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { resolveKey } from "@/lib/api/keys";
-import { checkRateLimit } from "@/lib/api/ratelimit";
+import { sdkSendAllowed } from "@/lib/api/ratelimit";
 import { allowedOrigin, jsonCors, preflight } from "@/lib/api/cors";
 import { recordNotificationEvents } from "@/lib/db/notifications";
 
@@ -42,7 +42,8 @@ export async function POST(req: Request) {
   if (origin && allowOrigin === null) return jsonCors({ error: "Origem não autorizada." }, { status: 403, origin: null });
 
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "0.0.0.0";
-  if (!(await checkRateLimit(`ntf:${ip}:${parsed.data.key}`, 60, 60))) {
+  // por estudante (hash), não por IP: a escola inteira sai pelo mesmo IP
+  if (!(await sdkSendAllowed("ntf", ip, parsed.data.key, parsed.data.user, 60))) {
     return jsonCors({ error: "Muitas requisições." }, { status: 429, origin: allowOrigin });
   }
 

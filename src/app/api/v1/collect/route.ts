@@ -1,5 +1,5 @@
 import { resolveKey } from "@/lib/api/keys";
-import { checkRateLimit } from "@/lib/api/ratelimit";
+import { sdkSendAllowed } from "@/lib/api/ratelimit";
 import { allowedOrigin, jsonCors, preflight } from "@/lib/api/cors";
 import { hostFromOrigin, normalizeHost } from "@/lib/db/hosts";
 import { getAnalyticsSettings, recordAnalytics } from "@/lib/db/analytics";
@@ -39,14 +39,15 @@ export async function POST(req: Request) {
   const allowOrigin = allowedOrigin(origin, resolved.domains);
   if (origin && allowOrigin === null) return jsonCors({ error: "Origem não autorizada." }, { status: 403, origin: null });
 
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "0.0.0.0";
-  if (!(await checkRateLimit(`col:${ip}:${key}`, 120, 60))) return jsonCors({ error: "Muitas requisições." }, { status: 429, origin: allowOrigin });
-
   const host = hostFromOrigin(origin) || normalizeHost(typeof body.host === "string" ? body.host : "") || "";
   const a = body.a && typeof body.a === "object" ? parseAnalytics({ ...(body.a as object), key }) : null;
   const visits = (Array.isArray(body.h) ? body.h.slice(0, MAX_VISITS) : [])
     .map((v) => (v && typeof v === "object" ? parsePageview({ ...(v as object), key, host }) : null))
     .filter((v): v is NonNullable<typeof v> => !!v);
+
+  // limite por navegador (escola inteira atrás de um IP não pode perder dados)
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "0.0.0.0";
+  if (!(await sdkSendAllowed("col", ip, key, a?.aid ?? visits[0]?.sid ?? null))) return jsonCors({ error: "Muitas requisições." }, { status: 429, origin: allowOrigin });
 
   // o que vale gravar (configurações e cota em cache por instância: sem ida ao banco no caso comum)
   const [analyticsOn, heatmapOk] = await Promise.all([

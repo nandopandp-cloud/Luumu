@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { canManageWorkspace, getCurrentProjectId, getCurrentRole, requireUser } from "@/lib/auth/current";
+import { parsePersonKey } from "@/lib/analytics/core";
 import { createView, deleteView, getAnalyticsUserProfile, listAnalyticsEvents, saveAnalyticsSettings, updateView } from "@/lib/db/analytics";
 import { parseViewConfig } from "@/lib/analytics/core";
 
@@ -84,9 +85,9 @@ export async function listMetricEventsAction(): Promise<string[]> {
   return listAnalyticsEvents(await getCurrentProjectId()).catch(() => []);
 }
 
-/** Perfil de um usuário do projeto ativo (aba Usuários). */
-export async function getUserProfileAction(anonId: string) {
+/** Perfil de uma pessoa do projeto ativo (aba Usuários): chave da lista ("u:…", "e:…", "a:…"). */
+export async function getUserProfileAction(key: string) {
   await requireUser();
-  if (typeof anonId !== "string" || !/^[A-Za-z0-9_-]{6,64}$/.test(anonId)) return null;
-  return getAnalyticsUserProfile(await getCurrentProjectId(), anonId);
+  if (typeof key !== "string" || !parsePersonKey(key)) return null;
+  return getAnalyticsUserProfile(await getCurrentProjectId(), key);
 }

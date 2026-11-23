@@ -87,8 +87,9 @@ function specOf(k: Id, p: PeriodScope, st: AnalyticsSettings, extra?: unknown): 
     host: p.host || undefined,
     device: p.device || undefined,
     day: p.period === "today" ? brDay(new Date()) : custom ? "br" : undefined,
-    // CSAT: a regra entra na chave (resultado de uma regra antiga não é reaproveitado)
-    extra: k === "usersList" ? extra : k === "csat" ? { rule: CSAT_RULE } : used ? Object.fromEntries(used.map((x) => [x, st[x]])) : undefined,
+    // CSAT: a regra entra na chave (resultado de uma regra antiga não é reaproveitado);
+    // lista de usuários: `person` = agrupada por pessoa (a lista antiga, por navegador, não vale)
+    extra: k === "usersList" ? { ...(extra as object | undefined), person: 1 } : k === "csat" ? { rule: CSAT_RULE } : used ? Object.fromEntries(used.map((x) => [x, st[x]])) : undefined,
   };
 }
 

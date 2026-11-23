@@ -386,3 +386,14 @@ export function pctChange(cur: number, prev: number | null | undefined): number 
   if (!prev) return null;
   return Math.round(((cur - prev) / prev) * 1000) / 10;
 }
+
+/**
+ * Chave de uma PESSOA no Analytics (lista e perfil de usuários): "u:<id do produto>",
+ * "e:<e-mail>" (sem id) ou "a:<id anônimo>" (nunca se identificou). Um ID anônimo solto também
+ * vale (links antigos, ainda por navegador).
+ */
+export function parsePersonKey(key: string): { kind: "u" | "e" | "a"; value: string } | null {
+  const m = /^([uea]):([^\n]{1,254})$/.exec(key);
+  if (m) return { kind: m[1] as "u" | "e" | "a", value: m[2] };
+  return /^[A-Za-z0-9_-]{6,64}$/.test(key) ? { kind: "a", value: key } : null;
+}

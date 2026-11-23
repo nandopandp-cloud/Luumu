@@ -731,7 +731,12 @@ export const analyticsSessions = pgTable(
     utmMedium: text("utm_medium").notNull().default(""),
     utmCampaign: text("utm_campaign").notNull().default(""),
   },
-  (t) => [index("analytics_sessions_started_idx").on(t.projectId, t.startedAt), index("analytics_sessions_anon_idx").on(t.projectId, t.anonId)]
+  (t) => [
+    index("analytics_sessions_started_idx").on(t.projectId, t.startedAt),
+    index("analytics_sessions_anon_idx").on(t.projectId, t.anonId),
+    // perfil da pessoa em todos os navegadores (lib/db/analytics.ts) — migração 0049
+    index("analytics_sessions_user_idx").on(t.projectId, t.userId).where(sql`${t.userId} is not null`),
+  ]
 );
 
 /** Uma tela vista numa sessão, com o tempo ativo e os eventos que aconteceram nela. */

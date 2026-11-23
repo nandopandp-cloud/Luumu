@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql, type SQL } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import { db } from "./client";
 import { analyticsPageviews, analyticsSessions, analyticsSettings, analyticsUsers, analyticsViews, avatarSvgParts, avatarSvgs } from "@/lib/db/schema";
@@ -20,6 +20,7 @@ import {
   type Channel,
   type Frequency,
   type ViewConfig,
+  parsePersonKey,
   parseViewConfig,
 } from "@/lib/analytics/core";
 
@@ -273,7 +274,12 @@ export async function recordAnalytics(workspaceId: string, projectId: string, ho
             pageviews: sql`${analyticsSessions.pageviews} + excluded.pageviews`,
             durationMs: sql`least(${analyticsSessions.durationMs} + excluded.duration_ms, 86400000)`,
             exitPath: sql`excluded.exit_path`,
-            userId: sql`coalesce(excluded.user_id, ${analyticsSessions.userId})`,
+            /*
+              A sessão é de quem estava nela primeiro: só ganha dono se ainda não tinha. Antes o
+              último envio mandava, e num computador compartilhado (SDK antigo, sem troca de ID
+              no login) a sessão inteira de um estudante passava para o próximo que entrasse.
+            */
+            userId: sql`coalesce(${analyticsSessions.userId}, excluded.user_id)`,
           },
         }),
       db.insert(analyticsPageviews).values(
@@ -1014,7 +1020,12 @@ export const USER_SORTS = ["recent", "sessions", "time", "pages", "days", "first
 export type UserSort = (typeof USER_SORTS)[number];
 
 export interface UserRow {
+  /** quem é a pessoa: "u:<id do produto>", "e:<e-mail>" ou "a:<id anônimo>" (abre o perfil) */
+  key: string;
+  /** navegador mais recente da pessoa */
   anonId: string;
+  /** em quantos navegadores ela apareceu */
+  browsers: number;
   userId: string | null;
   email: string | null;
   name: string | null;
@@ -1035,8 +1046,22 @@ export interface UserRow {
 
 const PAGE_SIZE = 25;
 
+/*
+  PESSOA, não navegador. Cada sessão pertence a uma pessoa:
+    1. o estudante gravado NA SESSÃO (Luumu.identify durante ela);
+    2. sessão anônima: quem está identificado no navegador;
+    3. sem id do produto: o e-mail do navegador; sem nada: o próprio navegador.
+  Assim o estudante que usa a casa e o laboratório da escola aparece uma vez, com tudo; e a sessão
+  de um colega num computador compartilhado não entra no perfil de quem usou o computador por
+  último. Chave: "u:<id>", "e:<e-mail>", "a:<id anônimo>".
+*/
+const personKey = sql`case when s.user_id is not null then 'u:' || s.user_id
+                           when u.user_id is not null then 'u:' || u.user_id
+                           when u.user_email is not null then 'e:' || lower(u.user_email)
+                           else 'a:' || s.anon_id end`;
+
 /**
- * Usuários ativos no período (com sessão no recorte), com o que fizeram NELE. Busca por
+ * Pessoas ativas no período (com sessão no recorte), com o que fizeram NELE. Busca por
  * nome, e-mail, ID do produto ou ID anônimo; segmentos e ordenação no banco; 25 por página.
  */
 export async function listAnalyticsUsers(
@@ -1052,53 +1077,89 @@ export async function listAnalyticsUsers(
   // coluna escolhida no sentido pedido; desempate pela atividade mais recente
   const dir = sql.raw(opts.dir === "asc" ? "asc" : "desc");
   const col = {
-    recent: sql`act.last`,
-    sessions: sql`act.sessions`,
-    time: sql`act.ms`,
-    pages: sql`act.pv`,
-    days: sql`act.days`,
-    first: sql`u.first_seen_at`,
-    name: sql`lower(coalesce(u.user_name, u.user_email, u.user_id))`,
+    recent: sql`p.last`,
+    sessions: sql`p.sessions`,
+    time: sql`p.ms`,
+    pages: sql`p.pv`,
+    days: sql`p.days`,
+    first: sql`p.first_seen`,
+    name: sql`lower(coalesce(p.user_name, p.user_email, p.user_id))`,
   }[opts.sort ?? "recent"];
-  const order = sql`${col} ${dir} nulls last, act.last desc`;
+  const order = sql`${col} ${dir} nulls last, p.last desc`;
+  const P = s.projectId;
 
   const r = rows<Record<string, unknown>>(
     await db.execute(sql`
-      with act as (
-        select s.anon_id, count(*)::int sessions, coalesce(sum(s.pageviews), 0)::int pv, coalesce(sum(s.duration_ms), 0)::bigint ms,
-               count(distinct (s.started_at at time zone ${TZ})::date)::int days, max(s.last_seen_at) last,
-               (array_agg(s.device order by s.started_at desc))[1] device, (array_agg(s.os order by s.started_at desc))[1] os,
-               (array_agg(s.browser order by s.started_at desc))[1] browser
-          from analytics_sessions s where ${sf(s)} group by s.anon_id
+      with ses as (
+        select s.id, s.anon_id, s.started_at, s.last_seen_at, s.pageviews, s.duration_ms, s.device, s.os, s.browser, ${personKey} pk
+          from analytics_sessions s left join analytics_users u on u.project_id = s.project_id and u.anon_id = s.anon_id
+         where ${sf(s)}
+      ), act as (
+        select pk, count(*)::int sessions, coalesce(sum(pageviews), 0)::int pv, coalesce(sum(duration_ms), 0)::bigint ms,
+               count(distinct (started_at at time zone ${TZ})::date)::int days, max(last_seen_at) last, min(started_at) first_act,
+               array_agg(distinct anon_id) anons, array_agg(id) sids,
+               (array_agg(device order by started_at desc))[1] device, (array_agg(os order by started_at desc))[1] os,
+               (array_agg(browser order by started_at desc))[1] browser
+          from ses group by pk
+      ), cand as (
+        select a.pk, u.project_id, u.anon_id, u.user_id, u.user_email, u.user_name, u.user_avatar, u.first_seen_at, u.last_seen_at, u.first_channel, u.first_landing
+          from act a join analytics_users u on u.project_id = ${P} and u.user_id = substr(a.pk, 3) where a.pk like 'u:%'
+        union all
+        select a.pk, u.project_id, u.anon_id, u.user_id, u.user_email, u.user_name, u.user_avatar, u.first_seen_at, u.last_seen_at, u.first_channel, u.first_landing
+          from act a join analytics_users u on u.project_id = ${P} and u.user_id is null and lower(u.user_email) = substr(a.pk, 3) where a.pk like 'e:%'
+        union all
+        select a.pk, u.project_id, u.anon_id, u.user_id, u.user_email, u.user_name, u.user_avatar, u.first_seen_at, u.last_seen_at, u.first_channel, u.first_landing
+          from act a join analytics_users u on u.project_id = ${P} and u.anon_id = substr(a.pk, 3) where a.pk like 'a:%'
+      ), who as (
+        -- o navegador mais recente representa a pessoa (nome, foto, e-mail); a 1ª visita é a mais antiga de todos
+        select distinct on (pk) pk, project_id, anon_id, user_id, user_email, user_name, user_avatar, first_channel, first_landing,
+               min(first_seen_at) over (partition by pk) first_seen, max(last_seen_at) over (partition by pk) u_last, count(*) over (partition by pk)::int n
+          from cand order by pk, last_seen_at desc
+      ), p as (
+        select a.*, u.anon_id rep_anon,
+               coalesce(u.user_id, case when a.pk like 'u:%' then substr(a.pk, 3) end) user_id,
+               coalesce(u.user_email, case when a.pk like 'e:%' then substr(a.pk, 3) end) user_email,
+               ${personal("user_name")} user_name, u.user_avatar, least(u.first_seen, a.first_act) first_seen, greatest(u.u_last, a.last) last_all,
+               coalesce(u.first_channel, 'direct') first_channel, coalesce(u.first_landing, '') first_landing,
+               greatest(coalesce(u.n, 0), cardinality(a.anons))::int browsers
+          from act a left join who u on u.pk = a.pk
       )
-      select u.anon_id, u.user_id, u.user_email, ${personal("user_name")} user_name, u.user_avatar, ${isoTs(sql`u.first_seen_at`)} first_seen, ${isoTs(sql`greatest(u.last_seen_at, act.last)`)} last_seen,
-             u.first_channel, u.first_landing, act.device, act.os, act.browser, act.sessions, act.pv, act.ms, act.days,
+      select p.pk, coalesce(p.rep_anon, p.anons[1]) anon_id, p.anons, p.sids, p.browsers, p.user_id, p.user_email, p.user_name, p.user_avatar,
+             ${isoTs(sql`p.first_seen`)} first_seen, ${isoTs(sql`p.last_all`)} last_seen,
+             p.first_channel, p.first_landing, p.device, p.os, p.browser, p.sessions, p.pv, p.ms, p.days,
              count(*) over ()::int total
-        from act join analytics_users u on u.project_id = ${s.projectId} and u.anon_id = act.anon_id
+        from p
        where true
-         ${q ? sql`and (lower(coalesce(u.user_name, '')) like ${like} escape '\\' or lower(coalesce(u.user_email, '')) like ${like} escape '\\'
-                    or lower(coalesce(u.user_id, '')) like ${like} escape '\\' or lower(u.anon_id) like ${like} escape '\\')` : sql``}
-         ${seg === "identified" ? sql`and u.user_id is not null` : seg === "anonymous" ? sql`and u.user_id is null` : sql``}
-         ${seg === "new" ? sql`and u.first_seen_at >= ${iso(s.from)}::timestamptz` : seg === "returning" ? sql`and u.first_seen_at < ${iso(s.from)}::timestamptz` : sql``}
+         ${q ? sql`and (lower(coalesce(p.user_name, '')) like ${like} escape '\\' or lower(coalesce(p.user_email, '')) like ${like} escape '\\'
+                    or lower(coalesce(p.user_id, '')) like ${like} escape '\\'
+                    or exists (select 1 from unnest(p.anons) x where lower(x) like ${like} escape '\\'))` : sql``}
+         ${seg === "identified" ? sql`and p.user_id is not null` : seg === "anonymous" ? sql`and p.user_id is null` : sql``}
+         ${seg === "new" ? sql`and p.first_seen >= ${iso(s.from)}::timestamptz` : seg === "returning" ? sql`and p.first_seen < ${iso(s.from)}::timestamptz` : sql``}
        order by ${order}
        limit ${size} offset ${(page - 1) * size}`)
   );
 
-  // eventos no período só para as linhas desta página (barato)
-  const ids = r.map((x) => String(x.anon_id));
+  /*
+    Eventos no período só para as pessoas desta página (barato), pelas SESSÕES de cada uma: por
+    navegador, as ações de um colega no computador compartilhado entrariam na conta.
+  */
+  const sessionsOf = new Map(r.map((x) => [String(x.pk), (x.sids as string[] | null) ?? []]));
+  const ids = [...sessionsOf.values()].flat();
   const plan = ids.length ? await rollupPlan(s.from, s.to) : null;
   const ev = ids.length
-    ? rows<{ anon_id: string; n: number }>(
-        await db.execute(plan ? rollupQueries.userEvents(s, plan, ids) : sql`
-          select p.anon_id, coalesce(sum(cardinality(p.events)), 0)::int n from analytics_pageviews p
-           where ${pf(s)} and p.anon_id in (${sql.join(ids.map((x) => sql`${x}`), sql`, `)}) group by 1`)
+    ? rows<{ session_id: string; n: number }>(
+        await db.execute(plan ? rollupQueries.sessionEvents(s, plan, ids) : sql`
+          select p.session_id, coalesce(sum(cardinality(p.events)), 0)::int n from analytics_pageviews p
+           where ${pf(s)} and p.session_id in (${sql.join(ids.map((x) => sql`${x}`), sql`, `)}) group by 1`)
       )
     : [];
-  const evBy = new Map(ev.map((x) => [x.anon_id, n(x.n)]));
+  const evBy = new Map(ev.map((x) => [x.session_id, n(x.n)]));
   const total = n(r[0]?.total);
   return {
     rows: r.map((x) => ({
+      key: String(x.pk),
       anonId: String(x.anon_id),
+      browsers: n(x.browsers),
       userId: (x.user_id as string) ?? null,
       email: (x.user_email as string) ?? null,
       name: (x.user_name as string) ?? null,
@@ -1114,7 +1175,7 @@ export async function listAnalyticsUsers(
       pageviews: n(x.pv),
       ms: n(x.ms),
       days: n(x.days),
-      events: evBy.get(String(x.anon_id)) ?? 0,
+      events: (sessionsOf.get(String(x.pk)) ?? []).reduce((a, id) => a + (evBy.get(id) ?? 0), 0),
     })),
     total,
     page,
@@ -1122,80 +1183,148 @@ export async function listAnalyticsUsers(
   };
 }
 
-/** Perfil de um usuário: quem é, linha do tempo de sessões, telas, ações e respostas de pesquisa. */
-export async function getAnalyticsUserProfile(projectId: string, anonId: string) {
-  const [u] = await db
+/**
+ * Perfil de uma PESSOA (mesma regra da lista, ver personKey): quem é, linha do tempo de sessões
+ * em todos os navegadores dela, telas, ações e respostas de pesquisa.
+ */
+export async function getAnalyticsUserProfile(projectId: string, key: string) {
+  const who = parsePersonKey(key);
+  if (!who) return null;
+
+  // navegador anônimo que já tem estudante: abre o perfil do estudante
+  let person = who;
+  if (who.kind === "a") {
+    const [b] = await db
+      .select({ userId: analyticsUsers.userId, email: analyticsUsers.userEmail })
+      .from(analyticsUsers)
+      .where(and(eq(analyticsUsers.projectId, projectId), eq(analyticsUsers.anonId, who.value)))
+      .limit(1);
+    if (b?.userId) person = { kind: "u", value: b.userId };
+    else if (b?.email) person = { kind: "e", value: b.email.toLowerCase() };
+  }
+
+  // os navegadores com a etiqueta desta pessoa, do mais recente ao mais antigo
+  const browsers = await db
     .select()
     .from(analyticsUsers)
-    .where(and(eq(analyticsUsers.projectId, projectId), eq(analyticsUsers.anonId, anonId)))
-    .limit(1);
-  if (!u) return null;
+    .where(
+      and(
+        eq(analyticsUsers.projectId, projectId),
+        person.kind === "u"
+          ? eq(analyticsUsers.userId, person.value)
+          : person.kind === "e"
+            ? and(isNull(analyticsUsers.userId), sql`lower(${analyticsUsers.userEmail}) = ${person.value}`)
+            : eq(analyticsUsers.anonId, person.value)
+      )
+    )
+    .orderBy(desc(analyticsUsers.lastSeenAt))
+    .limit(50);
+  const anons = browsers.map((b) => b.anonId);
+  const anonIn = anons.length ? sql`s.anon_id in (${sql.join(anons.map((x) => sql`${x}`), sql`, `)})` : sql`false`;
+  /*
+    Sessões da pessoa: as que têm o id dela gravado (em qualquer navegador) e as anônimas dos
+    navegadores dela. Sessão de OUTRO estudante num navegador com a etiqueta dela (computador
+    compartilhado) fica de fora.
+  */
+  const mine =
+    person.kind === "u"
+      ? sql`s.project_id = ${projectId} and (s.user_id = ${person.value} or (s.user_id is null and ${anonIn}))`
+      : sql`s.project_id = ${projectId} and ${anonIn} and s.user_id is null`;
+  if (!browsers.length && person.kind !== "u") return null;
 
   const since = new Date(Date.now() - 90 * 86_400_000).toISOString();
-  const [sessions, pages, events, totals, activity, surveys] = await Promise.all([
+  const [sessions, totals, activity, surveys] = await Promise.all([
     db.execute(sql`
-      select s.id, ${isoTs(sql`s.started_at`)} started, ${isoTs(sql`s.last_seen_at`)} last, s.device, s.os, s.browser, s.channel, s.referrer, s.utm_campaign,
+      select s.id, s.anon_id, ${isoTs(sql`s.started_at`)} started, ${isoTs(sql`s.last_seen_at`)} last, s.device, s.os, s.browser, s.channel, s.referrer, s.utm_campaign,
              s.landing_path, s.exit_path, s.pageviews, s.duration_ms, s.host
-        from analytics_sessions s where s.project_id = ${projectId} and s.anon_id = ${anonId}
+        from analytics_sessions s where ${mine}
        order by s.started_at desc limit 20`),
     db.execute(sql`
-      select p.session_id, p.path, ${isoTs(sql`p.created_at`)} at, p.duration_ms, p.events
-        from analytics_pageviews p where p.project_id = ${projectId} and p.anon_id = ${anonId}
-       order by p.created_at desc limit 300`),
+      select count(*)::int sessions, coalesce(sum(s.pageviews), 0)::int pv, coalesce(sum(s.duration_ms), 0)::bigint ms,
+             count(distinct (s.started_at at time zone ${TZ})::date)::int days, ${isoTs(sql`max(s.last_seen_at)`)} last,
+             ${isoTs(sql`min(s.started_at)`)} first, count(distinct s.anon_id)::int browsers
+        from analytics_sessions s where ${mine}`),
     db.execute(sql`
-      select e, count(*)::int n from analytics_pageviews p, unnest(p.events) e
-       where p.project_id = ${projectId} and p.anon_id = ${anonId} group by 1 order by 2 desc limit 12`),
-    db.execute(sql`
-      select count(*)::int sessions, coalesce(sum(pageviews), 0)::int pv, coalesce(sum(duration_ms), 0)::bigint ms,
-             count(distinct (started_at at time zone ${TZ})::date)::int days, ${isoTs(sql`max(last_seen_at)`)} last
-        from analytics_sessions where project_id = ${projectId} and anon_id = ${anonId}`),
-    db.execute(sql`
-      select ${day(sql`started_at`)} d, count(*)::int sessions, coalesce(sum(duration_ms), 0)::bigint ms
-        from analytics_sessions where project_id = ${projectId} and anon_id = ${anonId} and started_at >= ${since}::timestamptz
+      select ${day(sql`s.started_at`)} d, count(*)::int sessions, coalesce(sum(s.duration_ms), 0)::bigint ms
+        from analytics_sessions s where ${mine} and s.started_at >= ${since}::timestamptz
        group by 1 order by 1`),
     // respostas de pesquisa da mesma pessoa (pelo ID do Luumu.identify)
-    u.userId
+    person.kind === "u"
       ? db.execute(sql`
           select r.id, r.score, r.sentiment, ${isoTs(sql`r.created_at`)} at, sv.name survey, sv.id survey_id
             from responses r join surveys sv on sv.id = r.survey_id
-           where sv.project_id = ${projectId} and r.respondent = ${u.userId}
+           where sv.project_id = ${projectId} and r.respondent = ${person.value}
            order by r.created_at desc limit 10`)
       : Promise.resolve({ rows: [] }),
   ]);
+  const ses = rows<Record<string, unknown>>(sessions);
+  const t = rows<Record<string, unknown>>(totals)[0] ?? {};
+  if (!browsers.length && !ses.length) return null;
 
-  const pv = rows<{ session_id: string; path: string; at: string; duration_ms: number; events: string[] }>(pages);
+  /*
+    Telas e ações das sessões da linha do tempo. A busca é pelas sessões e pela janela de tempo
+    delas (índice por data): por navegador ela lia todas as telas do projeto.
+  */
+  const ids = ses.map((x) => String(x.id));
+  const span = ses.length
+    ? {
+        from: new Date(Math.min(...ses.map((x) => Date.parse(String(x.started)))) - 86_400_000),
+        to: new Date(Math.max(...ses.map((x) => Date.parse(String(x.last)))) + 86_400_000),
+      }
+    : null;
+  const pv = span
+    ? rows<{ session_id: string; path: string; at: string; duration_ms: number; events: string[] }>(
+        await db.execute(sql`
+          select p.session_id, p.path, ${isoTs(sql`p.created_at`)} at, p.duration_ms, p.events
+            from analytics_pageviews p
+           where p.project_id = ${projectId} and p.created_at >= ${iso(span.from)}::timestamptz and p.created_at < ${iso(span.to)}::timestamptz
+             and p.session_id in (${sql.join(ids.map((x) => sql`${x}`), sql`, `)})
+           order by p.created_at desc limit 600`)
+      )
+    : [];
   const bySession = new Map<string, { path: string; at: string; ms: number; events: string[] }[]>();
   for (const p of pv) {
     const list = bySession.get(p.session_id) ?? [];
     list.push({ path: p.path, at: p.at, ms: n(p.duration_ms), events: p.events ?? [] });
     bySession.set(p.session_id, list);
   }
-  const t = rows<Record<string, number>>(totals)[0] ?? {};
-  // o usuário só é regravado a cada LAST_SEEN_STEP: a sessão mais recente tem a hora exata
-  const lastSession = (t as unknown as { last?: string | null }).last;
-  const lastSeenAt = lastSession && Date.parse(lastSession) > u.lastSeenAt.getTime() ? lastSession : u.lastSeenAt.toISOString();
   const pageCount = new Map<string, number>();
-  for (const p of pv) pageCount.set(p.path, (pageCount.get(p.path) ?? 0) + 1);
+  const eventCount = new Map<string, number>();
+  for (const p of pv) {
+    pageCount.set(p.path, (pageCount.get(p.path) ?? 0) + 1);
+    for (const e of p.events ?? []) eventCount.set(e, (eventCount.get(e) ?? 0) + 1);
+  }
+
+  // o navegador mais recente representa a pessoa; a 1ª visita é a mais antiga de todos
+  const rep = browsers[0];
+  const firstSeen = [...browsers.map((b) => b.firstSeenAt.getTime()), ...(t.first ? [Date.parse(String(t.first))] : [])];
+  const lastSession = t.last ? String(t.last) : null;
+  const lastSeenAt = lastSession && (!rep || Date.parse(lastSession) > rep.lastSeenAt.getTime()) ? lastSession : (rep?.lastSeenAt.toISOString() ?? lastSession ?? "");
 
   // mesma regra da lista: valor compartilhado por outras pessoas não é deste usuário
-  const [own] = rows<{ name: string | null; avatar: string | null }>(
-    await db.execute(sql`select ${personal("user_name")} "name", u.user_avatar avatar from analytics_users u where u.project_id = ${projectId} and u.anon_id = ${anonId}`)
-  );
+  const [own] = rep
+    ? rows<{ name: string | null; avatar: string | null }>(
+        await db.execute(sql`select ${personal("user_name")} "name", u.user_avatar avatar from analytics_users u where u.project_id = ${projectId} and u.anon_id = ${rep.anonId}`)
+      )
+    : [];
   return {
-    anonId: u.anonId,
-    userId: u.userId,
-    email: u.userEmail,
+    key: `${person.kind}:${person.value}`,
+    anonId: rep?.anonId ?? String(ses[0]?.anon_id ?? ""),
+    /** navegadores em que a pessoa apareceu */
+    browsers: Math.max(browsers.length, n(t.browsers)),
+    userId: person.kind === "u" ? person.value : null,
+    email: rep?.userEmail ?? (person.kind === "e" ? person.value : null),
     name: own?.name ?? null,
     avatar: own?.avatar ?? null,
-    firstSeenAt: u.firstSeenAt.toISOString(),
+    firstSeenAt: new Date(Math.min(...firstSeen)).toISOString(),
     lastSeenAt,
-    channel: u.firstChannel as Channel,
-    source: u.firstSource,
-    campaign: u.firstCampaign,
-    landing: u.firstLanding,
+    channel: (rep?.firstChannel ?? "direct") as Channel,
+    source: rep?.firstSource ?? "",
+    campaign: rep?.firstCampaign ?? "",
+    landing: rep?.firstLanding ?? "",
     totals: { sessions: n(t.sessions), pageviews: n(t.pv), ms: n(t.ms), days: n(t.days) },
     activity: rows<{ d: string; sessions: number; ms: number }>(activity).map((a) => ({ d: a.d, sessions: n(a.sessions), ms: n(a.ms) })),
-    sessions: rows<Record<string, unknown>>(sessions).map((x) => ({
+    sessions: ses.map((x) => ({
       id: String(x.id),
       startedAt: String(x.started),
       lastSeenAt: String(x.last),
@@ -1210,7 +1339,7 @@ export async function getAnalyticsUserProfile(projectId: string, anonId: string)
       ms: n(x.duration_ms),
       pages: (bySession.get(String(x.id)) ?? []).slice().reverse(),
     })),
-    topEvents: rows<{ e: string; n: number }>(events).map((x) => ({ name: x.e, n: n(x.n) })),
+    topEvents: [...eventCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, 12).map(([name, c]) => ({ name, n: c })),
     topPages: [...pageCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([path, c]) => ({ path, n: c })),
     responses: rows<{ id: string; score: number | null; sentiment: string | null; at: string; survey: string; survey_id: string }>(surveys).map((x) => ({
       id: x.id,

@@ -47,3 +47,18 @@ export async function checkRateLimit(key: string, limit = 60, windowSec = 60): P
   b.count += 1;
   return b.count <= limit;
 }
+
+/*
+  Escolas saem para a internet por UM IP: uma turma inteira fazendo prova ao mesmo tempo
+  estourava o limite "por IP" e os envios do SDK eram descartados (o sendBeacon não tenta de
+  novo). O limite normal passa a ser por navegador (o ID que o SDK manda); o IP só tem um teto
+  alto, para conter abuso de quem inventa um ID por requisição.
+*/
+/**
+ * Envio do SDK dentro do limite? `client` = quem enviou (ID do navegador, do estudante, da aba);
+ * sem ele vale o limite por IP de antes. `perClient` por minuto; o IP aceita até 50× isso.
+ */
+export async function sdkSendAllowed(scope: string, ip: string, key: string, client: string | null | undefined, perClient = 120): Promise<boolean> {
+  if (!(await checkRateLimit(`${scope}:ip:${ip}:${key}`, client ? perClient * 50 : perClient, 60))) return false;
+  return client ? checkRateLimit(`${scope}:c:${client.slice(0, 200)}:${key}`, perClient, 60) : true;
+}

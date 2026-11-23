@@ -1,5 +1,5 @@
 import { resolveKey } from "@/lib/api/keys";
-import { checkRateLimit } from "@/lib/api/ratelimit";
+import { sdkSendAllowed } from "@/lib/api/ratelimit";
 import { allowedOrigin, jsonCors, preflight } from "@/lib/api/cors";
 import { hostFromOrigin, normalizeHost } from "@/lib/db/hosts";
 import { getAnalyticsSettings, recordAnalytics } from "@/lib/db/analytics";
@@ -36,7 +36,7 @@ export async function POST(req: Request) {
   if (origin && allowOrigin === null) return jsonCors({ error: "Origem não autorizada." }, { status: 403, origin: null });
 
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "0.0.0.0";
-  if (!(await checkRateLimit(`an:${ip}:${p.key}`, 120, 60))) return jsonCors({ error: "Muitas requisições." }, { status: 429, origin: allowOrigin });
+  if (!(await sdkSendAllowed("an", ip, p.key, p.aid))) return jsonCors({ error: "Muitas requisições." }, { status: 429, origin: allowOrigin });
 
   if (!(await getAnalyticsSettings(resolved.projectId)).enabled) return jsonCors({ ok: false, reason: "disabled" }, { origin: allowOrigin });
 

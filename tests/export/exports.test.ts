@@ -60,7 +60,7 @@ test("duração legível", () => {
 
 test("CSV e XLSX das mesmas tabelas", async () => {
   const tables = [
-    usersTable([{ anonId: "a1", userId: "u1", email: "ana@x.com", name: "Ana Souza", avatar: null, firstSeenAt: "2026-10-01T12:00:00Z", lastSeenAt: "2026-10-05T12:00:00Z", channel: "direct", landing: "inicio", device: "desktop", os: "Mac", browser: "Chrome", sessions: 2, pageviews: 30, ms: 600_000, days: 2, events: 5 }]),
+    usersTable([{ key: "u:u1", anonId: "a1", browsers: 1, userId: "u1", email: "ana@x.com", name: "Ana Souza", avatar: null, firstSeenAt: "2026-10-01T12:00:00Z", lastSeenAt: "2026-10-05T12:00:00Z", channel: "direct", landing: "inicio", device: "desktop", os: "Mac", browser: "Chrome", sessions: 2, pageviews: 30, ms: 600_000, days: 2, events: 5 }]),
     { title: "Indicadores", columns: ["Indicador", "Valor"], rows: [["DAU", 10]] },
   ];
   const csv = tablesToCsv(tables).toString("utf8");

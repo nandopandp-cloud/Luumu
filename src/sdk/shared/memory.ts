@@ -4,6 +4,7 @@
   defensivo: modo privado/storage bloqueado = comportamento de "nunca visto".
 */
 import type { TourMemory } from "../../lib/tours/frequency";
+import { switchOwner, type AnonState, type Owner } from "./anon-owner";
 
 const get = (s: Storage | undefined, k: string): string | null => {
   try {
@@ -71,6 +72,29 @@ export function anonymousId(): string {
     set(ls(), "luumu_anon", id);
   }
   return id;
+}
+
+const ANON_OWNER = "luumu_anon_owner";
+
+/**
+ * O que um identify faz com o ID anônimo deste navegador (ver anon-owner.ts). Em duas etapas:
+ * `changed` primeiro, para o core enviar o pendente ainda com o ID antigo; depois `commit()`.
+ */
+export function planAnonymousOwner(who: Owner | null): { changed: boolean; commit: () => void } {
+  let saved: { owner?: Owner | null; known?: AnonState["known"] } = {};
+  try {
+    saved = JSON.parse(get(ls(), ANON_OWNER) || "{}") || {};
+  } catch {}
+  const state: AnonState = { id: anonymousId(), owner: saved.owner ?? null, known: Array.isArray(saved.known) ? saved.known : [] };
+  const next = switchOwner(state, who, rand);
+  return {
+    changed: next.changed,
+    commit: () => {
+      if (next.state === state) return;
+      set(ls(), "luumu_anon", next.state.id);
+      set(ls(), ANON_OWNER, JSON.stringify({ owner: next.state.owner, known: next.state.known }));
+    },
+  };
 }
 
 export const newRunId = rand;

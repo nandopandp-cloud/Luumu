@@ -225,9 +225,9 @@ export function UsersView({ data }: { data: UsersData }) {
                   const identified = !!(u.userId || u.email || u.name);
                   return (
                     <tr
-                      key={u.anonId}
-                      onClick={() => setOpen(u.anonId)}
-                      onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), setOpen(u.anonId))}
+                      key={u.key ?? u.anonId}
+                      onClick={() => setOpen(u.key ?? u.anonId)}
+                      onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), setOpen(u.key ?? u.anonId))}
                       tabIndex={0}
                       className="group cursor-pointer outline-none transition hover:bg-surface-brand/30 focus-visible:bg-surface-brand/40"
                     >
@@ -300,24 +300,24 @@ export function UsersView({ data }: { data: UsersData }) {
         )}
       </section>
 
-      {open && <UserProfileDrawer anonId={open} onClose={() => setOpen(null)} />}
+      {open && <UserProfileDrawer personKey={open} onClose={() => setOpen(null)} />}
     </div>
   );
 }
 
 /* ---------- perfil ---------- */
 
-function UserProfileDrawer({ anonId, onClose }: { anonId: string; onClose: () => void }) {
+function UserProfileDrawer({ personKey, onClose }: { personKey: string; onClose: () => void }) {
   const [p, setP] = useState<AnalyticsUserProfile | null | "loading">("loading");
   useEffect(() => {
     let alive = true;
-    getUserProfileAction(anonId)
+    getUserProfileAction(personKey)
       .then((r) => alive && setP(r))
       .catch(() => alive && setP(null));
     return () => {
       alive = false;
     };
-  }, [anonId]);
+  }, [personKey]);
 
   return (
     <Drawer title="Perfil do usuário" subtitle="Tudo o que esta pessoa fez no seu produto." onClose={onClose} wide>
@@ -430,7 +430,7 @@ export function Profile({ p }: { p: AnalyticsUserProfile }) {
           {p.name && p.email && <p className="truncate text-sm text-fg-mut">{p.email}</p>}
           <div className="mt-2 flex flex-wrap gap-1.5">
             {p.userId && <Copyable label="ID do produto" value={p.userId} />}
-            <Copyable label="ID anônimo" value={p.anonId} />
+            {p.anonId && <Copyable label={p.browsers > 1 ? "ID anônimo (mais recente)" : "ID anônimo"} value={p.anonId} />}
           </div>
         </div>
       </div>
@@ -449,6 +449,14 @@ export function Profile({ p }: { p: AnalyticsUserProfile }) {
         </dd>
         <dt className="text-fg-mut">Página de entrada</dt>
         <dd className="truncate text-right font-semibold">{pagePath(p.landing)}</dd>
+        {p.browsers > 1 && (
+          <>
+            <dt className="text-fg-mut">Navegadores</dt>
+            <dd className="text-right font-semibold" title="Computadores, celulares ou navegadores diferentes em que esta pessoa usou o produto">
+              {fmtInt(p.browsers)}
+            </dd>
+          </>
+        )}
       </dl>
 
       <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-4">

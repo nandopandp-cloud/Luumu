@@ -24,10 +24,12 @@ import type { A11yEvent } from "../lib/accessibility/integration";
 import type { PublicNotifications } from "../lib/notifications/model";
 import type { BellWidget } from "./notifications/bell";
 import { whoFrom } from "./analytics/identity";
+import { ownerOf } from "./shared/anon-owner";
 // = SURVEY_EVENT de lib/analytics/core (repetido aqui para não puxar aquele módulo para o core)
 const SURVEY_EVENT = "luumu_survey_response";
 import {
   isFirstSession,
+  planAnonymousOwner,
   readActive,
   readMemory,
   readSession,
@@ -1957,10 +1959,19 @@ const isMessage = (q: Question) => MESSAGE_BLOCKS.indexOf(q.blockId) >= 0;
           if (items.length) next[k] = items;
         } else if (simple(v) !== undefined) next[k] = simple(v);
       }
+      /*
+        Outro estudante no mesmo navegador (computador compartilhado): ele ganha o próprio ID
+        anônimo e uma sessão nova. O que estava pendente sai antes, ainda em nome do anterior;
+        sem isso a sessão aberta era herdada por quem fizesse login em seguida.
+      */
+      const owner = planAnonymousOwner(ownerOf(next));
+      if (owner.changed) safe(() => flushBeacon());
+      safe(owner.commit);
       identity = next;
       try {
         localStorage.setItem("luumu_identity", JSON.stringify(identity));
       } catch {}
+      if (owner.changed) safe(() => analytics?.restart?.());
       // login sem recarregar a página (SPA): o plugin reavalia quem é o estudante na hora
       safe(() => a11y?.identify());
       // e o sino aparece (ou troca de dono) sem esperar outra página
@@ -2015,6 +2026,8 @@ const isMessage = (q: Question) => MESSAGE_BLOCKS.indexOf(q.blockId) >= 0;
     },
     // limpa a identidade (ex.: logout)
     reset() {
+      // o que estava pendente sai em nome de quem está saindo
+      safe(() => flushBeacon());
       identity = {};
       try {
         localStorage.removeItem("luumu_identity");

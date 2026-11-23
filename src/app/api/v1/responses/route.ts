@@ -6,7 +6,7 @@ import { hostFromOrigin } from "@/lib/db/hosts";
 import { detectDevice, isDeviceKind } from "@/lib/surveys/device";
 import { deriveSentiment } from "@/lib/surveys/sentiment";
 import { resolveKey } from "@/lib/api/keys";
-import { checkRateLimit } from "@/lib/api/ratelimit";
+import { sdkSendAllowed } from "@/lib/api/ratelimit";
 import { allowedOrigin, jsonCors, preflight } from "@/lib/api/cors";
 
 export const dynamic = "force-dynamic";
@@ -60,9 +60,10 @@ export async function POST(req: Request) {
     return jsonCors({ error: "Origem não autorizada." }, { status: 403, origin: null });
   }
 
-  // rate limit por ip+key (60/min)
+  // limite por estudante (60/min); sem identificação, por IP. Uma sala inteira respondendo
+  // ao mesmo tempo sai pelo mesmo IP da escola e não pode perder respostas.
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "0.0.0.0";
-  const ok = await checkRateLimit(`res:${ip}:${key}`, 60, 60);
+  const ok = await sdkSendAllowed("res", ip, key ?? "", data.respondent || data.respondentEmail, 60);
   if (!ok) return jsonCors({ error: "Muitas requisições." }, { status: 429, origin: allowOrigin });
 
   // a pesquisa precisa pertencer ao workspace da key e estar ativa

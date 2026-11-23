@@ -60,6 +60,11 @@ export interface AnalyticsCollector {
    * `partial`: envio por aba oculta (a página continua viva) — pode segurar continuações pequenas.
    */
   collect(partial?: boolean): AnalyticsBatch | null;
+  /**
+   * outra pessoa assumiu o navegador (login de outro estudante): sessão nova a partir da tela
+   * atual. O core envia o pendente (collect) ANTES, ainda com a pessoa anterior.
+   */
+  restart(): void;
   /** diagnóstico (Luumu.debugIdentity): o que o identify mandou e o que a página mostra agora */
   peek(): Promise<{
     capture: CaptureConfig | null;
@@ -351,6 +356,15 @@ const collector: AnalyticsCollector = {
     if (cur && cur.ev.size < LIMITS.events) cur.ev.add(name.slice(0, LIMITS.name));
   },
   collect,
+  restart() {
+    if (!cfg) return;
+    const now = Date.now();
+    session = newSession(false);
+    saveSession();
+    const cur = pages[pages.length - 1];
+    pages = cur ? [{ ...cur, id: rand(), t: now, dur: 0, ev: new Set(), sent: false }] : [];
+    scheduleAvatar(2000);
+  },
   async peek() {
     const c = cfg;
     const who = c ? c.identity() : { id: null, email: null, name: null, avatar: null };

@@ -149,8 +149,9 @@ function scopeFilter(s: AnalyticsScope, alias: "p" | "r"): SQL {
  * As linhas do período no formato do resumo: dias prontos do resumo + pontas das telas.
  * `anonIds` restringe às pessoas pedidas (lista de usuários) também nas pontas.
  */
-function source(s: AnalyticsScope, plan: RangePlan, anonIds?: string[]): SQL {
-  const only = (a: "p" | "r") => (anonIds ? sql` and ${sql.raw(a)}.anon_id in (${list(anonIds)})` : sql``);
+function source(s: AnalyticsScope, plan: RangePlan, anonIds?: string[], sessionIds?: string[]): SQL {
+  const only = (a: "p" | "r") =>
+    sql`${anonIds ? sql` and ${sql.raw(a)}.anon_id in (${list(anonIds)})` : sql``}${sessionIds ? sql` and ${sql.raw(a)}.session_id in (${list(sessionIds)})` : sql``}`;
   const parts: SQL[] = [];
   if (plan.rollup) {
     parts.push(sql`select ${COLS} from analytics_session_days r
@@ -240,8 +241,8 @@ export const rollupQueries = {
         from u`;
   },
 
-  /** Eventos no período de cada pessoa da página da lista de usuários. */
-  userEvents: (s: AnalyticsScope, plan: RangePlan, anonIds: string[]) => sql`
-    select src.anon_id, coalesce(sum((select sum(c) from unnest(src.event_counts) c)), 0)::int n
-      from ${source(s, plan, anonIds)} src group by 1`,
+  /** Eventos no período de cada sessão das pessoas da página da lista de usuários. */
+  sessionEvents: (s: AnalyticsScope, plan: RangePlan, sessionIds: string[]) => sql`
+    select src.session_id, coalesce(sum((select sum(c) from unnest(src.event_counts) c)), 0)::int n
+      from ${source(s, plan, undefined, sessionIds)} src group by 1`,
 };
