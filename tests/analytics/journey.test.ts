@@ -28,26 +28,30 @@ test("cada tela das atividades vira a etapa certa, em português e em inglês", 
   assert.equal(stepLabel(stepOf("testes-praticos/:id/quiz")!), "Iniciou o Teste prático");
 });
 
-test("resumo: contagem por etapa, a mais recente e quem iniciou sem chegar ao resultado", () => {
-  const sessions = [
+test("resumo sem depender da ordem: contagem por etapa, a sessão mais recente e quem iniciou sem concluir", () => {
+  const r = (sessionId: string, at: string, path: string, count = 1) => ({ sessionId, at, path, count });
+  const rows = [
+    // prova inteira (do resumo diário: contagens, sem ordem)
+    r("s1", "2026-11-16T10:00:00Z", "instituicao/avaliacoes/:id/results"),
+    r("s1", "2026-11-16T10:00:00Z", "instituicao/avaliacoes/:id/onboarding"),
+    r("s1", "2026-11-16T10:00:00Z", "instituicao/avaliacoes/:id/quiz", 2),
     // sessão mais recente: iniciou a tarefa e saiu
-    { pages: [{ path: "home", at: "2026-11-19T11:00:00Z" }, { path: "instituicao/assignments/:id", at: "2026-11-19T11:01:00Z" }, { path: "instituicao/assignments/:id/topic/:id/quiz", at: "2026-11-19T11:02:00Z" }] },
-    // prova inteira
-    {
-      pages: [
-        { path: "instituicao/avaliacoes/:id/onboarding", at: "2026-11-16T10:00:00Z" },
-        { path: "instituicao/avaliacoes/:id/quiz", at: "2026-11-16T10:01:00Z" },
-        { path: "instituicao/avaliacoes/:id/results", at: "2026-11-16T10:40:00Z" },
-      ],
-    },
+    r("s2", "2026-11-19T11:00:00Z", "instituicao/assignments/:id"),
+    r("s2", "2026-11-19T11:00:00Z", "instituicao/assignments/:id/topic/:id/quiz"),
+    // outra tarefa, concluída
+    r("s3", "2026-11-18T09:00:00Z", "instituicao/assignments/:id/topic/:id/quiz"),
+    r("s3", "2026-11-18T09:00:00Z", "instituicao/assignments/:id/complete"),
+    // tela comum não entra
+    r("s3", "2026-11-18T09:00:00Z", "home", 5),
   ];
-  const [prova, tarefa] = summarizeJourney(sessions);
-  assert.equal(prova.activity.id, "prova_genial");
-  assert.deepEqual(prova.counts, { viu: 1, iniciou: 1, concluiu: 1 });
+  const [prova, tarefa] = summarizeJourney(rows);
+  assert.equal(prova.id, "prova_genial");
+  assert.deepEqual(prova.counts, { viu: 1, iniciou: 2, concluiu: 1 });
   assert.equal(prova.unfinished, 0);
-  assert.deepEqual(prova.last, { stage: "concluiu", at: "2026-11-16T10:40:00Z" });
-  assert.equal(tarefa.activity.id, "tarefa");
-  assert.deepEqual(tarefa.counts, { viu: 1, iniciou: 1, concluiu: 0 });
-  assert.equal(tarefa.unfinished, 1);
-  assert.equal(summarizeJourney([{ pages: [{ path: "home", at: "2026-11-19T11:00:00Z" }] }]).length, 0);
+  assert.deepEqual(prova.last, { stage: "concluiu", at: "2026-11-16T10:00:00Z" });
+  assert.equal(tarefa.id, "tarefa");
+  assert.deepEqual(tarefa.counts, { viu: 1, iniciou: 2, concluiu: 1 });
+  assert.equal(tarefa.unfinished, 1, "só a sessão s2");
+  assert.deepEqual(tarefa.last, { stage: "iniciou", at: "2026-11-19T11:00:00Z" });
+  assert.equal(summarizeJourney([r("s9", "2026-11-19T11:00:00Z", "home")]).length, 0);
 });

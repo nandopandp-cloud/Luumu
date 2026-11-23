@@ -22,7 +22,14 @@ test("o perfil mostra o que a estudante abriu, iniciou e concluiu", async () => 
   const p = {
     key: "u:1", anonId: "42uzh7qhmwnh6ab2", browsers: 2, userId: "1", email: "alice@escola.com", name: "Alice", avatar: null,
     firstSeenAt: "2026-11-16T10:00:00Z", lastSeenAt: "2026-11-19T11:02:00Z", channel: "direct" as const, source: "", campaign: "", landing: "entrar",
-    totals: { sessions: 2, pageviews: 6, ms: 1_200_000, days: 2 }, activity: [], topEvents: [], topPages: [], responses: [],
+    totals: { sessions: 45, pageviews: 6, ms: 1_200_000, days: 2 }, activity: [],
+    journey: {
+      since: "2026-08-01T10:00:00Z",
+      activities: [
+        { id: "prova_genial", counts: { viu: 6, iniciou: 6, concluiu: 5 }, unfinished: 1, last: { stage: "concluiu" as const, at: "2026-11-16T10:00:00Z" } },
+        { id: "tarefa", counts: { viu: 9, iniciou: 8, concluiu: 7 }, unfinished: 1, last: { stage: "iniciou" as const, at: "2026-11-19T11:00:00Z" } },
+      ],
+    }, topEvents: [], topPages: [], responses: [],
     sessions: [
       session("s2", "2026-11-19T11:00:00Z", [page("home", "2026-11-19T11:00:00Z"), page("instituicao/assignments/:id/topic/:id/quiz", "2026-11-19T11:02:00Z")]),
       session("s1", "2026-11-16T10:00:00Z", [
@@ -39,4 +46,7 @@ test("o perfil mostra o que a estudante abriu, iniciou e concluiu", async () => 
   assert.match(html, /Iniciou a Tarefa/);
   assert.match(html, /Iniciou e não chegou ao resultado em 1 sessão/);
   assert.match(html, /Navegadores/);
+  assert.match(html, /todo o histórico, desde/);
+  assert.match(html, /Concluiu 5×/, "contagens do histórico inteiro, não só das sessões carregadas");
+  assert.match(html, /Carregar mais sessões/, "45 sessões, 2 carregadas");
 });

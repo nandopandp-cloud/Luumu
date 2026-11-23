@@ -92,36 +92,54 @@ export function stepLabel(step: { activity: Activity; stage: Stage }): string {
 }
 
 export interface ActivitySummary {
-  activity: Activity;
+  /** id da atividade em ACTIVITIES */
+  id: string;
   /** quantas vezes cada etapa apareceu */
   counts: Record<Stage, number>;
-  /** sessões em que iniciou e não chegou ao resultado depois */
+  /** sessões em que iniciou e não concluiu */
   unfinished: number;
-  /** a etapa mais recente e quando */
+  /** a sessão mais recente com a atividade: quando começou e até onde chegou nela */
   last: { stage: Stage; at: string };
 }
 
+/** Uma tela de atividade numa sessão, com quantas vezes apareceu (do resumo diário ou das telas). */
+export interface JourneyRow {
+  sessionId: string;
+  /** início da sessão */
+  at: string;
+  path: string;
+  count: number;
+}
+
+/** Todas as telas que contam como etapa de alguma atividade (filtro das consultas). */
+export const JOURNEY_PATHS: string[] = [...BY_PATH.keys()];
+
+export const activityById = (id: string) => ACTIVITIES.find((a) => a.id === id) ?? null;
+
 /**
- * Resumo das atividades de uma pessoa a partir das telas das sessões (cada sessão com as telas
- * em ordem). Uma atividade sem nenhuma tela reconhecida fica de fora.
+ * Resumo das atividades de uma pessoa. Sem depender da ordem das telas (o resumo diário guarda
+ * quantas vezes cada tela apareceu, não a sequência): "não concluiu" = sessão em que iniciou e
+ * não chegou ao resultado. Atividade sem nenhuma tela reconhecida fica de fora.
  */
-export function summarizeJourney(sessions: { pages: { path: string; at: string }[] }[]): ActivitySummary[] {
+export function summarizeJourney(rows: JourneyRow[]): ActivitySummary[] {
+  // por sessão e atividade: as contagens de cada etapa
+  const per = new Map<string, { id: string; at: string; counts: Record<Stage, number> }>();
+  for (const r of rows) {
+    const step = stepOf(r.path);
+    if (!step || r.count <= 0) continue;
+    const k = `${r.sessionId}\u0000${step.activity.id}`;
+    const cur = per.get(k) ?? { id: step.activity.id, at: r.at, counts: { viu: 0, iniciou: 0, concluiu: 0 } };
+    cur.counts[step.stage] += r.count;
+    per.set(k, cur);
+  }
   const out = new Map<string, ActivitySummary>();
-  for (const s of sessions) {
-    // por atividade: iniciou nesta sessão e ainda não concluiu depois disso
-    const open = new Map<string, boolean>();
-    for (const pg of s.pages) {
-      const step = stepOf(pg.path);
-      if (!step) continue;
-      const id = step.activity.id;
-      const sum = out.get(id) ?? { activity: step.activity, counts: { viu: 0, iniciou: 0, concluiu: 0 }, unfinished: 0, last: { stage: step.stage, at: pg.at } };
-      sum.counts[step.stage] += 1;
-      if (Date.parse(pg.at) >= Date.parse(sum.last.at)) sum.last = { stage: step.stage, at: pg.at };
-      out.set(id, sum);
-      if (step.stage === "iniciou") open.set(id, true);
-      if (step.stage === "concluiu") open.set(id, false);
-    }
-    for (const [id, pending] of open) if (pending) out.get(id)!.unfinished += 1;
+  for (const x of per.values()) {
+    const reached = [...STAGES].reverse().find((st) => x.counts[st] > 0)!;
+    const sum = out.get(x.id) ?? { id: x.id, counts: { viu: 0, iniciou: 0, concluiu: 0 }, unfinished: 0, last: { stage: reached, at: x.at } };
+    for (const st of STAGES) sum.counts[st] += x.counts[st];
+    if (x.counts.iniciou > 0 && x.counts.concluiu === 0) sum.unfinished += 1;
+    if (Date.parse(x.at) > Date.parse(sum.last.at)) sum.last = { stage: reached, at: x.at };
+    out.set(x.id, sum);
   }
   return ACTIVITIES.map((a) => out.get(a.id)).filter((x): x is ActivitySummary => !!x);
 }

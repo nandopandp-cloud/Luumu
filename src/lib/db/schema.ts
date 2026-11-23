@@ -787,6 +787,8 @@ export const analyticsSessionDays = pgTable(
   (t) => [
     index("analytics_session_days_project_idx").on(t.projectId, t.day),
     index("analytics_session_days_day_brin").using("brin", t.day),
+    // provas, tarefas e estudos do perfil, pelas sessões da pessoa — migração 0050
+    index("analytics_session_days_session_idx").on(t.projectId, t.sessionId),
   ]
 );
 

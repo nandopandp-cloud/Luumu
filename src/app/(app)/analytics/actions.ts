@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { canManageWorkspace, getCurrentProjectId, getCurrentRole, requireUser } from "@/lib/auth/current";
 import { parsePersonKey } from "@/lib/analytics/core";
-import { createView, deleteView, getAnalyticsUserProfile, listAnalyticsEvents, saveAnalyticsSettings, updateView } from "@/lib/db/analytics";
+import { createView, deleteView, getAnalyticsUserProfile, getAnalyticsUserSessions, listAnalyticsEvents, saveAnalyticsSettings, updateView } from "@/lib/db/analytics";
 import { parseViewConfig } from "@/lib/analytics/core";
 
 type Result = { ok: true; id?: string } | { ok: false; error: string };
@@ -90,4 +90,11 @@ export async function getUserProfileAction(key: string) {
   await requireUser();
   if (typeof key !== "string" || !parsePersonKey(key)) return null;
   return getAnalyticsUserProfile(await getCurrentProjectId(), key);
+}
+
+/** Mais sessões da linha do tempo do perfil (antes de `before`, ISO). */
+export async function getUserSessionsAction(key: string, before: string) {
+  await requireUser();
+  if (typeof key !== "string" || !parsePersonKey(key) || typeof before !== "string" || before.length > 40) return [];
+  return getAnalyticsUserSessions(await getCurrentProjectId(), key, before);
 }

@@ -43,9 +43,9 @@ import { InsightCard } from "@/components/ui/InsightCard";
 import { SortTh } from "@/components/ui/SortableHeader";
 import { CHANNEL_COLOR, CHANNEL_LABEL, eventLabel, fmtInt, formatDuration, type Channel } from "@/lib/analytics/core";
 import { relativeTime } from "@/lib/search/core";
-import { STAGE_LABEL, STAGES, stepLabel, stepOf, summarizeJourney, type ActivityIcon, type Stage } from "@/lib/analytics/journey";
-import type { AnalyticsUserProfile, UserRow } from "@/lib/db/analytics";
-import { getUserProfileAction } from "@/app/(app)/analytics/actions";
+import { activityById, STAGE_LABEL, STAGES, stepLabel, stepOf, type ActivityIcon, type Stage } from "@/lib/analytics/journey";
+import type { AnalyticsUserProfile, ProfileSession, UserRow } from "@/lib/db/analytics";
+import { getUserProfileAction, getUserSessionsAction } from "@/app/(app)/analytics/actions";
 
 export interface UsersData {
   rows: UserRow[];
@@ -436,14 +436,17 @@ function sessionSteps(pages: { path: string }[]) {
   }
   return [...best.values()];
 }
+const fmtDay = (iso: string) => new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric", timeZone: "America/Sao_Paulo" }).replace(".", "");
 const fmtShort = (iso: string) =>
   new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" }).replace(".", "");
 
 /** Provas, tarefas e estudos: o que a pessoa abriu, iniciou e concluiu (lib/analytics/journey.ts). */
-function JourneySummary({ sessions }: { sessions: AnalyticsUserProfile["sessions"] }) {
-  const list = useMemo(() => summarizeJourney(sessions), [sessions]);
-  if (!list.length)
-    return <p className="text-sm text-fg-mut">Nenhuma prova, tarefa, teste, quiz ou redação nas últimas {sessions.length} sessões.</p>;
+function JourneySummary({ journey }: { journey: AnalyticsUserProfile["journey"] }) {
+  const list = journey.activities.flatMap((a) => {
+    const activity = activityById(a.id);
+    return activity ? [{ ...a, activity }] : [];
+  });
+  if (!list.length) return <p className="text-sm text-fg-mut">Nenhuma prova, tarefa, teste, quiz ou redação no histórico.</p>;
   return (
     <ul className="grid gap-2.5 sm:grid-cols-2">
       {list.map((a) => {
@@ -457,7 +460,7 @@ function JourneySummary({ sessions }: { sessions: AnalyticsUserProfile["sessions
               <span className="min-w-0">
                 <span className="block text-sm font-semibold">{a.activity.label}</span>
                 <span className="block truncate text-xs text-fg-mut">
-                  Última: {STAGE_LABEL[a.last.stage].toLowerCase()} em {fmtShort(a.last.at)}
+                  Última: {STAGE_LABEL[a.last.stage].toLowerCase()} na sessão de {fmtShort(a.last.at)}
                 </span>
               </span>
             </div>
@@ -487,6 +490,22 @@ const SENT = { positivo: "bg-sucesso/12 text-sucesso", neutro: "bg-aviso/15 text
 
 export function Profile({ p }: { p: AnalyticsUserProfile }) {
   const [openSession, setOpenSession] = useState<string | null>(p.sessions[0]?.id ?? null);
+  // linha do tempo: as 20 mais recentes vêm com o perfil; o resto, por página
+  const [more, setMore] = useState<ProfileSession[]>([]);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const sessions = useMemo(() => [...p.sessions, ...more], [p.sessions, more]);
+  const hasMore = sessions.length < p.totals.sessions;
+  async function loadMore() {
+    const before = sessions[sessions.length - 1]?.startedAt;
+    if (!before || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const next = await getUserSessionsAction(p.key, before);
+      setMore((m) => [...m, ...next.filter((x) => !sessions.some((y) => y.id === x.id))]);
+    } finally {
+      setLoadingMore(false);
+    }
+  }
   const identified = !!(p.userId || p.email || p.name);
   return (
     <div>
@@ -542,9 +561,9 @@ export function Profile({ p }: { p: AnalyticsUserProfile }) {
       <Section
         title="Provas, tarefas e estudos"
         icon={GraduationCap}
-        aside={<span className="text-xs text-fg-mut">últimas {p.sessions.length} sessões</span>}
+        aside={p.journey.since ? <span className="text-xs text-fg-mut">todo o histórico, desde {fmtDay(p.journey.since)}</span> : undefined}
       >
-        <JourneySummary sessions={p.sessions} />
+        <JourneySummary journey={p.journey} />
       </Section>
 
       <Section title="Atividade" icon={Zap}>
@@ -614,9 +633,13 @@ export function Profile({ p }: { p: AnalyticsUserProfile }) {
         </Section>
       </div>
 
-      <Section title="Linha do tempo" icon={CalendarClock} aside={<span className="text-xs text-fg-mut">últimas {p.sessions.length} sessões</span>}>
+      <Section
+        title="Linha do tempo"
+        icon={CalendarClock}
+        aside={<span className="text-xs text-fg-mut">{fmtInt(sessions.length)} de {fmtInt(p.totals.sessions)} sessões</span>}
+      >
         <ol className="relative flex flex-col gap-2 border-l-2 border-line pl-4">
-          {p.sessions.map((s) => {
+          {sessions.map((s) => {
             const Dev = DEVICE_ICON[s.device] ?? Monitor;
             const open = openSession === s.id;
             return (
@@ -700,6 +723,16 @@ export function Profile({ p }: { p: AnalyticsUserProfile }) {
             );
           })}
         </ol>
+        {hasMore && (
+          <button
+            type="button"
+            onClick={loadMore}
+            disabled={loadingMore}
+            className="mt-3 w-full rounded-xl border border-line px-3 py-2 text-sm font-semibold text-fg-soft transition hover:border-accent/40 hover:text-accent disabled:opacity-60"
+          >
+            {loadingMore ? "Carregando…" : "Carregar mais sessões"}
+          </button>
+        )}
       </Section>
     </div>
   );

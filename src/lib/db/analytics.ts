@@ -6,6 +6,8 @@ import { analyticsPageviews, analyticsSessions, analyticsSettings, analyticsUser
 import { analyticsViewId } from "./ids";
 import { sharedCache } from "./shared-cache";
 import { rollupPlan, rollupQueries } from "./analytics-rollup";
+import { addDays, dayStart } from "@/lib/analytics/rollup-range";
+import { JOURNEY_PATHS, summarizeJourney, type JourneyRow } from "@/lib/analytics/journey";
 import { periodToRange, startOfTodayBR } from "@/lib/utils/period";
 import { hostList } from "@/lib/platform/hosts";
 import { getScoresBySurvey } from "./responses";
@@ -1184,10 +1186,12 @@ export async function listAnalyticsUsers(
 }
 
 /**
- * Perfil de uma PESSOA (mesma regra da lista, ver personKey): quem é, linha do tempo de sessões
- * em todos os navegadores dela, telas, ações e respostas de pesquisa.
+ * Quem é a pessoa de uma chave da lista e o filtro das sessões dela (alias s). Mesma regra da
+ * lista (ver personKey): as sessões com o id dela gravado (em qualquer navegador) e as anônimas
+ * dos navegadores dela. Sessão de OUTRO estudante num navegador com a etiqueta dela (computador
+ * compartilhado) fica de fora.
  */
-export async function getAnalyticsUserProfile(projectId: string, key: string) {
+async function personScope(projectId: string, key: string) {
   const who = parsePersonKey(key);
   if (!who) return null;
 
@@ -1219,26 +1223,145 @@ export async function getAnalyticsUserProfile(projectId: string, key: string) {
     )
     .orderBy(desc(analyticsUsers.lastSeenAt))
     .limit(50);
+  if (!browsers.length && person.kind !== "u") return null;
   const anons = browsers.map((b) => b.anonId);
   const anonIn = anons.length ? sql`s.anon_id in (${sql.join(anons.map((x) => sql`${x}`), sql`, `)})` : sql`false`;
-  /*
-    Sessões da pessoa: as que têm o id dela gravado (em qualquer navegador) e as anônimas dos
-    navegadores dela. Sessão de OUTRO estudante num navegador com a etiqueta dela (computador
-    compartilhado) fica de fora.
-  */
   const mine =
     person.kind === "u"
       ? sql`s.project_id = ${projectId} and (s.user_id = ${person.value} or (s.user_id is null and ${anonIn}))`
       : sql`s.project_id = ${projectId} and ${anonIn} and s.user_id is null`;
-  if (!browsers.length && person.kind !== "u") return null;
+  return { person, browsers, mine };
+}
 
-  const since = new Date(Date.now() - 90 * 86_400_000).toISOString();
-  const [sessions, totals, activity, surveys] = await Promise.all([
-    db.execute(sql`
+/** Sessões por página na linha do tempo do perfil. */
+export const PROFILE_SESSIONS = 20;
+const WINDOW_MARGIN = 10 * 60_000;
+
+/*
+  Telas de algumas sessões: cada sessão só na janela de tempo dela (índice por data). Uma janela
+  única, da primeira à última sessão, lia semanas de telas do projeto inteiro para um estudante
+  que usa pouco; por navegador, lia todas.
+*/
+async function pagesOf(projectId: string, ses: { id: string; started: string; last: string }[], filter: SQL = sql``) {
+  if (!ses.length) return [];
+  const windows = ses.map(
+    (x) => sql`(p.session_id = ${x.id} and p.created_at >= ${iso(new Date(Date.parse(x.started) - WINDOW_MARGIN))}::timestamptz
+                and p.created_at <= ${iso(new Date(Date.parse(x.last) + WINDOW_MARGIN))}::timestamptz)`
+  );
+  return rows<{ session_id: string; path: string; at: string; duration_ms: number; events: string[] }>(
+    await db.execute(sql`
+      select p.session_id, p.path, ${isoTs(sql`p.created_at`)} at, p.duration_ms, p.events
+        from analytics_pageviews p
+       where p.project_id = ${projectId} and (${sql.join(windows, sql` or `)})${filter}
+       order by p.created_at desc limit ${ses.length * 40}`)
+  );
+}
+
+/** Uma página da linha do tempo (as sessões mais recentes antes de `before`), com as telas. */
+async function timeline(projectId: string, mine: SQL, before?: string) {
+  const ses = rows<Record<string, unknown>>(
+    await db.execute(sql`
       select s.id, s.anon_id, ${isoTs(sql`s.started_at`)} started, ${isoTs(sql`s.last_seen_at`)} last, s.device, s.os, s.browser, s.channel, s.referrer, s.utm_campaign,
              s.landing_path, s.exit_path, s.pageviews, s.duration_ms, s.host
-        from analytics_sessions s where ${mine}
-       order by s.started_at desc limit 20`),
+        from analytics_sessions s where ${mine}${before ? sql` and s.started_at < ${before}::timestamptz` : sql``}
+       order by s.started_at desc limit ${PROFILE_SESSIONS}`)
+  );
+  const pv = await pagesOf(projectId, ses.map((x) => ({ id: String(x.id), started: String(x.started), last: String(x.last) })));
+  const bySession = new Map<string, { path: string; at: string; ms: number; events: string[] }[]>();
+  for (const p of pv) {
+    const list = bySession.get(p.session_id) ?? [];
+    list.push({ path: p.path, at: p.at, ms: n(p.duration_ms), events: p.events ?? [] });
+    bySession.set(p.session_id, list);
+  }
+  return {
+    pv,
+    anonId: ses[0]?.anon_id ? String(ses[0].anon_id) : null,
+    sessions: ses.map((x) => ({
+      id: String(x.id),
+      startedAt: String(x.started),
+      lastSeenAt: String(x.last),
+      device: String(x.device),
+      os: String(x.os),
+      browser: String(x.browser),
+      channel: x.channel as Channel,
+      referrer: String(x.referrer ?? ""),
+      campaign: String(x.utm_campaign ?? ""),
+      host: String(x.host ?? ""),
+      pageviews: n(x.pageviews),
+      ms: n(x.duration_ms),
+      pages: (bySession.get(String(x.id)) ?? []).slice().reverse(),
+    })),
+  };
+}
+
+export type ProfileSession = Awaited<ReturnType<typeof timeline>>["sessions"][number];
+
+/** Mais sessões da linha do tempo do perfil (botão "Carregar mais"). */
+export async function getAnalyticsUserSessions(projectId: string, key: string, before: string): Promise<ProfileSession[]> {
+  const scope = await personScope(projectId, key);
+  if (!scope || !Number.isFinite(Date.parse(before))) return [];
+  return (await timeline(projectId, scope.mine, new Date(before).toISOString())).sessions;
+}
+
+/*
+  Provas, tarefas e estudos de TODO o histórico guardado da pessoa (lib/analytics/journey.ts):
+    - dias já fechados: do resumo diário (analytics_session_days), pelas sessões dela — índice
+      (project_id, session_id), migração 0050; poucas linhas mesmo com anos de uso;
+    - dias que o cron ainda não resumiu (hoje, às vezes ontem): das telas, na janela de cada
+      sessão desses dias.
+  Só as telas que são etapa de alguma atividade saem do banco.
+*/
+async function personJourney(projectId: string, mine: SQL): Promise<JourneyRow[]> {
+  const paths = sql.join(JOURNEY_PATHS.map((x) => sql`${x}`), sql`, `);
+  let lastDone: string | null = null;
+  try {
+    lastDone = rows<{ d: string | null }>(await db.execute(sql`select to_char(max(day), 'YYYY-MM-DD') d from analytics_rollup_days`))[0]?.d ?? null;
+  } catch {
+    // sem o resumo diário (migração 0041): só as telas, abaixo
+  }
+  const cut = lastDone ? dayStart(addDays(lastDone, 1)) : null;
+
+  const rolled = lastDone
+    ? rows<{ session_id: string; started: string; path: string; c: number }>(
+        await db.execute(sql`
+          select s.id session_id, ${isoTs(sql`s.started_at`)} started, u.path, sum(u.c)::int c
+            from analytics_sessions s
+            join analytics_session_days r on r.project_id = s.project_id and r.session_id = s.id and r.day <= ${lastDone}::date
+            cross join lateral unnest(r.paths, r.path_counts) u(path, c)
+           where ${mine} and u.path in (${paths})
+           group by 1, 2, 3`)
+      )
+    : [];
+
+  // sessões com telas depois do último dia resumido (sem resumo: as mais recentes)
+  const tail = rows<{ id: string; started: string; last: string }>(
+    await db.execute(sql`
+      select s.id, ${isoTs(sql`s.started_at`)} started, ${isoTs(sql`s.last_seen_at`)} last
+        from analytics_sessions s where ${mine}${cut ? sql` and s.last_seen_at >= ${iso(cut)}::timestamptz` : sql``}
+       order by s.started_at desc limit 100`)
+  );
+  const raw = await pagesOf(projectId, tail, sql` and p.path in (${paths})${cut ? sql` and p.created_at >= ${iso(cut)}::timestamptz` : sql``}`);
+  const startedOf = new Map(tail.map((x) => [x.id, x.started]));
+
+  return [
+    ...rolled.map((r) => ({ sessionId: r.session_id, at: r.started, path: r.path, count: n(r.c) })),
+    ...raw.map((p) => ({ sessionId: p.session_id, at: startedOf.get(p.session_id) ?? p.at, path: p.path, count: 1 })),
+  ];
+}
+
+/**
+ * Perfil de uma PESSOA (mesma regra da lista, ver personKey): quem é, provas/tarefas/estudos de
+ * todo o histórico, linha do tempo de sessões em todos os navegadores dela, telas, ações e
+ * respostas de pesquisa.
+ */
+export async function getAnalyticsUserProfile(projectId: string, key: string) {
+  const scope = await personScope(projectId, key);
+  if (!scope) return null;
+  const { person, browsers, mine } = scope;
+
+  const since = new Date(Date.now() - 90 * 86_400_000).toISOString();
+  const [tl, totals, activity, surveys, journey] = await Promise.all([
+    timeline(projectId, mine),
     db.execute(sql`
       select count(*)::int sessions, coalesce(sum(s.pageviews), 0)::int pv, coalesce(sum(s.duration_ms), 0)::bigint ms,
              count(distinct (s.started_at at time zone ${TZ})::date)::int days, ${isoTs(sql`max(s.last_seen_at)`)} last,
@@ -1256,39 +1379,14 @@ export async function getAnalyticsUserProfile(projectId: string, key: string) {
            where sv.project_id = ${projectId} and r.respondent = ${person.value}
            order by r.created_at desc limit 10`)
       : Promise.resolve({ rows: [] }),
+    personJourney(projectId, mine),
   ]);
-  const ses = rows<Record<string, unknown>>(sessions);
   const t = rows<Record<string, unknown>>(totals)[0] ?? {};
-  if (!browsers.length && !ses.length) return null;
+  if (!browsers.length && !tl.sessions.length) return null;
 
-  /*
-    Telas e ações das sessões da linha do tempo: cada sessão só na janela de tempo dela (índice
-    por data). Uma janela única, da primeira à última sessão, lia semanas de telas do projeto
-    inteiro para um estudante que usa pouco; por navegador, lia todas.
-  */
-  const MARGIN = 10 * 60_000;
-  const windows = ses.map(
-    (x) => sql`(p.session_id = ${String(x.id)} and p.created_at >= ${iso(new Date(Date.parse(String(x.started)) - MARGIN))}::timestamptz
-                and p.created_at <= ${iso(new Date(Date.parse(String(x.last)) + MARGIN))}::timestamptz)`
-  );
-  const pv = windows.length
-    ? rows<{ session_id: string; path: string; at: string; duration_ms: number; events: string[] }>(
-        await db.execute(sql`
-          select p.session_id, p.path, ${isoTs(sql`p.created_at`)} at, p.duration_ms, p.events
-            from analytics_pageviews p
-           where p.project_id = ${projectId} and (${sql.join(windows, sql` or `)})
-           order by p.created_at desc limit 600`)
-      )
-    : [];
-  const bySession = new Map<string, { path: string; at: string; ms: number; events: string[] }[]>();
-  for (const p of pv) {
-    const list = bySession.get(p.session_id) ?? [];
-    list.push({ path: p.path, at: p.at, ms: n(p.duration_ms), events: p.events ?? [] });
-    bySession.set(p.session_id, list);
-  }
   const pageCount = new Map<string, number>();
   const eventCount = new Map<string, number>();
-  for (const p of pv) {
+  for (const p of tl.pv) {
     pageCount.set(p.path, (pageCount.get(p.path) ?? 0) + 1);
     for (const e of p.events ?? []) eventCount.set(e, (eventCount.get(e) ?? 0) + 1);
   }
@@ -1307,7 +1405,7 @@ export async function getAnalyticsUserProfile(projectId: string, key: string) {
     : [];
   return {
     key: `${person.kind}:${person.value}`,
-    anonId: rep?.anonId ?? String(ses[0]?.anon_id ?? ""),
+    anonId: rep?.anonId ?? tl.anonId ?? "",
     /** navegadores em que a pessoa apareceu */
     browsers: Math.max(browsers.length, n(t.browsers)),
     userId: person.kind === "u" ? person.value : null,
@@ -1321,22 +1419,10 @@ export async function getAnalyticsUserProfile(projectId: string, key: string) {
     campaign: rep?.firstCampaign ?? "",
     landing: rep?.firstLanding ?? "",
     totals: { sessions: n(t.sessions), pageviews: n(t.pv), ms: n(t.ms), days: n(t.days) },
+    /** provas, tarefas e estudos de todo o histórico guardado, desde `since` */
+    journey: { activities: summarizeJourney(journey), since: t.first ? String(t.first) : null },
     activity: rows<{ d: string; sessions: number; ms: number }>(activity).map((a) => ({ d: a.d, sessions: n(a.sessions), ms: n(a.ms) })),
-    sessions: ses.map((x) => ({
-      id: String(x.id),
-      startedAt: String(x.started),
-      lastSeenAt: String(x.last),
-      device: String(x.device),
-      os: String(x.os),
-      browser: String(x.browser),
-      channel: x.channel as Channel,
-      referrer: String(x.referrer ?? ""),
-      campaign: String(x.utm_campaign ?? ""),
-      host: String(x.host ?? ""),
-      pageviews: n(x.pageviews),
-      ms: n(x.duration_ms),
-      pages: (bySession.get(String(x.id)) ?? []).slice().reverse(),
-    })),
+    sessions: tl.sessions,
     topEvents: [...eventCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, 12).map(([name, c]) => ({ name, n: c })),
     topPages: [...pageCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([path, c]) => ({ path, n: c })),
     responses: rows<{ id: string; score: number | null; sentiment: string | null; at: string; survey: string; survey_id: string }>(surveys).map((x) => ({
