@@ -1262,23 +1262,21 @@ export async function getAnalyticsUserProfile(projectId: string, key: string) {
   if (!browsers.length && !ses.length) return null;
 
   /*
-    Telas e ações das sessões da linha do tempo. A busca é pelas sessões e pela janela de tempo
-    delas (índice por data): por navegador ela lia todas as telas do projeto.
+    Telas e ações das sessões da linha do tempo: cada sessão só na janela de tempo dela (índice
+    por data). Uma janela única, da primeira à última sessão, lia semanas de telas do projeto
+    inteiro para um estudante que usa pouco; por navegador, lia todas.
   */
-  const ids = ses.map((x) => String(x.id));
-  const span = ses.length
-    ? {
-        from: new Date(Math.min(...ses.map((x) => Date.parse(String(x.started)))) - 86_400_000),
-        to: new Date(Math.max(...ses.map((x) => Date.parse(String(x.last)))) + 86_400_000),
-      }
-    : null;
-  const pv = span
+  const MARGIN = 10 * 60_000;
+  const windows = ses.map(
+    (x) => sql`(p.session_id = ${String(x.id)} and p.created_at >= ${iso(new Date(Date.parse(String(x.started)) - MARGIN))}::timestamptz
+                and p.created_at <= ${iso(new Date(Date.parse(String(x.last)) + MARGIN))}::timestamptz)`
+  );
+  const pv = windows.length
     ? rows<{ session_id: string; path: string; at: string; duration_ms: number; events: string[] }>(
         await db.execute(sql`
           select p.session_id, p.path, ${isoTs(sql`p.created_at`)} at, p.duration_ms, p.events
             from analytics_pageviews p
-           where p.project_id = ${projectId} and p.created_at >= ${iso(span.from)}::timestamptz and p.created_at < ${iso(span.to)}::timestamptz
-             and p.session_id in (${sql.join(ids.map((x) => sql`${x}`), sql`, `)})
+           where p.project_id = ${projectId} and (${sql.join(windows, sql` or `)})
            order by p.created_at desc limit 600`)
       )
     : [];

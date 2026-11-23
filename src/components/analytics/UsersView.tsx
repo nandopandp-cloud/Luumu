@@ -7,11 +7,19 @@ import {
   ArrowDownUp,
   ArrowRight,
   CalendarClock,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  ClipboardList,
   Clock,
   Copy,
+  Eye,
   FileText,
+  GraduationCap,
+  ListChecks,
+  PenLine,
+  PlayCircle,
+  Target,
   Layers,
   LogIn,
   Monitor,
@@ -35,6 +43,7 @@ import { InsightCard } from "@/components/ui/InsightCard";
 import { SortTh } from "@/components/ui/SortableHeader";
 import { CHANNEL_COLOR, CHANNEL_LABEL, eventLabel, fmtInt, formatDuration, type Channel } from "@/lib/analytics/core";
 import { relativeTime } from "@/lib/search/core";
+import { STAGE_LABEL, STAGES, stepLabel, stepOf, summarizeJourney, type ActivityIcon, type Stage } from "@/lib/analytics/journey";
 import type { AnalyticsUserProfile, UserRow } from "@/lib/db/analytics";
 import { getUserProfileAction } from "@/app/(app)/analytics/actions";
 
@@ -410,6 +419,70 @@ function Section({ title, icon: Icon, children, aside }: { title: string; icon: 
   );
 }
 
+const ACTIVITY_ICON: Record<ActivityIcon, LucideIcon> = { prova: GraduationCap, tarefa: ClipboardList, teste: Target, quiz: ListChecks, redacao: PenLine };
+const STAGE_ICON: Record<Stage, LucideIcon> = { viu: Eye, iniciou: PlayCircle, concluiu: CheckCircle2 };
+const STAGE_BG: Record<Stage, string> = { viu: "bg-bg-sunken", iniciou: "bg-sec-azul/10", concluiu: "bg-sucesso/10" };
+const STAGE_TEXT: Record<Stage, string> = { viu: "text-fg-soft", iniciou: "text-sec-azul", concluiu: "text-sucesso" };
+const STAGE_TONE: Record<Stage, string> = { viu: `${STAGE_BG.viu} ${STAGE_TEXT.viu}`, iniciou: `${STAGE_BG.iniciou} ${STAGE_TEXT.iniciou}`, concluiu: `${STAGE_BG.concluiu} ${STAGE_TEXT.concluiu}` };
+
+/** O ponto mais avançado de cada atividade numa sessão (chips no cabeçalho da sessão). */
+function sessionSteps(pages: { path: string }[]) {
+  const best = new Map<string, NonNullable<ReturnType<typeof stepOf>>>();
+  for (const pg of pages) {
+    const st = stepOf(pg.path);
+    if (!st) continue;
+    const cur = best.get(st.activity.id);
+    if (!cur || STAGES.indexOf(st.stage) > STAGES.indexOf(cur.stage)) best.set(st.activity.id, st);
+  }
+  return [...best.values()];
+}
+const fmtShort = (iso: string) =>
+  new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" }).replace(".", "");
+
+/** Provas, tarefas e estudos: o que a pessoa abriu, iniciou e concluiu (lib/analytics/journey.ts). */
+function JourneySummary({ sessions }: { sessions: AnalyticsUserProfile["sessions"] }) {
+  const list = useMemo(() => summarizeJourney(sessions), [sessions]);
+  if (!list.length)
+    return <p className="text-sm text-fg-mut">Nenhuma prova, tarefa, teste, quiz ou redação nas últimas {sessions.length} sessões.</p>;
+  return (
+    <ul className="grid gap-2.5 sm:grid-cols-2">
+      {list.map((a) => {
+        const Icon = ACTIVITY_ICON[a.activity.icon];
+        return (
+          <li key={a.activity.id} className="rounded-xl border border-line p-3.5">
+            <div className="flex items-center gap-2.5">
+              <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-surface-brand text-accent">
+                <Icon className="size-4" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold">{a.activity.label}</span>
+                <span className="block truncate text-xs text-fg-mut">
+                  Última: {STAGE_LABEL[a.last.stage].toLowerCase()} em {fmtShort(a.last.at)}
+                </span>
+              </span>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {STAGES.filter((st) => a.activity.stages[st]).map((st) => {
+                const SI = STAGE_ICON[st];
+                return (
+                  <span key={st} className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold", a.counts[st] ? STAGE_TONE[st] : "bg-bg-sunken text-fg-mut/70")}>
+                    <SI className="size-3" /> {STAGE_LABEL[st]} {fmtInt(a.counts[st])}×
+                  </span>
+                );
+              })}
+            </div>
+            {a.unfinished > 0 && (
+              <p className="mt-2 text-xs text-fg-mut">
+                Iniciou e não chegou ao resultado em {fmtInt(a.unfinished)} {a.unfinished === 1 ? "sessão" : "sessões"}.
+              </p>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 const SENT = { positivo: "bg-sucesso/12 text-sucesso", neutro: "bg-aviso/15 text-aviso", negativo: "bg-erro/10 text-erro" } as Record<string, string>;
 
 export function Profile({ p }: { p: AnalyticsUserProfile }) {
@@ -465,6 +538,14 @@ export function Profile({ p }: { p: AnalyticsUserProfile }) {
         <Stat icon={Clock} value={formatDuration(p.totals.ms)} label="tempo ativo" />
         <Stat icon={CalendarClock} value={fmtInt(p.totals.days)} label="dias com uso" />
       </div>
+
+      <Section
+        title="Provas, tarefas e estudos"
+        icon={GraduationCap}
+        aside={<span className="text-xs text-fg-mut">últimas {p.sessions.length} sessões</span>}
+      >
+        <JourneySummary sessions={p.sessions} />
+      </Section>
 
       <Section title="Atividade" icon={Zap}>
         <ActivityGrid activity={p.activity} />
@@ -562,17 +643,40 @@ export function Profile({ p }: { p: AnalyticsUserProfile }) {
                     {s.referrer && <span>via {s.referrer}</span>}
                     {s.campaign && <span>· campanha {s.campaign}</span>}
                   </span>
+                  {sessionSteps(s.pages).length > 0 && (
+                    <span className="mt-2 flex flex-wrap gap-1.5">
+                      {sessionSteps(s.pages).map((st) => {
+                        const SI = STAGE_ICON[st.stage];
+                        return (
+                          <span key={st.activity.id} className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold", STAGE_TONE[st.stage])}>
+                            <SI className="size-3" /> {stepLabel(st)}
+                          </span>
+                        );
+                      })}
+                    </span>
+                  )}
                 </button>
                 {open && (
                   <ol className="mt-2 flex flex-col gap-1.5 pl-2">
                     {!s.pages.length && <li className="text-xs text-fg-mut">Telas desta sessão não estão mais disponíveis.</li>}
-                    {s.pages.map((pg, i) => (
-                      <li key={i} className="rounded-lg bg-bg-sunken/50 px-3 py-2">
+                    {s.pages.map((pg, i) => {
+                      const step = stepOf(pg.path);
+                      const SI = step ? STAGE_ICON[step.stage] : null;
+                      return (
+                      <li key={i} className={cn("rounded-lg px-3 py-2", step ? STAGE_BG[step.stage] : "bg-bg-sunken/50")}>
                         <span className="flex items-center justify-between gap-2 text-[13px]">
+                          {step && SI ? (
+                            <span className="flex min-w-0 items-center gap-2 font-semibold" title={pagePath(pg.path)}>
+                              <SI className={cn("size-3.5 shrink-0", STAGE_TEXT[step.stage])} />
+                              <span className="truncate">{stepLabel(step)}</span>
+                              <span className="hidden truncate text-xs font-normal text-fg-mut sm:inline">{pagePath(pg.path)}</span>
+                            </span>
+                          ) : (
                           <span className="flex min-w-0 items-center gap-2 font-medium">
                             {i === 0 ? <LogIn className="size-3.5 shrink-0 text-accent" /> : <FileText className="size-3.5 shrink-0 text-fg-mut" />}
                             <span className="truncate">{pagePath(pg.path)}</span>
                           </span>
+                          )}
                           <span className="shrink-0 text-xs text-fg-mut">
                             {new Date(pg.at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })} · {formatDuration(pg.ms)}
                           </span>
@@ -588,7 +692,8 @@ export function Profile({ p }: { p: AnalyticsUserProfile }) {
                           </span>
                         )}
                       </li>
-                    ))}
+                      );
+                    })}
                   </ol>
                 )}
               </li>
