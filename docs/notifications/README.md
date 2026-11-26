@@ -11,6 +11,11 @@ Dois tipos de conteúdo:
    alimentados por um **webhook por turma** que o back-end do cliente chama. O contrato com o
    cliente, incluindo quem faz o quê, está em [INTEGRACAO.md](INTEGRACAO.md).
 
+   Versão em PDF para entregar à engenharia do cliente:
+   [integracao-avisos-automaticos.pdf](integracao-avisos-automaticos.pdf), gerada por
+   `TSX_TSCONFIG_PATH=scripts/tsconfig.scripts.json node --import tsx scripts/notifications-integration-pdf.mjs`.
+   Os limites e as janelas do PDF vêm do código. Gere de novo quando o contrato mudar.
+
 ## Peças
 
 | Peça | Onde |
