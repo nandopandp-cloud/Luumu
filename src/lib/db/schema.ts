@@ -12,6 +12,7 @@ import {
   uniqueIndex,
   primaryKey,
   bigint,
+  foreignKey,
 } from "drizzle-orm/pg-core";
 
 /* =====================================================================
@@ -1065,6 +1066,84 @@ export const notificationEvents = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.notificationId, t.kind, t.userKey] })]
+);
+
+/**
+ * Avisos automáticos de atividades (lib/db/notification-activities.ts, migração 0051): o cliente
+ * avisa por webhook quando libera, altera ou cancela uma atividade, com as turmas que a recebem;
+ * o sino lê a lista da turma. Ver docs/notifications/INTEGRACAO.md.
+ */
+export const notificationWebhooks = pgTable("notification_webhooks", {
+  projectId: text("project_id").primaryKey().references(() => projects.id, { onDelete: "cascade" }),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  secret: text("secret").notNull(),
+  // na troca, o segredo anterior segue válido até previous_until
+  previousSecret: text("previous_secret"),
+  previousUntil: timestamp("previous_until", { withTimezone: true }),
+  updatedBy: text("updated_by").references(() => users.id, { onDelete: "set null" }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const notificationActivities = pgTable(
+  "notification_activities",
+  {
+    projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+    // id da atividade no produto do cliente
+    externalId: text("external_id").notNull(),
+    type: text("type").notNull(), // tarefa | prova_genial
+    title: text("title").notNull().default(""),
+    subject: text("subject"),
+    url: text("url").notNull().default(""),
+    assignedAt: timestamp("assigned_at", { withTimezone: true }).notNull(),
+    dueAt: timestamp("due_at", { withTimezone: true }),
+    classIds: text("class_ids").array().notNull().default(sql`'{}'::text[]`),
+    status: text("status").notNull().default("active"), // active | canceled
+    // data do último evento aplicado: evento mais antigo que chegue depois é ignorado
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.projectId, t.externalId] }),
+    index("notification_activities_classes_idx").using("gin", t.classIds),
+    index("notification_activities_project_idx").on(t.projectId, t.updatedAt),
+  ]
+);
+
+/** Cada evento recebido pelo webhook (a chave descarta repetidos; o painel mostra os últimos). */
+export const notificationWebhookDeliveries = pgTable(
+  "notification_webhook_deliveries",
+  {
+    projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    eventId: text("event_id").notNull(),
+    event: text("event").notNull().default(""),
+    activityId: text("activity_id"),
+    status: text("status").notNull(), // applied | stale | invalid | unauthorized
+    error: text("error"),
+    receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.projectId, t.eventId] }),
+    index("notification_webhook_deliveries_recent_idx").on(t.projectId, t.receivedAt),
+  ]
+);
+
+/** Contadores dos avisos automáticos por atividade, aviso (nova | prazo), tipo e dia. */
+export const notificationActivityStats = pgTable(
+  "notification_activity_stats",
+  {
+    projectId: text("project_id").notNull(),
+    activityId: text("activity_id").notNull(),
+    item: text("item").notNull(),
+    kind: text("kind").notNull(),
+    day: date("day", { mode: "string" }).notNull(),
+    n: integer("n").notNull().default(0),
+  },
+  (t) => [
+    primaryKey({ columns: [t.projectId, t.activityId, t.item, t.kind, t.day] }),
+    foreignKey({ columns: [t.projectId, t.activityId], foreignColumns: [notificationActivities.projectId, notificationActivities.externalId] }).onDelete("cascade"),
+  ]
 );
 
 export type Workspace = typeof workspaces.$inferSelect;

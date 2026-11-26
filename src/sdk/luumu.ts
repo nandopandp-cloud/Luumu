@@ -1883,6 +1883,18 @@ const isMessage = (q: Question) => MESSAGE_BLOCKS.indexOf(q.blockId) >= 0;
         bellPendingOpen = false;
         bell?.close();
       },
+      /*
+        Avisos automáticos: o produto avisa que o estudante concluiu uma atividade, quando a tela
+        de resultado não basta para a Luumu perceber (ex.: entrega por outro caminho):
+          window.Luumu?.notifications?.complete?.("t123")
+      */
+      complete(activityId: string) {
+        safe(() => bell?.complete(String(activityId)));
+      },
+      // diagnóstico no console do produto logado: Luumu.notifications.debug()
+      debug() {
+        return bell ? bell.debug() : { ok: false, motivo: catalogLoaded ? "O sino não está ligado nesta plataforma (Notificações → Sino e instalação)." : "O SDK ainda está carregando; tente de novo em alguns segundos." };
+      },
     },
     accessibility: {
       open(view: A11yView = "panel") {

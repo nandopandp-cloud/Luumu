@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { canEditContent, getCurrentProjectId, getCurrentWorkspaceId, requireUser } from "@/lib/auth/current";
+import { canEditContent, canManageWorkspace, getCurrentProjectId, getCurrentWorkspaceId, requireUser } from "@/lib/auth/current";
 import { getWorkspace } from "@/lib/db/workspace";
 import {
   deleteNotification,
@@ -21,6 +21,8 @@ import {
   type NotificationDraft,
 } from "@/lib/notifications/model";
 import { normalizeHost } from "@/lib/platform/hosts";
+import { feedForClass, revealWebhookSecret } from "@/lib/db/notification-activities";
+import { classKey, normalizeAuto, type FeedActivity } from "@/lib/notifications/activities";
 import { DEFAULT_TIMEZONE } from "@/lib/surveys/schedule";
 
 /*
@@ -120,6 +122,9 @@ export async function saveBellSettingsAction(input: unknown): Promise<Result> {
   const g = await guard();
   if (!g) return DENIED;
   const s = normalizeBellSettings(input);
+  // os avisos automáticos têm a própria aba (saveAutoSettingsAction): aqui ficam como estão gravados
+  const current = await getBellSettings(g.projectId);
+  if (current) s.auto = current.auto;
   s.hosts = [...new Set(s.hosts.map((h) => normalizeHost(h)).filter((h): h is string => !!h))];
   if (s.placement === "selector" && !s.selector) return { ok: false, error: "Informe o seletor CSS do elemento onde o sino entra." };
   try {
@@ -128,5 +133,47 @@ export async function saveBellSettingsAction(input: unknown): Promise<Result> {
     return { ok: true };
   } catch {
     return { ok: false, error: "Não foi possível salvar. A migração drizzle/0048_notifications.sql já foi aplicada?" };
+  }
+}
+
+/* ---------- avisos automáticos (webhook de atividades) ---------- */
+
+export async function saveAutoSettingsAction(input: unknown): Promise<Result> {
+  const g = await guard();
+  if (!g) return DENIED;
+  const current = await getBellSettings(g.projectId);
+  if (!current) return { ok: false, error: "Não foi possível salvar. A migração drizzle/0048_notifications.sql já foi aplicada?" };
+  try {
+    await saveBellSettings(g.workspaceId, g.projectId, { ...current, auto: normalizeAuto(input) }, g.user.userId);
+    revalidatePath("/notifications");
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "Não foi possível salvar." };
+  }
+}
+
+/** Mostra o segredo do webhook (gera na primeira vez). Só donos e administradores: dá acesso de escrita. */
+export async function revealWebhookSecretAction(rotate = false): Promise<{ ok: true; secret: string } | { ok: false; error: string }> {
+  const [user, allowed, projectId, workspaceId] = await Promise.all([requireUser(), canManageWorkspace(), getCurrentProjectId(), getCurrentWorkspaceId()]);
+  if (!allowed) return { ok: false, error: "Só donos e administradores veem o segredo do webhook." };
+  try {
+    const secret = await revealWebhookSecret(workspaceId, projectId, user.userId, rotate === true);
+    revalidatePath("/notifications");
+    return { ok: true, secret };
+  } catch {
+    return { ok: false, error: "Não foi possível gerar o segredo. A migração drizzle/0051_notification_activities.sql já foi aplicada?" };
+  }
+}
+
+/** "Ver como uma turma": o que o sino dos estudantes desta turma recebe agora (sem cache). */
+export async function previewClassFeedAction(classId: string): Promise<{ ok: true; items: FeedActivity[] } | { ok: false; error: string }> {
+  await requireUser();
+  const projectId = await getCurrentProjectId();
+  const c = classKey(classId);
+  if (!c) return { ok: false, error: "Informe o id de uma turma, como o GenieX manda no classIds." };
+  try {
+    return { ok: true, items: await feedForClass(projectId, c) };
+  } catch {
+    return { ok: false, error: "Não foi possível consultar. A migração drizzle/0051_notification_activities.sql já foi aplicada?" };
   }
 }

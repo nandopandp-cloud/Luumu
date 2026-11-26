@@ -12,6 +12,11 @@
   - Lidas: guardadas neste navegador, por usuário. Abrir o painel zera o contador; ao fechar, o
     que estava em "Novas" passa para "Anteriores".
   - Métricas: cada (recado, tipo) vai uma vez por usuário, em lote (POST /notifications/events).
+  - Avisos automáticos (lib/notifications/activities.ts): com `auto` no /config e as turmas do
+    estudante no identify (`class_ids`), o sino lê a lista de cada turma (GET /notifications/feed,
+    na CDN) ao montar, a cada 5 minutos com a aba visível e ao voltar para a aba. "Nova tarefa",
+    "Nova Prova Genial" e "Falta 1 dia" são calculados aqui; a atividade sai do sino quando o
+    estudante chega à tela de resultado dela (ou o produto chama Luumu.notifications.complete).
 */
 import {
   audienceHash,
@@ -24,6 +29,16 @@ import {
   type PublicNotification,
   type PublicNotifications,
 } from "../../lib/notifications/model";
+import {
+  activityItems,
+  classIdsOf,
+  isActivityType,
+  isCompletionPath,
+  itemText,
+  staleOnFirstSync,
+  type ActivityItem,
+  type FeedActivity,
+} from "../../lib/notifications/activities";
 import { svg } from "./icons";
 import { bellCss, panelCss } from "./styles";
 
@@ -42,12 +57,28 @@ export interface BellWidget {
   identify(): void;
   open(): void;
   close(): void;
+  /** o produto avisou que o estudante concluiu a atividade (some do sino) */
+  complete(activityId: string): void;
+  /** diagnóstico para o console: Luumu.notifications.debug() */
+  debug(): Record<string, unknown>;
   destroy(): void;
 }
+
+/** O que o painel desenha: um recado, ou um aviso automático no mesmo formato. */
+type Shown = Omit<PublicNotification, "c"> & { c: string };
 
 const READ_CAP = 300;
 const SENT_CAP = 1000;
 const SENT_KEY = "luumu_ntf_sent";
+const DONE_CAP = 300;
+const FEED_EVERY_MS = 5 * 60_000;
+const FEED_MIN_GAP_MS = 60_000;
+
+/** Lixo de cache/servidor antigo não entra: só atividades no formato do feed. */
+const validFeed = (x: unknown): x is FeedActivity => {
+  const a = x as FeedActivity;
+  return !!a && typeof a.id === "string" && isActivityType(a.k) && typeof a.t === "string" && typeof a.u === "string" && typeof a.a === "number" && (a.d === undefined || typeof a.d === "number");
+};
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
@@ -68,8 +99,19 @@ function writeJson(key: string, v: unknown) {
 function createBell(): BellWidget {
   let cfg: BellBootConfig | null = null;
   let user = ""; // hash do usuário identificado ("" = ninguém: sino escondido)
-  let items: PublicNotification[] = [];
+  let items: Shown[] = [];
   let read = new Set<string>();
+  // avisos automáticos: turmas do estudante, a lista de cada uma e as atividades que ele concluiu
+  let classes: string[] = [];
+  const feeds = new Map<string, FeedActivity[]>();
+  let feedsFor = ""; // usuário + turmas a que `feeds` se refere
+  let feedLoading = false;
+  let lastFeedAt = 0;
+  let feedTimer: ReturnType<typeof setInterval> | null = null;
+  let feedError: string | null = null;
+  let done = new Set<string>();
+  let firstSync = 0; // quando o sino viu as atividades deste estudante neste navegador pela 1ª vez
+  let autoNow: ActivityItem[] = [];
   let isOpen = false;
   let tab: "all" | "unread" = "all";
   /** "Novas" desta abertura do painel: congeladas até fechar, para a lista não pular. */
@@ -89,25 +131,127 @@ function createBell(): BellWidget {
   let flushTimer: ReturnType<typeof setTimeout> | null = null;
 
   const readKey = () => `luumu_ntf_read_${user}`;
+  const actKey = () => `luumu_ntf_act_${user}`;
 
   /* ---------- usuário, recados visíveis, lidas ---------- */
 
   function refreshUser() {
     if (!cfg) return;
-    const k = userKeyOf(cfg.identity());
+    const traits = cfg.identity();
+    const k = userKeyOf(traits);
     user = k ? audienceHash(cfg.data.salt, k) : "";
     read = new Set(user ? readJson<string[]>(readKey(), []) : []);
+    classes = user && cfg.data.auto ? classIdsOf(traits) : [];
+    const st = user ? readJson<{ f?: number; d?: string[] }>(actKey(), {}) : {};
+    done = new Set(Array.isArray(st.d) ? st.d : []);
+    firstSync = typeof st.f === "number" ? st.f : 0;
+    // outro estudante (ou outras turmas): a lista antiga não vale para ele
+    const owner = `${user}|${classes.join(",")}`;
+    if (owner !== feedsFor) {
+      feeds.clear();
+      feedsFor = owner;
+      lastFeedAt = 0;
+    }
   }
+
+  function saveActState() {
+    if (!user) return;
+    writeJson(actKey(), { f: firstSync || undefined, d: [...done].slice(-DONE_CAP) });
+  }
+
+  const feedActivities = () => [...feeds.values()].flat();
 
   function computeItems() {
     if (!cfg || !user) {
       items = [];
+      autoNow = [];
       return;
     }
     const traits = cfg.identity();
-    items = cfg.data.items.filter((n) => visibleTo(n, traits, cfg!.data.salt));
+    const recados: Shown[] = cfg.data.items.filter((n) => visibleTo(n, traits, cfg!.data.salt));
+    const auto = cfg.data.auto;
+    autoNow = auto ? activityItems(feedActivities(), auto, done) : [];
+    const avisos: Shown[] = autoNow.map((i) => {
+      const txt = itemText(i, auto!);
+      return { id: i.id, t: txt.title, b: txt.body, c: i.kind === "prazo" ? "prazo" : i.activity.k, u: i.activity.u, s: i.at };
+    });
+    // fixados primeiro; o resto, do mais novo para o mais antigo
+    items = [...recados.filter((n) => n.p), ...[...recados.filter((n) => !n.p), ...avisos].sort((a, b) => b.s - a.s)];
     for (const n of items) track(n.id, "delivered");
   }
+
+  /* ---------- avisos automáticos: lista das turmas e conclusão ---------- */
+
+  async function loadFeeds(force = false) {
+    if (!cfg || !user || !cfg.data.auto || !classes.length) return;
+    if (feedLoading || (!force && Date.now() - lastFeedAt < FEED_MIN_GAP_MS)) return;
+    feedLoading = true;
+    lastFeedAt = Date.now();
+    const owner = feedsFor;
+    const { api, key } = cfg;
+    try {
+      const lists = await Promise.all(
+        classes.map((c) =>
+          fetch(`${api}/notifications/feed?key=${encodeURIComponent(key)}&c=${encodeURIComponent(c)}`)
+            .then((r) => (r.ok ? (r.json() as Promise<{ items?: unknown }>) : null))
+            .catch(() => null)
+        )
+      );
+      // trocou de estudante enquanto a resposta vinha: descarta
+      if (owner !== feedsFor || !cfg) return;
+      let got = false;
+      classes.forEach((c, i) => {
+        const list = lists[i]?.items;
+        if (!Array.isArray(list)) return;
+        got = true;
+        feeds.set(c, list.filter(validFeed));
+      });
+      feedError = got ? null : "Não foi possível ler as atividades das turmas (rede ou chave).";
+      if (!got) return;
+      checkDone();
+      computeItems();
+      if (!firstSync) {
+        // primeira vez neste navegador: o que foi liberado há mais de 48h não acende o sino
+        firstSync = Date.now();
+        markRead(staleOnFirstSync(autoNow));
+        saveActState();
+      }
+      renderBell();
+      if (isOpen) renderPanel();
+    } finally {
+      feedLoading = false;
+    }
+  }
+
+  function markDone(ids: string[]) {
+    const fresh = ids.filter((id) => !done.has(id));
+    if (!fresh.length) return false;
+    fresh.forEach((id) => done.add(id));
+    saveActState();
+    return true;
+  }
+
+  /** O estudante está na tela de resultado de alguma atividade do sino? Então ela saiu. */
+  function checkDone(): boolean {
+    if (!user || !feeds.size) return false;
+    const here = location.pathname;
+    return markDone(feedActivities().filter((a) => !done.has(a.id) && isCompletionPath(here, a)).map((a) => a.id));
+  }
+
+  let lastPath = "";
+  function onRoute() {
+    if (location.pathname === lastPath) return;
+    lastPath = location.pathname;
+    if (checkDone()) {
+      computeItems();
+      renderBell();
+      if (isOpen) renderPanel();
+    }
+  }
+
+  const onVisible = () => {
+    if (document.visibilityState === "visible") void loadFeeds();
+  };
 
   const unreadCount = () => items.filter((n) => !read.has(n.id)).length;
 
@@ -204,6 +348,8 @@ function createBell(): BellWidget {
     ensureTimer = setTimeout(() => {
       ensureTimer = null;
       ensureMounted();
+      // num SPA a troca de rota mexe no DOM: é aqui que se nota a chegada à tela de resultado
+      onRoute();
     }, 250);
   }
 
@@ -230,7 +376,7 @@ function createBell(): BellWidget {
     });
   }
 
-  function itemHtml(n: PublicNotification, isNew: boolean) {
+  function itemHtml(n: Shown, isNew: boolean) {
     const cat = categoryOf(n.c);
     return `<article class="ntf${isNew ? " unread" : ""}${n.u ? " link" : ""}" data-id="${esc(n.id)}" ${n.u ? 'tabindex="0" role="link"' : ""}>
       <span class="ic" style="color:${cat.color};background:${cat.bg}">${svg(n.c, 16)}</span>
@@ -390,6 +536,7 @@ function createBell(): BellWidget {
     ensureMounted();
     renderBell();
     if (isOpen) renderPanel();
+    void loadFeeds();
   }
 
   return {
@@ -401,6 +548,8 @@ function createBell(): BellWidget {
       // recados agendados entram na hora certa sem esperar o catálogo vencer
       tick = setInterval(() => {
         const before = items.map((n) => n.id).join();
+        // o prazo também entra (e sai) sozinho com o passar do tempo
+        checkDone();
         computeItems();
         if (items.map((n) => n.id).join() !== before) {
           renderBell();
@@ -408,6 +557,11 @@ function createBell(): BellWidget {
         }
       }, 60_000);
       document.addEventListener("visibilitychange", onHide);
+      document.addEventListener("visibilitychange", onVisible);
+      window.addEventListener("popstate", onRoute);
+      feedTimer = setInterval(() => {
+        if (document.visibilityState !== "hidden") void loadFeeds();
+      }, FEED_EVERY_MS);
     },
     update(data) {
       if (!cfg) return;
@@ -424,14 +578,45 @@ function createBell(): BellWidget {
       openPanel();
     },
     close: () => closePanel(),
+    complete(activityId) {
+      if (!cfg || !user || typeof activityId !== "string" || !activityId) return;
+      if (markDone([activityId.slice(0, 100)])) {
+        computeItems();
+        renderBell();
+        if (isOpen) renderPanel();
+      }
+    },
+    debug() {
+      if (!cfg) return { ok: false, motivo: "O sino não está ativo nesta página." };
+      const traits = cfg.identity();
+      return {
+        usuarioIdentificado: !!user,
+        turmasNoIdentify: classIdsOf(traits),
+        avisosAutomaticos: cfg.data.auto
+          ? { ligados: true, novas: cfg.data.auto.n === 1, horasAntesDoPrazo: cfg.data.auto.d }
+          : { ligados: false, motivo: "Desligados em Notificações → Avisos automáticos (ou o catálogo ainda é o antigo: até 20 min)." },
+        ultimaLeitura: lastFeedAt ? new Date(lastFeedAt).toLocaleString() : null,
+        erro: feedError,
+        atividadesPorTurma: Object.fromEntries([...feeds].map(([c, l]) => [c, l.map((a) => `${a.id} · ${a.t}`)])),
+        concluidasNesteNavegador: [...done],
+        avisosNoSino: autoNow.map((i) => ({ id: i.id, aviso: itemText(i, cfg!.data.auto!).title, atividade: i.activity.t, lido: read.has(i.id) })),
+        recadosNoSino: cfg.data.items.filter((n) => visibleTo(n, traits, cfg!.data.salt)).map((n) => n.t),
+      };
+    },
     destroy() {
       closePanel(false);
       flush();
       observer?.disconnect();
       observer = null;
       if (tick) clearInterval(tick);
+      if (feedTimer) clearInterval(feedTimer);
+      feedTimer = null;
       if (ensureTimer) clearTimeout(ensureTimer);
       document.removeEventListener("visibilitychange", onHide);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("popstate", onRoute);
+      feeds.clear();
+      feedsFor = "";
       bellHost?.remove();
       panelHost?.remove();
       bellHost = panelHost = null;

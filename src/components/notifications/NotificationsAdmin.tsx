@@ -15,6 +15,7 @@ import { DISPLAY_STATUS_LABEL, type BellSettings, type NotificationCategory, typ
 import { deleteNotificationAction, duplicateNotificationAction, setNotificationStatusAction } from "@/app/(app)/notifications/actions";
 import { CategoryIcon } from "./BellPreview";
 import { BellSettingsForm } from "./BellSettingsForm";
+import { AutoNotificationsTab, type AutoTabData } from "./AutoNotificationsTab";
 
 export interface NotificationListItem {
   id: string;
@@ -44,13 +45,15 @@ export function NotificationsAdmin({
   settings,
   hosts,
   canEdit,
+  auto,
   initialTab,
 }: {
   items: NotificationListItem[];
   settings: BellSettings;
   hosts: string[];
   canEdit: boolean;
-  initialTab: "recados" | "sino";
+  auto: AutoTabData;
+  initialTab: "recados" | "sino" | "auto";
 }) {
   const [tab, setTab] = useState<string>(initialTab);
   const live = items.filter((i) => i.display === "no_ar");
@@ -93,13 +96,20 @@ export function NotificationsAdmin({
       <Tabs
         tabs={[
           { value: "recados", label: `Recados (${items.length})` },
+          { value: "auto", label: "Avisos automáticos" },
           { value: "sino", label: "Sino e instalação" },
         ]}
         value={tab}
         onChange={setTab}
       />
       <div className="mt-5">
-        {tab === "recados" ? <RecadosTable items={items} canEdit={canEdit} /> : <BellSettingsForm initial={settings} hosts={hosts} canEdit={canEdit} />}
+        {tab === "recados" ? (
+          <RecadosTable items={items} canEdit={canEdit} />
+        ) : tab === "auto" ? (
+          <AutoNotificationsTab data={auto} />
+        ) : (
+          <BellSettingsForm initial={settings} hosts={hosts} canEdit={canEdit} />
+        )}
       </div>
     </div>
   );

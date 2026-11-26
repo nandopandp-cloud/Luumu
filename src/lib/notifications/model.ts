@@ -3,10 +3,11 @@
  * status, público e o recorte público que vai no /config. Usado pelo painel, pela API e pelo SDK
  * (src/sdk/notifications/bell.ts) — por isso sem `server-only`, `next/*` nem banco.
  *
- * Fase 1: recados escritos no painel da Luumu. As notificações automáticas (nova tarefa, nova
- * Prova Genial, prazo) entram depois, alimentadas pelas atividades que o cliente enviar.
+ * Recados escritos no painel da Luumu. Os avisos automáticos (nova tarefa, nova Prova Genial,
+ * prazo), alimentados pelo webhook de atividades do cliente, ficam em ./activities.ts.
  */
 import { matchesSchoolYears, normalizeSchoolYears } from "../surveys/school-years";
+import { DEFAULT_AUTO, normalizeAuto, publicAuto, type AutoSettings, type PublicAuto } from "./activities";
 
 /* ---------- categorias (ícone e cor no painel do estudante) ---------- */
 
@@ -19,7 +20,16 @@ export const NOTIFICATION_CATEGORIES = [
 ] as const;
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number]["id"];
 export const isCategory = (v: unknown): v is NotificationCategory => NOTIFICATION_CATEGORIES.some((c) => c.id === v);
-export const categoryOf = (id: string) => NOTIFICATION_CATEGORIES.find((c) => c.id === id) ?? NOTIFICATION_CATEGORIES[0];
+
+/** Ícone e cor dos avisos automáticos (não são escolhidos no editor de recados). */
+export const AUTO_CATEGORIES = [
+  { id: "tarefa", label: "Nova tarefa", color: "#0F766E", bg: "#D5F2EE" },
+  { id: "prova_genial", label: "Nova Prova Genial", color: "#5B50E6", bg: "#E3E1FB" },
+  { id: "prazo", label: "Prazo", color: "#C2410C", bg: "#FDE6D8" },
+] as const;
+
+export const categoryOf = (id: string): { id: string; label: string; color: string; bg: string } =>
+  NOTIFICATION_CATEGORIES.find((c) => c.id === id) ?? AUTO_CATEGORIES.find((c) => c.id === id) ?? NOTIFICATION_CATEGORIES[0];
 
 /* ---------- status ---------- */
 
@@ -124,6 +134,8 @@ export interface BellSettings {
   emptyText: string;
   /** ids/e-mails que recebem os recados "em teste" */
   testers: string[];
+  /** avisos automáticos de atividades (webhook do cliente) */
+  auto: AutoSettings;
 }
 
 export const DEFAULT_ACCENT = "#5B50E6";
@@ -138,6 +150,7 @@ export const DEFAULT_BELL_SETTINGS: BellSettings = {
   accent: DEFAULT_ACCENT,
   emptyText: DEFAULT_EMPTY_TEXT,
   testers: [],
+  auto: { ...DEFAULT_AUTO },
 };
 
 const HEX = /^#[0-9a-f]{6}$/i;
@@ -154,6 +167,7 @@ export function normalizeBellSettings(v: unknown): BellSettings {
     accent: typeof o.accent === "string" && HEX.test(o.accent) ? o.accent.toUpperCase() : DEFAULT_ACCENT,
     emptyText: str(o.emptyText, 140) || DEFAULT_EMPTY_TEXT,
     testers: Array.isArray(o.testers) ? [...new Set(o.testers.map(audienceKey).filter(Boolean))].slice(0, 50) : [],
+    auto: normalizeAuto(o.auto),
   };
 }
 
@@ -241,6 +255,8 @@ export interface PublicNotifications {
   salt: string;
   cfg: PublicBellConfig;
   items: PublicNotification[];
+  /** avisos automáticos ligados: o sino busca as atividades das turmas do estudante */
+  auto?: PublicAuto;
 }
 
 export const MAX_PUBLIC_ITEMS = 30;
@@ -301,11 +317,14 @@ export function publicNotifications(
     items.push(item);
   }
   items.sort((a, b) => (b.p ?? 0) - (a.p ?? 0) || b.s - a.s);
-  return {
+  const out: PublicNotifications = {
     salt,
     cfg: { m: settings.placement, sel: settings.selector, cor: settings.corner, ac: settings.accent, em: settings.emptyText },
     items: items.slice(0, MAX_PUBLIC_ITEMS),
   };
+  const auto = publicAuto(settings.auto);
+  if (auto) out.auto = auto;
+  return out;
 }
 
 /* ---------- regras do lado do SDK ---------- */
